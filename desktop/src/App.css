@@ -12532,7 +12532,9 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
  * مبلغ ۱۵۰px. حالا درصد است و با صفحه با هم بزرگ می‌شوند: حساب باقی را می‌گیرد (حدودِ
  * دو و نیم برابرِ مبلغ)، هر مبلغ ۱۶٪، شرح باریک‌تر؛ شماره و کنش‌ها ثابت. کف
  * ۹۰۰px تا حساب در عرضِ کم زیرِ ~۲۰۰px نرود؛ زیرِ آن گرید در ظرفِ خودش می‌لغزد. */
-.jg-table { table-layout: fixed; inline-size: 100%; min-inline-size: 900px; }
+/* کف ۷۲۰px: جدول هم‌عرضِ قاب است و اسکرولِ افقی فقط زیرِ این عرض (موبایل) — در ۱۲۰۰px با کارت‌های
+ * کناری قاب حدودِ ۸۰۰px است و کفِ ۹۰۰ آن‌جا اسکرول می‌ساخت. */
+.jg-table { table-layout: fixed; inline-size: 100%; min-inline-size: 720px; }
 .jg-table col.jg-c-num { width: 44px; }
 .jg-table col.jg-c-actions { width: 104px; }
 .jg-table col.jg-c-amount { width: 16%; }
@@ -13042,10 +13044,6 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .xl-rowhead-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td.xl-rowhead { background: var(--accent); }
 .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected .xl-rowhead-btn { color: var(--accent-text); font-weight: 700; }
-
-/* عرض‌های دستیِ کاربر (`xl-custom`): ستونِ آخر کشسان است و جای خالی را می‌گیرد. `width: 1%`ِ
- * سرستونش (`ef-col-min`) در `table-layout: fixed` عرضِ ستون می‌شد و جای اضافه میانِ همه پخش. */
-.page .ef-table-wrap > table.xl-grid.xl-custom > thead > tr:first-child > th.ef-col-min { width: auto; }
 
 /* لبه‌ی کشیدنیِ عرضِ ستون (`ColResizer`) — سمتِ پایانِ هر سرستون؛ با hover خطِ accent. */
 .page .ef-table-wrap > table.xl-grid--list > thead > tr:first-child > th { position: relative; }
