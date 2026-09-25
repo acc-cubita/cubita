@@ -15,15 +15,19 @@ import { describe, it, expect } from 'vitest'
 import {
   MODE_GROUP_LANDING,
   MODE_GROUP_ORDER,
+  LEGACY_PAGES,
   NAV_GROUPS,
   PAGE_MODULE_KEY,
   buildNav,
   groupLanding,
   menuEntryVisible,
+  navSections,
   orderNavGroups,
+  resolveLegacyPage,
   uniqueNavItems,
   type PageKey,
 } from './navModel'
+import { LIST_MENUS, OPS_LIST_MAP } from '../components/moduleLists'
 import type { ExperienceMode } from './experienceMode'
 
 //: صفحه‌ی عملیاتِ کاری — در `NAV_GROUPS` است، پس با فیلترِ ناوبری سنجیده می‌شود.
@@ -203,5 +207,63 @@ describe('«مجوز نرم‌افزار» فقط در کوبیتا سازمان
     const { groups, secondary } = buildNav({ tenantKind: 'standard', isOwner: true })
     const keys = [...groups.flatMap((g) => g.items), ...secondary].map((i) => i.key)
     expect(keys).not.toContain('license')
+  })
+})
+
+describe('بازچینیِ منوهای حسابداری — ۱۴۰۵/۰۷/۰۳', () => {
+  const accounting = NAV_GROUPS.find((g) => g.heading === 'حسابداری')!
+  const SECTIONS = ['ساختار و تعریف‌ها', 'ثبت سند', 'بازبینی اسناد', 'اصلاح و تعدیل', 'پایان دوره', 'گزارش و کنترل']
+
+  it('شش دسته به ترتیبِ کار، هر ردیف در یک دسته و ردیف‌های هم‌دسته پشتِ هم', () => {
+    expect(accounting.items.every((i) => i.section)).toBe(true)
+    expect(navSections(accounting.items).map((s) => s.title)).toEqual(SECTIONS)
+    //: پشتِ هم: هر دسته فقط یک بار «شروع» می‌شود.
+    const starts = accounting.items.filter((it, i) => it.section !== accounting.items[i - 1]?.section)
+    expect(starts).toHaveLength(SECTIONS.length)
+  })
+
+  it('منوی ادغام‌شده برنمی‌گردد — نه در منو، نه در فهرست', () => {
+    const menu = new Set(NAV_GROUPS.flatMap((g) => g.items.map((i) => i.key as string)))
+    const lists = new Set(Object.values(LIST_MENUS).flatMap((m) => m.map((i) => i.key as string)))
+    for (const old of Object.keys(LEGACY_PAGES)) {
+      expect(menu.has(old), old).toBe(false)
+      expect(lists.has(old), old).toBe(false)
+      expect(old in OPS_LIST_MAP, old).toBe(false)
+    }
+  })
+
+  it('هیچ دو منوی حسابداری هم‌نام نیستند', () => {
+    const labels = accounting.items.map((i) => i.label)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('هر کلیدِ قدیمی به صفحه‌ای می‌رود که واقعاً در منوست', () => {
+    const menu = new Set(NAV_GROUPS.flatMap((g) => g.items.map((i) => i.key)))
+    for (const [old, to] of Object.entries(LEGACY_PAGES)) expect(menu.has(to.page), `${old} → ${to.page}`).toBe(true)
+  })
+
+  it('مسیرِ قدیمی به جای تازه، بقیه دست‌نخورده', () => {
+    expect(resolveLegacyPage('finalizeentries')).toEqual({ page: 'entrycartable', section: null })
+    expect(resolveLegacyPage('generaldoc', 'x')).toEqual({ page: 'balancereport', section: 'general' })
+    expect(resolveLegacyPage('newaccount')).toEqual({ page: 'acctchart', section: 'new' })
+    expect(resolveLegacyPage('inventory', 'count')).toEqual({ page: 'inventory', section: 'count' })
+  })
+})
+
+describe('navSections', () => {
+  it('دسته‌ها به ترتیبِ اولین ظهور، ردیف‌ها به ترتیبِ خودشان — حتی اگر درهم آمده باشند', () => {
+    const out = navSections<{ k: number; section?: string }>([
+      { k: 1, section: 'الف' },
+      { k: 2, section: 'ب' },
+      { k: 3, section: 'الف' },
+    ])
+    expect(out.map((s) => [s.title, s.items.map((i) => i.k)])).toEqual([
+      ['الف', [1, 3]],
+      ['ب', [2]],
+    ])
+  })
+
+  it('گروهِ بی‌دسته یک دسته‌ی بی‌نام است', () => {
+    expect(navSections<{ k: number; section?: string }>([{ k: 1 }, { k: 2 }])).toEqual([{ title: null, items: [{ k: 1 }, { k: 2 }] }])
   })
 })

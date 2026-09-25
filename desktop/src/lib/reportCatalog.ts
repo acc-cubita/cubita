@@ -59,7 +59,15 @@ export const REPORT_GROUPS: { key: ReportGroupKey; heading: string; entries: Ent
   {
     key: 'ledgers',
     heading: 'دفاتر و ترازها',
-    entries: [{ id: 'balancereport' }, { id: 'ledgerreport' }, { id: 'accountbrowse' }, { id: 'ebooks' }, { id: 'integrity' }],
+    entries: [
+      { id: 'balancereport' },
+      //: قالبِ «سند کل»ِ همان صفحه — پیش‌تر منوی جدای «صدور سند کل» (بازچینیِ ۱۴۰۵/۰۷/۰۳).
+      { id: 'balancereport/general', label: 'سند کل' },
+      { id: 'ledgerreport' },
+      { id: 'accountbrowse' },
+      { id: 'ebooks' },
+      { id: 'integrity' },
+    ],
   },
   {
     key: 'statements',
@@ -165,7 +173,11 @@ export function buildReportCatalog(launchers: LaunchGroup[], mode: ExperienceMod
           return [{ id: e.id, label: e.label ?? tab.label, page: 'reports', section: tab.key, icon: reportsPage.icon }]
         }
         const t = index.get(e.id)
-        return t ? [{ id: e.id, label: e.label ?? t.label, page: t.page, section: t.section, icon: t.icon }] : []
+        if (t) return [{ id: e.id, label: e.label ?? t.label, page: t.page, section: t.section, icon: t.icon }]
+        //: قالبی از صفحه‌ای که تب ندارد («سند کل»ِ گزارش ترازها): با دیده‌شدنِ خودِ صفحه گیت می‌شود.
+        const [base, section] = e.id.split('/')
+        const b = section ? index.get(base) : undefined
+        return b && e.label ? [{ id: e.id, label: e.label, page: b.page, section, icon: b.icon }] : []
       }),
     }))
     .filter((g) => g.entries.length > 0)

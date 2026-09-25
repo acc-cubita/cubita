@@ -11,7 +11,7 @@ import {
   type ListMenuItem,
   type ListRow,
 } from './moduleLists'
-import { menuEntryVisible, type NavGroup } from '../lib/navModel'
+import { menuEntryVisible, navSections, type NavGroup } from '../lib/navModel'
 import { useMenuOrder, type MenuOrderApi } from '../lib/menuOrder'
 import type { PageKey } from './Sidebar'
 
@@ -150,8 +150,12 @@ export function ModulePanels({
       ? [`pages:${gk}`, ...pages.map((p) => secOps(p.key))]
       : [secOps(page)]
   const listScopes = listMenu?.length ? [`list:${gk}`] : sectionLists.length > 0 ? [`sec-list:${page}`] : []
-  const sortedPages = mo.sort(`pages:${gk}`, pages, (p) => p.key)
-  const pageKeys = sortedPages.map((p) => p.key)
+  //: دسته‌های گروه («ساختار و تعریف‌ها»، «ثبت سند»، …) ترتیبِ ثابتِ `NAV_GROUPS` را دارند؛ ترتیبِ
+  //: دلخواهِ کاربر فقط *درونِ* هر دسته است — وگرنه جابه‌جاییِ یک منو دسته‌ای را دو تکه می‌کرد.
+  const pageSections = navSections(pages).map((sec) => ({
+    ...sec,
+    items: mo.sort(`pages:${gk}`, sec.items, (p) => p.key),
+  }))
 
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
@@ -176,63 +180,75 @@ export function ModulePanels({
             {opsMenu && menuButtons(opsMenu, page, activeSection, onSelectSection, onNavigate, mo, `ops:${gk}`)}
             {/* صفحه‌های هم‌گروه، و زیرِ صفحه‌ی فعال بخش‌های خودش — همان چیزی که
                 پیش‌تر دراپ‌داونِ نوارِ بالا نشان می‌داد، حالا این‌جا. */}
-            {!opsMenu && sortedPages.map((it) => {
-              // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
-              // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
-              // مستقیم در سطحِ اول می‌نشینند.
-              const redundant = it.label === group?.heading
-              const own = mo.sort(secOps(it.key), opsSections(MODULE_SECTIONS[it.key] ?? []), (x) => x.key)
-              if (redundant && own.length > 0) {
-                const ownKeys = own.map((x) => x.key)
+            {!opsMenu &&
+              pageSections.map((sec) => {
+                const pageKeys = sec.items.map((p) => p.key)
                 return (
-                  <Fragment key={it.key}>
-                    {own.map((s) => {
-                      const Icon = s.icon
-                      const on = it.key === page && activeSection === s.key
+                  <Fragment key={sec.title ?? ''}>
+                    {/* تیترِ دسته فقط وقتی گروه چند دسته دارد؛ گروهِ یک‌دست همان فهرستِ قبلی است. */}
+                    {sec.title && pageSections.length > 1 && (
+                      <div className="mod-section-label">{sec.title}</div>
+                    )}
+                    {sec.items.map((it) => {
+                      // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
+                      // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
+                      // مستقیم در سطحِ اول می‌نشینند.
+                      const redundant = it.label === group?.heading
+                      const own = mo.sort(secOps(it.key), opsSections(MODULE_SECTIONS[it.key] ?? []), (x) => x.key)
+                      if (redundant && own.length > 0) {
+                        const ownKeys = own.map((x) => x.key)
+                        return (
+                          <Fragment key={it.key}>
+                            {own.map((s) => {
+                              const Icon = s.icon
+                              const on = it.key === page && activeSection === s.key
+                              return (
+                                <MenuItem
+                                  key={s.key}
+                                  mo={mo}
+                                  scope={secOps(it.key)}
+                                  keys={ownKeys}
+                                  itemKey={s.key}
+                                  label={s.label}
+                                  icon={<Icon size={16} />}
+                                  className={`mod-op${on ? ' active' : ''}`}
+                                  current={on}
+                                  onClick={() => (it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key))}
+                                />
+                              )
+                            })}
+                          </Fragment>
+                        )
+                      }
+                      const current = it.key === page
+                      const expanded = current && own.length > 0
                       return (
-                        <MenuItem
-                          key={s.key}
-                          mo={mo}
-                          scope={secOps(it.key)}
-                          keys={ownKeys}
-                          itemKey={s.key}
-                          label={s.label}
-                          icon={<Icon size={16} />}
-                          className={`mod-op${on ? ' active' : ''}`}
-                          current={on}
-                          onClick={() => (it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key))}
-                        />
+                        <Fragment key={it.key}>
+                          <MenuItem
+                            mo={mo}
+                            scope={`pages:${gk}`}
+                            keys={pageKeys}
+                            itemKey={it.key}
+                            label={it.label}
+                            icon={it.icon}
+                            //: صفحه‌ای که بخش‌هایش زیرش باز است «والد» است نه «فعال»: هایلایت
+                            //: مالِ بخشِ انتخاب‌شده است. اگر هر دو یک‌جور برجسته شوند، دیگر
+                            //: پیدا نیست کاربر دقیقاً روی کدام زیرمنو ایستاده.
+                            className={`mod-op${expanded ? ' mod-op--parent' : current ? ' active' : ''}`}
+                            current={current && !expanded}
+                            onClick={() => onNavigate(it.key)}
+                          />
+                          {expanded && (
+                            <div className="mod-sub">
+                              {sectionButtons(own, activeSection, onSelectSection, mo, secOps(it.key))}
+                            </div>
+                          )}
+                        </Fragment>
                       )
                     })}
                   </Fragment>
                 )
-              }
-              const current = it.key === page
-              const expanded = current && own.length > 0
-              return (
-                <Fragment key={it.key}>
-                  <MenuItem
-                    mo={mo}
-                    scope={`pages:${gk}`}
-                    keys={pageKeys}
-                    itemKey={it.key}
-                    label={it.label}
-                    icon={it.icon}
-                    //: صفحه‌ای که بخش‌هایش زیرش باز است «والد» است نه «فعال»: هایلایت
-                    //: مالِ بخشِ انتخاب‌شده است. اگر هر دو یک‌جور برجسته شوند، دیگر
-                    //: پیدا نیست کاربر دقیقاً روی کدام زیرمنو ایستاده.
-                    className={`mod-op${expanded ? ' mod-op--parent' : current ? ' active' : ''}`}
-                    current={current && !expanded}
-                    onClick={() => onNavigate(it.key)}
-                  />
-                  {expanded && (
-                    <div className="mod-sub">
-                      {sectionButtons(own, activeSection, onSelectSection, mo, secOps(it.key))}
-                    </div>
-                  )}
-                </Fragment>
-              )
-            })}
+              })}
             {/* ماژولِ تک‌صفحه‌ای (تولید، دارایی ثابت، …) ردیفی با نامِ خودش نمی‌گیرد: نامش
                 همین حالا در نوارِ بالا هست و تکرارش در «عملیات» یک زیرمنوی بی‌معناست. */}
             {!opsMenu && pages.length === 0 && sectionButtons(ops, activeSection, onSelectSection, mo, secOps(page))}

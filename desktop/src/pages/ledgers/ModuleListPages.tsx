@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Check, Hash, MapPin, RotateCcw, Tag, Tags } from 'lucide-react'
+import { CalendarDays, Check, Hash, MapPin, RotateCcw, Tags } from 'lucide-react'
 import {
-  fetchAnalytics,
   fetchCalendarEvents,
   setCalendarEventDone,
   fetchContactGroups,
@@ -15,110 +14,12 @@ import { formatJalali, toFaDigits } from '../../lib/jalali'
 import { AsyncBlock, Metric, OpsPage, faInt, useAsync } from '../accounting/kit'
 
 /**
- * دفترهای نظیرِ عملیاتِ رکوردسازِ ماژول‌های «حسابداری»، «شرکت» و «تنظیمات».
+ * دفترهای نظیرِ عملیاتِ رکوردسازِ ماژول‌های «شرکت» و «تنظیمات».
  *
  * قاعده‌ی نظیر (اسکیلِ `cubita-page`، بخشِ ۱): هر عملیاتی که رکورد ثبت می‌کند، در
  * کارتِ «فهرست»ِ همان ماژول یک دفترِ خواندنی دارد. صفحه‌ی عملیات جای ثبت است و
  * این‌جا جای گشتن — با جمع‌ها و فیلتر، بدونِ فرم.
  */
-
-// ═══════════════════ حسابداری: تفصیلی‌های سایر ═══════════════════
-
-export function AnalyticListPage({ token }: { token: string }) {
-  const [q, setQ] = useState('')
-  const [only, setOnly] = useState<'all' | 'active' | 'inactive'>('all')
-  const data = useAsync(() => fetchAnalytics(token), [token])
-
-  const rows = useMemo(() => {
-    const term = q.trim()
-    return (data.data ?? []).filter((a) => {
-      if (only === 'active' && !a.is_active) return false
-      if (only === 'inactive' && a.is_active) return false
-      if (!term) return true
-      return a.code.includes(term) || a.name.includes(term) || a.group_name.includes(term)
-    })
-  }, [data.data, q, only])
-  const pg = usePagination(rows, 20, `${q}|${only}`)
-  const used = (data.data ?? []).filter((a) => a.line_count > 0).length
-
-  return (
-    <OpsPage
-      canvas
-      icon={Tag}
-      title="تفصیلی‌های سایر"
-      description="بُعدِ تحلیلیِ آزادِ چارت — خودرو، قرارداد، پرونده و هر چیزی که نه طرف‌حساب است نه مرکزِ هزینه."
-      head={
-        <div className="cc-head">
-          <div className="cc-toolbar">
-            <div className="cc-presets">
-              {(
-                [
-                  ['all', 'همه'],
-                  ['active', 'فعال'],
-                  ['inactive', 'غیرفعال'],
-                ] as const
-              ).map(([key, label]) => (
-                <button key={key} type="button" className={only === key ? 'is-active' : ''} onClick={() => setOnly(key)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="cc-summary">
-            <Metric icon={<Tag size={14} />} label="تفصیلی‌ها" value={faInt((data.data ?? []).length)} />
-            <Metric icon={<Tag size={14} />} label="به‌کاررفته در سند" value={faInt(used)} tone="in" />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Tag}
-        title="تفصیلی‌ها"
-        badge={data.data ? <CountBadge accent>{faInt(rows.length)} ردیف</CountBadge> : undefined}
-      >
-        <ListToolbar>
-          <SearchField value={q} onChange={setQ} placeholder="کد، نام یا دسته" label="جست‌وجو" />
-        </ListToolbar>
-        <AsyncBlock
-          loading={data.loading}
-          error={data.error}
-          empty={rows.length === 0}
-          emptyText="تفصیلی‌ای با این شرایط نیست. از عملیاتِ «تفصیلی سایر» بسازید."
-        >
-          <div className="table-scroll ef-table-wrap">
-            <table className="cards-on-mobile acc-table ef-table">
-              <thead>
-                <tr>
-                  <th>کد</th>
-                  <th>نام</th>
-                  <th>دسته</th>
-                  <th>ردیفِ سند</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((a) => (
-                  <tr key={a.id} className={a.is_active ? '' : 'acc-row--void'}>
-                    <td className="card-title" data-label="کد"><span dir="ltr">{a.code}</span></td>
-                    <td className="card-wide" data-label="نام">{a.name}</td>
-                    <td data-label="دسته">{a.group_name || '—'}</td>
-                    <td className="num" data-label="ردیفِ سند">{faInt(a.line_count)}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${a.is_active ? 'tone-success' : 'tone-muted'}`}>
-                        {a.is_active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
 
 // ═══════════════════ شرکت: محل‌های جغرافیایی ═══════════════════
 

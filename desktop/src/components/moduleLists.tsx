@@ -44,7 +44,6 @@ import {
 
   LayoutList,
   ListChecks,
-  ListTree,
   MapPin,
   Receipt,
   Scale,
@@ -241,13 +240,12 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'fiscalyearlist', label: 'سال‌های مالی', icon: CalendarRange },
     { key: 'numberinglist', label: 'روش‌های شماره‌گذاری', icon: Hash },
   ],
-  //: «حسابداری» — داده‌ی ذخیره‌شده‌ی ماژول: اسناد، حساب‌ها، و سه پنلی که پیش‌تر
-  //: تبِ درونِ صفحه بودند (تکرارشونده، بودجه، ارز) و حالا صفحه‌ی مستقل دارند.
+  //: «حسابداری» — دفترهایی که هیچ صفحه‌ی عملیاتی تمامشان را نشان نمی‌دهد: اسناد و
+  //: دوره‌های بسته‌شده. «فهرست حساب‌ها» و «تفصیلی‌های سایر» در بازچینیِ ۱۴۰۵/۰۷/۰۳ رفتند:
+  //: درختواره و برگه‌ی تفصیلی خودشان دفترِ کاملِ همان داده‌اند (دو نمای یک داده نمی‌سازیم).
   'حسابداری': [
     { key: 'entrylist', label: 'اسناد حسابداری', icon: FileStack },
-    { key: 'accountlist', label: 'فهرست حساب‌ها', icon: ListTree },
     { key: 'periodcloselist', label: 'دوره‌های بسته‌شده', icon: Archive },
-    { key: 'analyticlist', label: 'تفصیلی‌های سایر', icon: Tag },
   ],
   //: «دریافت و پرداخت» — دفترِ رسیدها و اعلامیه‌ها. پیش‌تر تبِ ماژولِ «اشخاص» بود؛
   //: داده‌ی این ماژول در ماژولِ دیگری زندگی می‌کرد.
@@ -336,7 +334,6 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   contactsettlelist: 'دریافت و پرداخت',
   statementlist: 'دریافت و پرداخت',
   pettylist: 'دریافت و پرداخت',
-  analyticlist: 'حسابداری',
   geolist: 'شرکت',
   ownertxnlist: 'شرکت',
   contactgrouplist: 'شرکت',
@@ -352,7 +349,6 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   assurancefindinglist: 'حسابرسی',
   assurancerunlist: 'حسابرسی',
   entrylist: 'حسابداری',
-  accountlist: 'حسابداری',
   recurringlist: 'حسابداری',
   budgetlist: 'حسابداری',
   currencylist: 'حسابداری',
@@ -427,22 +423,21 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   pettyexpense: 'pettylist',
 
   // ── حسابداری ──
-  acctchart: 'accountlist',
-  newaccount: 'accountlist',
+  //: درختواره خودش دفترِ کاملِ حساب‌هاست (جست‌وجو، نمای تخت، مانده) — مثلِ «حساب بانکی».
+  acctchart: 'view',
   openingbalance: 'entrylist', //: خروجی‌اش یک سندِ حسابداری است
   journalentry: 'entrylist',
   mergeentries: 'entrylist',
   fxrevaluation: 'entrylist',
-  //: سندش در فهرستِ اسناد با منشأ «اصلاح طبقه‌بندی مانده» دیده می‌شود.
+  //: سندش در فهرستِ اسناد با منشأ «انتقال مانده به حساب دیگر» دیده می‌شود.
   balancereclass: 'entrylist',
   closingopening: 'entrylist',
   closepnl: 'periodcloselist',
-  analytics: 'analyticlist',
+  //: برگه‌ی «تفصیلی سایر» همه‌ی تفصیلی‌ها را با همان ستون‌های دفتر دارد و همان‌جا ویرایش می‌شود.
+  analytics: 'view',
   entrycartable: 'state',
-  finalizeentries: 'state',
   renumber: 'state',
   reclassify: 'state',
-  generaldoc: 'view',
   vat: 'view',
   ebooks: 'view',
   accountbrowse: 'view',
@@ -479,10 +474,10 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   // ── تنظیمات ──
   shortcuts: 'none', //: ترجیحِ شخصی، رکوردی نمی‌سازد
   fiscalyear: 'fiscalyearlist',
-  //: قالبِ صنفی حساب می‌سازد، و دفترِ حساب‌ها همان «فهرست حساب‌ها» است — فهرستِ
+  //: قالبِ صنفی حساب می‌سازد، و دفترِ حساب‌ها همان «درختواره حساب‌ها» است — فهرستِ
   //: دوم یعنی دو نمای یک داده.
-  coding: 'accountlist',
-  personalization: 'accountlist',
+  coding: 'acctchart',
+  personalization: 'none', //: ترجیحِ رفتاریِ کسب‌وکار، رکوردی نمی‌سازد
   numbering: 'numberinglist',
   team: 'userlist',
   backup: 'backuplist',

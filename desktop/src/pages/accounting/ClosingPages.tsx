@@ -1,23 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import {
   AlertTriangle,
   Check,
   Archive,
   ArrowLeftRight,
-  BookOpenCheck,
   CalendarCheck,
   DoorOpen,
-  FileSpreadsheet,
   Lock,
-  Printer,
   Scale,
   TrendingDown,
   TrendingUp,
-  Wallet,
 } from 'lucide-react'
 import {
   createPeriodClose,
-  fetchAccountBalances,
   fetchChartAccounts,
   fetchClosingPreview,
   fetchOpeningPreview,
@@ -29,7 +24,7 @@ import {
   issueOpeningEntry,
   issueReclass,
   previewReclass,
-  type ChartAccount,
+  type FiscalPeriodCloseRecord,
   type ReclassBody,
   type ReclassPreview,
   type ClosingRow,
@@ -51,13 +46,11 @@ import {
   BalanceFooter,
   Metric,
   OpsPage,
-  RangeBar,
   fa,
   faAmount,
   faInt,
   jalaliYearStart,
   useAsync,
-  useRange,
   type Msg,
 } from './kit'
 
@@ -137,6 +130,11 @@ export function ClosePnlPage({ token }: { token: string }) {
   const difference = Number(data?.difference ?? 0)
   const alreadyClosed = data?.already_closed ?? false
   const hasDimensions = rows.some((r) => r.analytic_name || r.cost_center_name)
+  //: تاریخِ آخرین قفل مرزِ ثبتِ سند است — همان چیزی که پیش از قفلِ تازه باید دید.
+  const lastClose = (closes.data ?? []).reduce<FiscalPeriodCloseRecord | null>(
+    (best, c) => (!best || c.closing_date > best.closing_date ? c : best),
+    null,
+  )
 
   return (
     <OpsPage
@@ -280,6 +278,14 @@ export function ClosePnlPage({ token }: { token: string }) {
             هنوز سندِ بستن زده نشده. اگر مستقیم قفل کنید، سند همین‌جا خودکار زده می‌شود.
           </p>
         )}
+        {/* جدولِ کاملِ دوره‌ها فقط در فهرستِ «دوره‌های بسته‌شده» است (دو نمای یک داده نمی‌سازیم)؛
+            این‌جا فقط مرزِ فعلی، که برای تصمیمِ قفل لازم است. */}
+        {lastClose && (
+          <p className="muted ef-block-note">
+            آخرین دوره‌ی قفل‌شده: تا {formatJalali(lastClose.closing_date)} — سود/زیانِ خالص {fa(lastClose.net_profit)}.
+            تاریخچه‌ی کامل در فهرستِ «دوره‌های بسته‌شده» است.
+          </p>
+        )}
         <div className="ef-card-foot">
           <button type="button" className="ef-btn-secondary" onClick={() => void lock()}>
             <Lock size={15} /> قفل کردن دوره
@@ -287,43 +293,6 @@ export function ClosePnlPage({ token }: { token: string }) {
         </div>
       </SectionCard>
 
-      <SectionCard
-        icon={Archive}
-        title="دوره‌های بسته‌شده"
-        badge={closes.data ? <CountBadge>{faInt(closes.data.length)} دوره</CountBadge> : undefined}
-      >
-        <AsyncBlock
-          loading={closes.loading}
-          error={closes.error}
-          empty={(closes.data?.length ?? 0) === 0}
-          emptyText="هنوز هیچ دوره‌ای بسته نشده."
-        >
-          <div className="table-scroll ef-table-wrap">
-            <table className="cards-on-mobile acc-table ef-table">
-              <thead>
-                <tr>
-                  <th>تاریخِ بستن</th>
-                  <th>سود/زیانِ خالص</th>
-                  <th>یادداشت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(closes.data ?? []).map((c) => (
-                  <tr key={c.id}>
-                    <td className="card-title" data-label="تاریخِ بستن">
-                      {formatJalali(c.closing_date)}
-                    </td>
-                    <td data-label="سود/زیانِ خالص" className="num">
-                      {fa(c.net_profit)}
-                    </td>
-                    <td data-label="یادداشت">{c.notes || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
       <ActionBar
         status={
           <FormStatus
@@ -628,132 +597,12 @@ function ClosingTable({ rows }: { rows: ClosingRow[] }) {
   )
 }
 
-// ═════════════════════ ۴) صدور سند کل ═════════════════════
-
-/** سطحِ «کل» یعنی نزدیک‌ترین جدِ گروهیِ حساب. بدونِ این، تجمیع روی حسابِ سطحِ آخر
- *  انجام می‌شد و «سند کل» با تراز آزمایشی فرقی نداشت. */
-function generalAncestor(account: ChartAccount, byId: Map<string, ChartAccount>): ChartAccount {
-  let node = account
-  const seen = new Set<string>()
-  while (node.parent_id && !seen.has(node.id)) {
-    seen.add(node.id)
-    const parent = byId.get(node.parent_id)
-    if (!parent) break
-    // یک سطح زیرِ ریشه = حسابِ کل. ریشه‌ها گروهِ اصلی‌اند (دارایی، بدهی، …).
-    if (!parent.parent_id) return node
-    node = parent
-  }
-  return node
-}
-
-export function GeneralDocumentPage({ token }: { token: string }) {
-  const range = useRange('month')
-  const accounts = useAsync(() => fetchChartAccounts(token), [token])
-  const balances = useAsync(
-    () => fetchAccountBalances(token, { dateFrom: range.from, dateTo: range.to }),
-    [token, range.from, range.to],
-  )
-
-  const rows = useMemo(() => {
-    const list = accounts.data ?? []
-    const byId = new Map(list.map((a) => [a.id, a]))
-    const totals = new Map<string, { account: ChartAccount; debit: number; credit: number }>()
-    for (const row of balances.data ?? []) {
-      const leaf = byId.get(row.account_id)
-      if (!leaf) continue
-      const parent = generalAncestor(leaf, byId)
-      const bucket = totals.get(parent.id) ?? { account: parent, debit: 0, credit: 0 }
-      bucket.debit += Number(row.period_debit)
-      bucket.credit += Number(row.period_credit)
-      totals.set(parent.id, bucket)
-    }
-    return [...totals.values()]
-      .filter((r) => r.debit !== 0 || r.credit !== 0)
-      .sort((a, b) => a.account.code.localeCompare(b.account.code))
-  }, [accounts.data, balances.data])
-
-  const debit = rows.reduce((s, r) => s + r.debit, 0)
-  const credit = rows.reduce((s, r) => s + r.credit, 0)
-
-  return (
-    <OpsPage
-      canvas
-      icon={FileSpreadsheet}
-      title="صدور سند کل"
-      description="خلاصه‌ی گردشِ یک بازه در سطحِ حسابِ کل — همان برگه‌ای که در پایانِ ماه چاپ و بایگانی می‌شود. سندِ تازه‌ای ثبت نمی‌کند؛ فقط اسنادِ موجود را تجمیع می‌کند."
-      head={
-        <div className="cc-head">
-          <RangeBar range={range} />
-          <div className="cc-summary">
-            <Metric icon={<BookOpenCheck size={14} />} label="حسابِ کل" value={faInt(rows.length)} />
-            <Metric icon={<Wallet size={14} />} label="جمعِ بدهکار" value={fa(debit)} tone="in" />
-            <Metric icon={<Wallet size={14} />} label="جمعِ بستانکار" value={fa(credit)} tone="out" />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={FileSpreadsheet}
-        title="سند کل"
-        description={
-          range.from
-            ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? todayIso())}`
-            : 'از ابتدای دفتر'
-        }
-        actions={
-          <button type="button" className="ef-btn-secondary" onClick={() => window.print()}>
-            <Printer size={14} /> چاپ
-          </button>
-        }
-      >
-        <AsyncBlock
-          loading={accounts.loading || balances.loading}
-          error={accounts.error ?? balances.error}
-          empty={rows.length === 0}
-          emptyText="در این بازه گردشی ثبت نشده."
-        >
-          <div className="table-scroll ef-table-wrap">
-            <table className="cards-on-mobile acc-table ef-table">
-              <thead>
-                <tr>
-                  <th>کدِ کل</th>
-                  <th>نامِ حسابِ کل</th>
-                  <th>بدهکار</th>
-                  <th>بستانکار</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.account.id}>
-                    <td className="card-title" data-label="کدِ کل" dir="ltr">
-                      {r.account.code}
-                    </td>
-                    <td data-label="نامِ حسابِ کل">{r.account.name}</td>
-                    <td data-label="بدهکار" className="num">
-                      {faAmount(r.debit)}
-                    </td>
-                    <td data-label="بستانکار" className="num">
-                      {faAmount(r.credit)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <BalanceFooter debit={debit} credit={credit} />
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
-
-// ═════════════════════ ۵) اصلاح طبقه‌بندی مانده ═════════════════════
+// ═════════════════════ ۴) انتقال مانده به حساب دیگر ═════════════════════
 
 /**
  * مانده‌ی یک ترکیبِ (حساب، تفصیلی) را با یک سندِ متوازن به حسابِ درست می‌برد.
  *
- * **با «جابه‌جایی حساب در درختواره» یکی نیست.** آن یکی `parent_id`ِ خودِ حساب را
+ * **با «انتقال حساب به سرفصل دیگر» یکی نیست.** آن یکی `parent_id`ِ خودِ حساب را
  * عوض می‌کند و گزارشِ گذشته را هم تغییر می‌دهد؛ این یکی اسنادِ گذشته را دست
  * نمی‌زند و اصلاح را به‌عنوان یک رویدادِ مالیِ تاریخ‌دار ثبت می‌کند.
  */
@@ -813,8 +662,8 @@ export function BalanceReclassPage({ token }: { token: string }) {
     <OpsPage
       canvas
       icon={ArrowLeftRight}
-      title="اصلاح طبقه‌بندی مانده"
-      description="مانده‌ی یک حساب/تفصیلی را با یک سندِ متوازن به جای درست می‌برد. اسنادِ گذشته دست‌نخورده می‌مانند و اصلاح به‌عنوان رویدادی تاریخ‌دار ثبت می‌شود."
+      title="انتقال مانده به حساب دیگر"
+      description="مانده‌ی یک حساب/تفصیلی را با یک سندِ متوازن به حساب یا تفصیلیِ درست می‌برد (اصلاحِ طبقه‌بندیِ مانده). اسنادِ گذشته دست‌نخورده می‌مانند و انتقال به‌عنوان رویدادی تاریخ‌دار ثبت می‌شود. برای جابه‌جاییِ خودِ حساب در درختواره، «انتقال حساب به سرفصل دیگر» را باز کنید."
       head={
         <div className="cc-head">
           <div className="cc-toolbar">
@@ -828,7 +677,7 @@ export function BalanceReclassPage({ token }: { token: string }) {
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="اصلاح طبقه‌بندی مانده"
+                placeholder="انتقال مانده به حساب دیگر"
               />
             </label>
           </div>

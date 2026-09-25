@@ -286,7 +286,7 @@ export function BankAccountsPanel({ token, accounts }: { token: string; accounts
               {hasUntagged && someTaggedEmpty && (
                 <p className="field-hint">
                   حسابی که مانده‌اش صفر است، گردشِ پیش از تفکیک را روی حسابِ بدونِ تفصیلی دارد.
-                  برای انتقالش از «اصلاح طبقه‌بندی مانده» استفاده کنید تا اسنادِ گذشته دست‌نخورده بمانند.
+                  برای انتقالش از «انتقال مانده به حساب دیگر» استفاده کنید تا اسنادِ گذشته دست‌نخورده بمانند.
                 </p>
               )}
               <div className="table-scroll">

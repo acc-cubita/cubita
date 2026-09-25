@@ -272,7 +272,7 @@ def test_changing_analytic_of_a_used_account_is_refused(db, user, gl):
     with pytest.raises(HTTPException) as err:
         svc.update_bank_account(db, acct.id, {"analytic_id": _analytic(db, user).id})
     assert err.value.status_code == 409
-    assert "اصلاح طبقه‌بندی مانده" in err.value.detail
+    assert "انتقال مانده به حساب دیگر" in err.value.detail
 
 
 def test_changing_analytic_of_an_unused_account_is_allowed(db, user, gl):

@@ -34,7 +34,7 @@ import {
   DatabaseBackup,
   Factory,
   FileSpreadsheet,
-  FolderPlus,
+  FolderTree,
   GitCompareArrows,
   Banknote,
   HandCoins,
@@ -245,7 +245,6 @@ export type PageKey =
   | 'statementlist'
   | 'pettylist'
   //: دفترهای نظیرِ ماژول‌های حسابداری، شرکت و تنظیمات.
-  | 'analyticlist'
   | 'geolist'
   | 'contactgrouplist'
   | 'calendarlist'
@@ -256,10 +255,8 @@ export type PageKey =
   | 'journalentry'
   | 'renumber'
   | 'mergeentries'
-  | 'finalizeentries'
   | 'fxrevaluation'
   | 'balancereclass'
-  | 'generaldoc'
   | 'entrycartable'
   | 'closingopening'
   | 'vat'
@@ -267,7 +264,6 @@ export type PageKey =
   | 'reclassify'
   | 'closepnl'
   | 'analytics'
-  | 'newaccount'
   | 'openingbalance'
   | 'accountbrowse'
   | 'balancereport'
@@ -275,7 +271,6 @@ export type PageKey =
   | 'integrity'
   //: فهرست‌های حسابداری — از کارتِ «فهرست» باز می‌شوند.
   | 'entrylist'
-  | 'accountlist'
   | 'recurringlist'
   | 'budgetlist'
   | 'currencylist'
@@ -284,7 +279,17 @@ export type PageKey =
   | 'assurancefindinglist'
   | 'assurancerunlist'
 
-export type NavItem = { key: PageKey; label: string; icon: ReactNode }
+export type NavItem = {
+  key: PageKey
+  label: string
+  icon: ReactNode
+  /**
+   * دسته‌ی ردیف درونِ گروه — تیترِ کوچکی که کارتِ «عملیات» و کشوی موبایل بالای هر دسته
+   * می‌گذارند. ردیف‌های هم‌دسته پشتِ هم می‌آیند (`navSections`). گروهی که دسته ندارد، همان
+   * فهرستِ یک‌دستِ قبلی است.
+   */
+  section?: string
+}
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
 
 // چیدمانِ ماژول‌ها گروه‌بندی‌شده تا کاربر به‌جای اسکنِ فهرستِ تخت، روی «دسته» تمرکز کند.
@@ -390,39 +395,38 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'fixedassets', label: 'دارایی ثابت', icon: <Building2 size={18} /> }],
   },
   {
-    //: «حسابداری» = دفترداری، از ساختِ چارت تا بستنِ سال. ترتیب عمدی است و مسیرِ
-    //: کارِ واقعی را دنبال می‌کند: اول ساختار (چارت، سرفصل)، بعد ثبت و بازبینیِ
-    //: سند، بعد اصلاح و مرتب‌سازی، بعد عملیاتِ پایانِ دوره، و آخر گزارش‌ها.
+    //: «حسابداری» = دفترداری، از ساختِ چارت تا بستنِ سال، در شش دسته به ترتیبِ کارِ
+    //: واقعی: ساختار، ثبت، بازبینی، اصلاح، پایانِ دوره، گزارش. بازچینیِ ۱۴۰۵/۰۷/۰۳
+    //: منوهای تکراری را یکی کرد (PROJECT_OVERVIEW §۱۰): «سرفصل جدید» و «فهرست حساب‌ها»
+    //: در درختواره، «تبدیل اسناد موقت به دائم» در کارتابل، «صدور سند کل» در گزارش ترازها.
+    //: کلیدهای قدیمی از `LEGACY_PAGES` به جای تازه‌شان می‌روند.
     heading: 'حسابداری',
     icon: <BookOpen size={17} />,
     items: [
-      { key: 'acctchart', label: 'درختواره حساب‌ها', icon: <ListTree size={18} /> },
-      { key: 'newaccount', label: 'سرفصل جدید', icon: <FolderPlus size={18} /> },
-      { key: 'openingbalance', label: 'مانده اول دوره', icon: <Wallet size={18} /> },
-      { key: 'journalentry', label: 'سند حسابداری', icon: <BookOpen size={18} /> },
-      { key: 'entrycartable', label: 'کارتابل صدور سند حسابداری', icon: <ClipboardCheck size={18} /> },
-      { key: 'finalizeentries', label: 'تبدیل اسناد موقت به دائم', icon: <Lock size={18} /> },
-      { key: 'renumber', label: 'شماره‌گذاری مجدد اسناد', icon: <Hash size={18} /> },
-      { key: 'mergeentries', label: 'ادغام اسناد', icon: <Combine size={18} /> },
-      { key: 'reclassify', label: 'جابه‌جایی حساب در درختواره', icon: <ArrowLeftRight size={18} /> },
-      { key: 'analytics', label: 'تفصیلی سایر', icon: <Tag size={18} /> },
-      { key: 'fxrevaluation', label: 'صدور سند تسعیر ارز', icon: <Coins size={18} /> },
-      { key: 'balancereclass', label: 'اصلاح طبقه‌بندی مانده', icon: <ArrowLeftRight size={18} /> },
-      { key: 'generaldoc', label: 'صدور سند کل', icon: <FileSpreadsheet size={18} /> },
-      { key: 'closepnl', label: 'بستن حساب‌های سود و زیان', icon: <CalendarCheck size={18} /> },
-      { key: 'closingopening', label: 'صدور سند اختتامیه و افتتاحیه', icon: <Archive size={18} /> },
-      { key: 'vat', label: 'مالیات بر ارزش افزوده', icon: <Percent size={18} /> },
-      { key: 'ebooks', label: 'دفاتر تجارت الکترونیک', icon: <BookMarked size={18} /> },
-      { key: 'accountbrowse', label: 'مرور حساب‌ها', icon: <Layers size={18} /> },
-      { key: 'balancereport', label: 'گزارش ترازها', icon: <Scale size={18} /> },
-      { key: 'ledgerreport', label: 'گزارش دفتر', icon: <BookOpenCheck size={18} /> },
+      { key: 'acctchart', label: 'درختواره حساب‌ها', icon: <ListTree size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'reclassify', label: 'انتقال حساب به سرفصل دیگر', icon: <FolderTree size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'analytics', label: 'تفصیلی سایر', icon: <Tag size={18} />, section: 'ساختار و تعریف‌ها' },
       //: این سه پنلِ سازنده‌ی خودشان را در همان صفحه دارند (RecurringEntriesPanel،
       //: BudgetPanel، CurrenciesPanel) — فرم و دفترشان یکی است، پس عملیات‌اند نه فهرست.
-      { key: 'recurringlist', label: 'اسناد تکرارشونده', icon: <Repeat size={18} /> },
-      { key: 'budgetlist', label: 'بودجه‌بندی', icon: <Target size={18} /> },
-      { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: <Coins size={18} /> },
-      { key: 'integrity', label: 'بررسی یکپارچگی', icon: <ShieldCheck size={18} /> },
-      { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
+      { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: <Coins size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'budgetlist', label: 'بودجه‌بندی', icon: <Target size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'journalentry', label: 'سند حسابداری', icon: <BookOpen size={18} />, section: 'ثبت سند' },
+      { key: 'openingbalance', label: 'مانده اول دوره', icon: <Wallet size={18} />, section: 'ثبت سند' },
+      { key: 'recurringlist', label: 'اسناد تکرارشونده', icon: <Repeat size={18} />, section: 'ثبت سند' },
+      { key: 'entrycartable', label: 'کارتابل اسناد موقت', icon: <ClipboardCheck size={18} />, section: 'بازبینی اسناد' },
+      { key: 'mergeentries', label: 'ادغام اسناد', icon: <Combine size={18} />, section: 'بازبینی اسناد' },
+      { key: 'renumber', label: 'شماره‌گذاری مجدد اسناد', icon: <Hash size={18} />, section: 'بازبینی اسناد' },
+      { key: 'balancereclass', label: 'انتقال مانده به حساب دیگر', icon: <ArrowLeftRight size={18} />, section: 'اصلاح و تعدیل' },
+      { key: 'fxrevaluation', label: 'صدور سند تسعیر ارز', icon: <Coins size={18} />, section: 'اصلاح و تعدیل' },
+      { key: 'closepnl', label: 'بستن حساب‌های سود و زیان', icon: <CalendarCheck size={18} />, section: 'پایان دوره' },
+      { key: 'closingopening', label: 'صدور سند اختتامیه و افتتاحیه', icon: <Archive size={18} />, section: 'پایان دوره' },
+      { key: 'accountbrowse', label: 'مرور حساب‌ها', icon: <Layers size={18} />, section: 'گزارش و کنترل' },
+      { key: 'balancereport', label: 'گزارش ترازها', icon: <Scale size={18} />, section: 'گزارش و کنترل' },
+      { key: 'ledgerreport', label: 'گزارش دفتر', icon: <BookOpenCheck size={18} />, section: 'گزارش و کنترل' },
+      { key: 'ebooks', label: 'دفاتر تجارت الکترونیک', icon: <BookMarked size={18} />, section: 'گزارش و کنترل' },
+      { key: 'vat', label: 'مالیات بر ارزش افزوده', icon: <Percent size={18} />, section: 'گزارش و کنترل' },
+      { key: 'integrity', label: 'بررسی یکپارچگی', icon: <ShieldCheck size={18} />, section: 'گزارش و کنترل' },
+      { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} />, section: 'گزارش و کنترل' },
     ],
   },
   {
@@ -532,11 +536,11 @@ export const NAV_GROUPS: NavGroup[] = [
 export const PAGE_MODULE_KEY: Partial<Record<PageKey, string | string[]>> = Object.fromEntries(
   (
     [
-      'acctchart', 'newaccount', 'openingbalance', 'journalentry', 'entrycartable', 'finalizeentries',
+      'acctchart', 'openingbalance', 'journalentry', 'entrycartable',
       'renumber', 'mergeentries', 'reclassify', 'analytics', 'fxrevaluation', 'balancereclass',
-      'generaldoc', 'closepnl', 'closingopening', 'vat', 'ebooks', 'accountbrowse',
+      'closepnl', 'closingopening', 'vat', 'ebooks', 'accountbrowse',
       'balancereport', 'ledgerreport', 'integrity',
-      'entrylist', 'accountlist', 'recurringlist', 'budgetlist', 'currencylist', 'periodcloselist',
+      'entrylist', 'recurringlist', 'budgetlist', 'currencylist', 'periodcloselist',
     ] as PageKey[]
   ).map((key) => [key, 'accounting']),
 ) as Partial<Record<PageKey, string | string[]>>
@@ -570,9 +574,6 @@ for (const key of [
 //: خرید دارد هم تهاترِ تأمین‌کننده‌ها را لازم دارد.
 PAGE_MODULE_KEY.creditnote = ['sales', 'purchases']
 PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
-
-//: دفترِ «تفصیلی سایر» زیرِ چترِ حسابداری است، مثلِ بقیه‌ی فهرست‌های آن ماژول.
-PAGE_MODULE_KEY.analyticlist = 'accounting'
 
 //: «ورود گروهی اشخاص» در گروهِ «تنظیمات» می‌نشیند ولی داده‌اش طرف‌حساب است؛ پس
 //: کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
@@ -798,4 +799,45 @@ export function menuEntryVisible(key: PageKey, groups: NavGroup[]): boolean {
   const wanted = modulesOf(key)
   if (PAGE_MODULE_KEY[key] === undefined) return true
   return groups.some((g) => g.items.some((i) => modulesOf(i.key).some((m) => wanted.includes(m))))
+}
+
+/**
+ * ردیف‌های یک گروه، دسته‌به‌دسته — برای تیترهای کوچکِ کارتِ «عملیات» و کشوی موبایل.
+ *
+ * دسته‌ها به ترتیبِ اولین ظهورشان می‌آیند و ردیف‌های هر دسته ترتیبِ خودشان را نگه می‌دارند؛ پس
+ * فهرستی که با ترتیبِ دلخواهِ کاربر مرتب شده هم دسته‌ها را به‌هم نمی‌ریزد. گروهی که ردیف‌هایش دسته
+ * ندارند یک دسته‌ی بی‌نام می‌شود — همان فهرستِ یک‌دستِ قبلی، بی‌تیتر.
+ */
+export function navSections<T extends { section?: string }>(items: readonly T[]): { title: string | null; items: T[] }[] {
+  const out: { title: string | null; items: T[] }[] = []
+  const at = new Map<string | null, number>()
+  for (const it of items) {
+    const title = it.section ?? null
+    let i = at.get(title)
+    if (i === undefined) {
+      i = out.length
+      at.set(title, i)
+      out.push({ title, items: [] })
+    }
+    out[i].items.push(it)
+  }
+  return out
+}
+
+/**
+ * منوهایی که در بازچینیِ حسابداری (۱۴۰۵/۰۷/۰۳) در صفحه‌ی دیگری ادغام شدند. کلیدِ قدیمی هنوز
+ * ممکن است در میان‌برهای ذخیره‌شده‌ی کاربر باشد؛ به‌جای صفحه‌ی خالی، به جای تازه‌اش می‌رود.
+ */
+export const LEGACY_PAGES: Readonly<Record<string, { page: PageKey; section?: string }>> = {
+  newaccount: { page: 'acctchart', section: 'new' },
+  accountlist: { page: 'acctchart', section: 'flat' },
+  analyticlist: { page: 'analytics' },
+  finalizeentries: { page: 'entrycartable' },
+  generaldoc: { page: 'balancereport', section: 'general' },
+}
+
+/** مقصدِ واقعیِ یک ناوبری — کلیدِ قدیمی به جای تازه‌اش، بقیه همان که بود. */
+export function resolveLegacyPage(page: string, section: string | null = null): { page: PageKey; section: string | null } {
+  const to = LEGACY_PAGES[page]
+  return to ? { page: to.page, section: to.section ?? null } : { page: page as PageKey, section }
 }

@@ -35,6 +35,7 @@ import {
   type VatBreakdown,
 } from '../../api'
 import { AccountLedgerDrawer } from '../../components/AccountLedgerDrawer'
+import { useNavSection } from '../../components/navContext'
 import { EntryCard } from '../../components/EntryCard'
 import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
 import { ReportFilterBar } from '../../components/ReportFilterBar'
@@ -135,17 +136,37 @@ const BALANCE_FILTERS = [
 ] as const
 type BalanceFilter = (typeof BALANCE_FILTERS)[number]['value']
 
+/**
+ * دو قالبِ یک داده: **تراز آزمایشی** (ستون‌ها و سطحِ دلخواه) و **سند کل** — خلاصه‌ی گردشِ بازه در سطحِ
+ * حسابِ کل، همان برگه‌ای که پایانِ ماه چاپ و بایگانی می‌شود. «سند کل» پیش‌تر منوی جدای «صدور سند کل»
+ * بود که سندی صادر نمی‌کرد و همین تجمیع را دوباره حساب می‌کرد؛ در بازچینیِ ۱۴۰۵/۰۷/۰۳ قالبی از همین
+ * صفحه شد (بخشِ `general`).
+ */
+type BalanceView = 'trial' | 'general'
+
 export function BalanceReportPage({ token }: { token: string }) {
-  const range = useRange('year')
+  const nav = useNavSection()
+  const askedGeneral = nav?.activePage === 'balancereport' && nav.section === 'general'
+  const [view, setView] = useState<BalanceView>(askedGeneral ? 'general' : 'trial')
+  const general = view === 'general'
+  //: سند کل برگه‌ی ماهانه است؛ تراز معمولاً کلِ سال.
+  const range = useRange(askedGeneral ? 'month' : 'year')
   const [columns, setColumns] = useState<Columns>(6)
   const [level, setLevel] = useState(0)
   const [filters, setFilters] = useState<ReportFilters>({})
   const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('all')
   const [drill, setDrill] = useState<{ id: string; code: string; name: string } | null>(null)
   const accounts = useAsync(() => fetchChartAccounts(token), [token])
+  //: کاتالوگِ گزارش‌ها «سند کل» را روی همین صفحه‌ی باز هم می‌تواند بخواهد.
+  useEffect(() => {
+    if (askedGeneral) setView('general')
+  }, [askedGeneral])
+  //: سند کل: فقط گردش، سطحِ کل. بقیه‌ی گزینه‌ها مالِ تراز است.
+  const shownColumns: Columns = general ? 4 : columns
+  const shownLevel = general ? 2 : level
   //: «بدونِ گردش» تنها حالتی است که حساب‌های بی‌ردیف را هم لازم دارد؛ بقیه‌ی
   //: اوقات کشیدنشان یعنی چارتِ چندصدردیفی پر از صفر.
-  const wantsIdle = balanceFilter === 'idle' || balanceFilter === 'all'
+  const wantsIdle = !general && (balanceFilter === 'idle' || balanceFilter === 'all')
   const scope: ReportFilters = { ...filters, dateFrom: range.from, dateTo: range.to }
   const balances = useAsync(
     () => fetchAccountBalances(token, scope, wantsIdle),
@@ -159,12 +180,12 @@ export function BalanceReportPage({ token }: { token: string }) {
     const list = accounts.data ?? []
     const byId = new Map(list.map((a) => [a.id, a]))
     const source = balances.data ?? []
-    if (level === 0) return source
+    if (shownLevel === 0) return source
     const totals = new Map<string, BalanceRow>()
     for (const row of source) {
       const leaf = byId.get(row.account_id)
       if (!leaf) continue
-      const target = ancestorAtLevel(leaf, byId, level)
+      const target = ancestorAtLevel(leaf, byId, shownLevel)
       const bucket = totals.get(target.id)
       if (!bucket) {
         totals.set(target.id, {
@@ -199,28 +220,28 @@ export function BalanceReportPage({ token }: { token: string }) {
         }
       })
       .sort((a, b) => a.account_code.localeCompare(b.account_code))
-  }, [accounts.data, balances.data, level])
+  }, [accounts.data, balances.data, shownLevel])
 
 
   function exportCsv() {
     const headers = ['کد', 'نام حساب', 'نوع']
-    if (columns >= 6) headers.push('افتتاحیه بدهکار', 'افتتاحیه بستانکار')
-    if (columns >= 4) headers.push('گردش بدهکار', 'گردش بستانکار')
-    if (columns >= 8) headers.push('جمع بدهکار', 'جمع بستانکار')
-    headers.push('مانده بدهکار', 'مانده بستانکار')
+    if (shownColumns >= 6) headers.push('افتتاحیه بدهکار', 'افتتاحیه بستانکار')
+    if (shownColumns >= 4) headers.push('گردش بدهکار', 'گردش بستانکار')
+    if (shownColumns >= 8) headers.push('جمع بدهکار', 'جمع بستانکار')
+    if (!general) headers.push('مانده بدهکار', 'مانده بستانکار')
     downloadCsv(
-      `tarazha-${range.from ?? 'all'}`,
+      `${general ? 'sanad-kol' : 'tarazha'}-${range.from ?? 'all'}`,
       headers,
       visible.map((r) => {
         const cells: (string | number)[] = [r.account_code, r.account_name, TYPE_LABELS[r.account_type] ?? r.account_type]
-        if (columns >= 6) cells.push(Number(r.opening_debit), Number(r.opening_credit))
-        if (columns >= 4) cells.push(Number(r.period_debit), Number(r.period_credit))
-        if (columns >= 8)
+        if (shownColumns >= 6) cells.push(Number(r.opening_debit), Number(r.opening_credit))
+        if (shownColumns >= 4) cells.push(Number(r.period_debit), Number(r.period_credit))
+        if (shownColumns >= 8)
           cells.push(
             Number(r.opening_debit) + Number(r.period_debit),
             Number(r.opening_credit) + Number(r.period_credit),
           )
-        cells.push(Number(r.closing_debit), Number(r.closing_credit))
+        if (!general) cells.push(Number(r.closing_debit), Number(r.closing_credit))
         return cells
       }),
     )
@@ -230,6 +251,8 @@ export function BalanceReportPage({ token }: { token: string }) {
   //: دامنه‌ی محاسبه را عوض نمی‌کند، فقط نمایش را — برخلافِ `ReportFilterBar` که
   //: باید سمتِ سرور باشد چون *خودِ عددها* را عوض می‌کند.
   const visible = useMemo(() => {
+    //: سند کل فقط حساب‌هایی را دارد که در بازه گردش خورده‌اند.
+    if (general) return rows.filter((r) => Number(r.period_debit) !== 0 || Number(r.period_credit) !== 0)
     if (balanceFilter === 'all') return rows
     return rows.filter((r) => {
       const net = Number(r.closing_debit) - Number(r.closing_credit)
@@ -238,7 +261,7 @@ export function BalanceReportPage({ token }: { token: string }) {
       if (balanceFilter === 'debit') return net > 0
       return net < 0
     })
-  }, [rows, balanceFilter])
+  }, [rows, balanceFilter, general])
 
   //: **این سه خط باید زیرِ `visible` بمانند.**
   //:
@@ -262,49 +285,75 @@ export function BalanceReportPage({ token }: { token: string }) {
       canvas
       icon={Scale}
       title="گزارش ترازها"
-      description="تراز آزمایشی در چهار قالبِ استاندارد و سه سطحِ حساب. همان یک داده است؛ ستون‌ها تعیین می‌کنند چقدرش را ببینید."
+      description="تراز آزمایشی در چهار قالبِ استاندارد و سه سطحِ حساب، و «سند کل»ِ پایانِ ماه (گردشِ هر حسابِ کل). همان یک داده است؛ قالب و ستون‌ها تعیین می‌کنند چقدرش را ببینید."
       head={
         <div className="cc-head">
           <RangeBar
             range={range}
             extra={
               <>
-                <label className="acc-inline-field">
-                  ستون‌ها
-                  <SearchSelect
-                    value={columns}
-                    onChange={(e) => setColumns(Number(e.target.value) as Columns)}
+                <div className="cc-presets" role="group" aria-label="قالبِ گزارش">
+                  <button
+                    type="button"
+                    className={general ? '' : 'is-active'}
+                    aria-pressed={!general}
+                    onClick={() => setView('trial')}
                   >
-                    {COLUMN_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label} — {o.hint}
-                      </option>
-                    ))}
-                  </SearchSelect>
-                </label>
-                <label className="acc-inline-field">
-                  سطح
-                  <SearchSelect value={level} onChange={(e) => setLevel(Number(e.target.value))}>
-                    {LEVEL_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </SearchSelect>
-                </label>
-                <label className="acc-inline-field">
-                  نوعِ مانده
-                  <SearchSelect
-                    value={balanceFilter}
-                    onChange={(e) => setBalanceFilter(e.target.value as BalanceFilter)}
+                    تراز آزمایشی
+                  </button>
+                  <button
+                    type="button"
+                    className={general ? 'is-active' : ''}
+                    aria-pressed={general}
+                    title="گردشِ بدهکار و بستانکارِ هر حسابِ کل در بازه — برگه‌ی بایگانیِ پایانِ ماه"
+                    onClick={() => {
+                      setView('general')
+                      if (range.preset === 'year') range.setPreset('month')
+                    }}
                   >
-                    {BALANCE_FILTERS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </SearchSelect>
-                </label>
+                    سند کل
+                  </button>
+                </div>
+                {!general && (
+                  <>
+                    <label className="acc-inline-field">
+                      ستون‌ها
+                      <SearchSelect
+                        value={columns}
+                        onChange={(e) => setColumns(Number(e.target.value) as Columns)}
+                      >
+                        {COLUMN_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label} — {o.hint}
+                          </option>
+                        ))}
+                      </SearchSelect>
+                    </label>
+                    <label className="acc-inline-field">
+                      سطح
+                      <SearchSelect value={level} onChange={(e) => setLevel(Number(e.target.value))}>
+                        {LEVEL_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </SearchSelect>
+                    </label>
+                    <label className="acc-inline-field">
+                      نوعِ مانده
+                      <SearchSelect
+                        value={balanceFilter}
+                        onChange={(e) => setBalanceFilter(e.target.value as BalanceFilter)}
+                      >
+                        {BALANCE_FILTERS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </SearchSelect>
+                    </label>
+                  </>
+                )}
                 <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
               </>
             }
@@ -326,12 +375,10 @@ export function BalanceReportPage({ token }: { token: string }) {
     >
       <SectionCard
         icon={Scale}
-        title="تراز"
-        description={
-          range.from
-            ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? todayIso())} — روی هر حساب کلیک کنید تا دفترش باز شود`
-            : 'از ابتدای دفتر — روی هر حساب کلیک کنید تا دفترش باز شود'
-        }
+        title={general ? 'سند کل' : 'تراز'}
+        description={`${
+          range.from ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? todayIso())}` : 'از ابتدای دفتر'
+        } — ${general ? 'گردشِ هر حسابِ کل در این بازه؛' : ''} روی هر حساب کلیک کنید تا دفترش باز شود`}
         actions={
           <>
             <button
@@ -352,7 +399,11 @@ export function BalanceReportPage({ token }: { token: string }) {
           loading={accounts.loading || balances.loading}
           error={accounts.error ?? balances.error}
           empty={visible.length === 0}
-          emptyText="با این فیلترها ردیفی نیست — بازه یا نوعِ مانده را عوض کنید."
+          emptyText={
+            general
+              ? 'در این بازه هیچ حسابی گردش نخورده — بازه را عوض کنید.'
+              : 'با این فیلترها ردیفی نیست — بازه یا نوعِ مانده را عوض کنید.'
+          }
         >
           <div className="table-scroll ef-table-wrap">
             <table className="ef-table cards-on-mobile acc-table acc-table--wide">
@@ -360,26 +411,30 @@ export function BalanceReportPage({ token }: { token: string }) {
                 <tr>
                   <th>کد</th>
                   <th>نامِ حساب</th>
-                  {columns >= 6 && (
+                  {shownColumns >= 6 && (
                     <>
                       <th>افتتاحیه بد</th>
                       <th>افتتاحیه بس</th>
                     </>
                   )}
-                  {columns >= 4 && (
+                  {shownColumns >= 4 && (
                     <>
                       <th>گردش بد</th>
                       <th>گردش بس</th>
                     </>
                   )}
-                  {columns >= 8 && (
+                  {shownColumns >= 8 && (
                     <>
                       <th>جمع بد</th>
                       <th>جمع بس</th>
                     </>
                   )}
-                  <th>مانده بد</th>
-                  <th>مانده بس</th>
+                  {!general && (
+                    <>
+                      <th>مانده بد</th>
+                      <th>مانده بس</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -397,19 +452,19 @@ export function BalanceReportPage({ token }: { token: string }) {
                       {r.account_code}
                     </td>
                     <td data-label="نامِ حساب">{r.account_name}</td>
-                    {columns >= 6 && (
+                    {shownColumns >= 6 && (
                       <>
                         <td data-label="افتتاحیه بد" className="num">{faAmount(r.opening_debit)}</td>
                         <td data-label="افتتاحیه بس" className="num">{faAmount(r.opening_credit)}</td>
                       </>
                     )}
-                    {columns >= 4 && (
+                    {shownColumns >= 4 && (
                       <>
                         <td data-label="گردش بد" className="num">{faAmount(r.period_debit)}</td>
                         <td data-label="گردش بس" className="num">{faAmount(r.period_credit)}</td>
                       </>
                     )}
-                    {columns >= 8 && (
+                    {shownColumns >= 8 && (
                       <>
                         <td data-label="جمع بد" className="num">
                           {faAmount(Number(r.opening_debit) + Number(r.period_debit))}
@@ -419,8 +474,12 @@ export function BalanceReportPage({ token }: { token: string }) {
                         </td>
                       </>
                     )}
-                    <td data-label="مانده بد" className="num">{faAmount(r.closing_debit)}</td>
-                    <td data-label="مانده بس" className="num">{faAmount(r.closing_credit)}</td>
+                    {!general && (
+                      <>
+                        <td data-label="مانده بد" className="num">{faAmount(r.closing_debit)}</td>
+                        <td data-label="مانده بس" className="num">{faAmount(r.closing_credit)}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

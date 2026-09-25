@@ -776,6 +776,17 @@
   border-inline-start: 1px solid var(--sidebar-border);
 }
 
+/* تیترِ دسته‌ی منوها درونِ گروهِ سایدبار — هم‌ترازِ متنِ منوها، کوچک و کم‌رنگ. */
+.sidebar-section-label {
+  padding-block: 8px 2px;
+  padding-inline: 30px 8px;
+  color: var(--sidebar-text);
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+  user-select: none;
+}
+
 /* برگِ ماژولِ بدونِ تب داخلِ گروه — هم‌ترازِ برچسبِ ماژول‌های تب‌دار (جای twistie). */
 .acc-inner > .sidebar-nav-item {
   padding-inline-start: 30px;
@@ -4247,6 +4258,12 @@ button.topnav-org:hover {
 }
 .mob-section-label:first-child {
   padding-top: 4px;
+}
+/* دسته‌ی منوها درونِ «عملیات» — یک پله فرعی‌تر از تیترِ «عملیات»/«فهرست». */
+.mob-section-label--sub {
+  padding-inline-start: 16px;
+  font-weight: 500;
+  opacity: 0.85;
 }
 
 /* ── حالت‌ها ─────────────────────────────────────────────────────────────
@@ -8626,6 +8643,24 @@ button.mp-item:focus-visible {
   background: var(--accent-on-tint);
 }
 
+/* تیترِ دسته‌ی منوهای یک گروه («ساختار و تعریف‌ها»، «ثبت سند»، …) — کوچک، کم‌رنگ و بی‌کنش تا با
+   منوها قاطی نشود؛ خطِ نازکِ بالا دسته‌ها را از هم جدا می‌کند (جز اولی). فاصله‌ی حرفی نمی‌گیرد:
+   letter-spacing پیوستگیِ حروفِ فارسی را می‌شکند. */
+.mod-section-label {
+  margin: 8px 4px 2px;
+  padding: 8px 6px 2px;
+  border-block-start: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  user-select: none;
+}
+.mod-section-label:first-child {
+  margin-block-start: 0;
+  padding-block-start: 2px;
+  border-block-start: 0;
+}
+
 /* بخش‌های صفحه، تودرتو زیرِ ردیفِ والد. خطِّ راهنما دقیقاً زیرِ مرکزِ آیکونِ والد است
    (۱px قاب + ۱۰px فاصله + نیمِ آیکونِ ۱۶px = ۱۹px) و padding-inline-start (در RTL همان
    padding-right) آیکونِ زیرمنو را زیرِ متنِ والد می‌نشاند. */
@@ -9133,6 +9168,19 @@ ol.pw-facts { list-style-type: persian; padding-inline-start: 20px; }
 .tree-add input[type='text'],
 .tree-add input:not([type]) { width: 160px; }
 .tree-add button { font-size: var(--fs-xs); }
+/* فرمِ افزودن در جدولِ درختواره — شبکه‌ی خانه‌های هم‌عرض به‌جای ستونِ تمام‌عرض: قاعده‌ی سراسریِ فرم‌ها
+   هر کادر را تمام‌عرض می‌کرد و فرمِ «حساب تازه» (جانشینِ صفحه‌ی «سرفصل جدید») دیوارِ بلندی از کادر می‌شد.
+   برچسب ردیفِ خودش را دارد؛ تیک‌ها و دکمه‌ها هم خانه‌ی خودشان را. */
+.tree-table .tree-add {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  align-items: center;
+  gap: 8px;
+}
+.tree-table .tree-add > * { min-width: 0; width: auto; }
+.tree-table .tree-add > :is(input, select, .item-picker-trigger) { inline-size: 100%; }
+.tree-table .tree-add > .tree-add-label { grid-column: 1 / -1; }
+.tree-table .tree-add > .bk-hint { grid-column: 1 / -1; }
 
 /* ── قالب‌های آماده‌ی کدینگ ───────────────────────────────────────────────── */
 .tpl-grid {

@@ -29,9 +29,21 @@ describe('کاتالوگِ گزارش‌ها', () => {
     const index = launchIndex(EVERYTHING)
     for (const id of allIds) {
       if (id.startsWith('reports/')) expect(isReportKind(id.slice('reports/'.length)), id).toBe(true)
-      else expect(index.has(id), id).toBe(true)
+      else if (!index.has(id)) {
+        //: قالبی از صفحه‌ی بی‌تب («سند کل»ِ گزارش ترازها): صفحه‌ی پایه باید باشد و نامِ صریح داشته باشد.
+        const [base, section] = id.split('/')
+        const spec = REPORT_GROUPS.flatMap((g) => g.entries).find((e) => e.id === id)
+        expect(Boolean(section && index.has(base) && spec?.label), id).toBe(true)
+      }
     }
     expect(ids('accountant')).toHaveLength(allIds.length)
+  })
+
+  it('«سند کل» قالبِ «گزارش ترازها» است، نه صفحه‌ی جدا', () => {
+    const entry = buildReportCatalog(EVERYTHING, 'accountant')
+      .flatMap((g) => g.entries)
+      .find((e) => e.id === 'balancereport/general')
+    expect(entry).toMatchObject({ label: 'سند کل', page: 'balancereport', section: 'general' })
   })
 
   it('هیچ ردیفی دو بار نیست', () => {
