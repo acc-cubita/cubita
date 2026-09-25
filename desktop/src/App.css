@@ -13003,6 +13003,10 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font-weight: 700;
   text-align: start;
   white-space: nowrap;
+  /* ستونِ باریک‌شده: عنوان سه‌نقطه می‌خورد نه اینکه زیرِ ستونِ کناری برود. دستگیره‌ی عرض درونِ
+   * خودِ سرستون است، پس بریده نمی‌شود. */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* اعداد راست‌چین، هم‌ستون و هم‌عرض (tabular) — خواندنِ ستونِ مبلغ از بالا به پایین. */
 .page .ef-table-wrap > table.xl-grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -13038,6 +13042,10 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .xl-rowhead-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td.xl-rowhead { background: var(--accent); }
 .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected .xl-rowhead-btn { color: var(--accent-text); font-weight: 700; }
+
+/* عرض‌های دستیِ کاربر (`xl-custom`): ستونِ آخر کشسان است و جای خالی را می‌گیرد. `width: 1%`ِ
+ * سرستونش (`ef-col-min`) در `table-layout: fixed` عرضِ ستون می‌شد و جای اضافه میانِ همه پخش. */
+.page .ef-table-wrap > table.xl-grid.xl-custom > thead > tr:first-child > th.ef-col-min { width: auto; }
 
 /* لبه‌ی کشیدنیِ عرضِ ستون (`ColResizer`) — سمتِ پایانِ هر سرستون؛ با hover خطِ accent. */
 .page .ef-table-wrap > table.xl-grid--list > thead > tr:first-child > th { position: relative; }

@@ -11,11 +11,18 @@ export const MIN_COL_WIDTH = 48
  * می‌شود (`data-col` روی `<th>`)؛ وگرنه بزرگ‌کردنِ یکی بقیه‌ی ستون‌های درصدی را جابه‌جا
  * می‌کرد. از آن به بعد جدول به اندازه‌ی جمعِ ستون‌هاست و اگر از قاب پهن‌تر شد، افقی می‌لغزد.
  *
+ * **ولی هرگز باریک‌تر از قاب نمی‌شود.** با جدولی به اندازه‌ی جمعِ ستون‌ها، باریک‌کردنِ ستون‌ها
+ * کنارِ جدول فضای سفیدِ خالی می‌گذاشت. حالا جدول دست‌کم تمام‌عرض است و جای اضافه به یک ستونِ
+ * «کشسان» (`flex`) می‌رسد — **ستونِ آخر** (کنش‌ها)، نه یک ستونِ میانی. اولین نسخه جای اضافه را
+ * به «حساب» (ستونِ دوم) می‌داد و باریک‌کردنِ «شرح» ستون‌های بینِ آن دو را جابه‌جا می‌کرد؛ کاربر
+ * گفت «همه‌ی جدول به‌هم می‌ریزد». حالا مثلِ اکسل فقط ستونی که کشیده می‌شود عوض می‌شود، ستون‌های
+ * قبلش سرِ جایشان می‌مانند و جای خالی ته جدول، درونِ خطوطِ خودش، می‌ماند.
+ *
  * روی همین دستگاه می‌ماند (مثلِ ترتیبِ منوها و میان‌برها). دوبار کلیک روی هر لبه همه را به
  * پیش‌فرض برمی‌گرداند. جهت از خودِ جدول خوانده می‌شود: در راست‌به‌چپ لبه‌ی کشیدنی سمتِ چپِ
  * ستون است و کشیدن به چپ پهن‌ترش می‌کند.
  */
-export function useColumnWidths(storageKey: string, fallback: Record<string, number>) {
+export function useColumnWidths(storageKey: string, fallback: Record<string, number>, flex?: string) {
   const [widths, setWidths] = useState<Record<string, number> | null>(() => load(storageKey))
 
   function persist(next: Record<string, number> | null) {
@@ -37,6 +44,9 @@ export function useColumnWidths(storageKey: string, fallback: Record<string, num
     table.querySelectorAll<HTMLElement>('thead tr:first-child > th[data-col]').forEach((th) => {
       snapshot[th.dataset.col!] = Math.round(th.getBoundingClientRect().width)
     })
+    //: ستونِ کشسان با کفِ پیش‌فرضش ذخیره می‌شود نه با پهنای فعلی‌اش (که جای خالی را هم در خود دارد) —
+    //: وگرنه پهن‌کردنِ ستونِ دیگر به‌جای پس‌گرفتنِ همان جای خالی، جدول را از قاب بیرون می‌زد.
+    if (flex && fallback[flex] !== undefined) snapshot[flex] = fallback[flex]
     const start = snapshot[col] ?? fallback[col] ?? 120
     const rtl = getComputedStyle(table).direction === 'rtl'
     const x0 = e.clientX
@@ -69,11 +79,17 @@ export function useColumnWidths(storageKey: string, fallback: Record<string, num
     customized: widths !== null,
     begin,
     reset,
-    /** سبکِ `<col>`؛ تا کاربر دست نزده، هیچ — چیدمانِ پیش‌فرض می‌ماند. */
-    col: (id: string): CSSProperties | undefined => (widths ? { width: widths[id] ?? fallback[id] ?? 120 } : undefined),
-    /** سبکِ `<table>` برای ستون‌هایی که الان دیده می‌شوند. */
+    /** سبکِ `<col>`؛ تا کاربر دست نزده، هیچ — چیدمانِ پیش‌فرض می‌ماند. ستونِ کشسان صریحاً
+     *  `auto` می‌گیرد (نه «هیچ»): عرضِ پیش‌فرضِ کلاسش وگرنه می‌ماند، `table-layout: fixed` هیچ
+     *  ستونِ خودکاری نمی‌دید و جای اضافه را میانِ **همه‌ی** ستون‌ها پخش می‌کرد. سرستونِ همان ستون
+     *  هم نباید عرض داشته باشد — جدول کلاسِ `xl-custom` را برای همین می‌گیرد (`App.css`). */
+    col: (id: string): CSSProperties | undefined =>
+      widths ? (id === flex ? { width: 'auto' } : { width: widths[id] ?? fallback[id] ?? 120 }) : undefined,
+    /** سبکِ `<table>` برای ستون‌هایی که الان دیده می‌شوند: جمعِ ستون‌ها، ولی دست‌کم تمام‌عرض. */
     table: (ids: readonly string[]): CSSProperties | undefined =>
-      widths ? { width: ids.reduce((s, id) => s + (widths[id] ?? fallback[id] ?? 120), 0), minInlineSize: 0 } : undefined,
+      widths
+        ? { width: ids.reduce((s, id) => s + (widths[id] ?? fallback[id] ?? 120), 0), minInlineSize: '100%' }
+        : undefined,
   }
 }
 
