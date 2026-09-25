@@ -16,12 +16,18 @@ export function JalaliDatePicker({
   value,
   onChange,
   placeholder = 'انتخاب تاریخ',
+  clearLabel,
 }: {
   /** شناسه‌ی دکمه‌ی بازکننده — تا `<label htmlFor>` به آن وصل شود. */
   id?: string
   value: string
   onChange: (iso: string) => void
   placeholder?: string
+  /**
+   * تاریخِ اختیاری: دکمه‌ای کنارِ «امروز» که مقدار را خالی می‌کند (`onChange('')`) — مثلاً «بی‌پایان» برای
+   * تاریخِ پایانِ سندِ تکرارشونده. بی‌این، تاریخی که یک‌بار انتخاب شد دیگر خالی نمی‌شد.
+   */
+  clearLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -125,6 +131,17 @@ export function JalaliDatePicker({
             <button type="button" onClick={pickToday}>
               امروز
             </button>
+            {clearLabel && value && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('')
+                  setOpen(false)
+                }}
+              >
+                {clearLabel}
+              </button>
+            )}
           </div>
         </div>
       )}

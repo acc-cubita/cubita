@@ -2897,6 +2897,7 @@ button:disabled {
   margin-top: 8px;
   display: flex;
   justify-content: center;
+  gap: 6px;
 }
 
 .jalali-date-footer button {
@@ -11466,6 +11467,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .ef-req { margin-inline-start: 3px; color: var(--danger); }
 .ef-message { margin: 0; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-muted); }
 .ef-message--warn { color: var(--danger); }
+.ef-message--ok { color: var(--success); }
 
 /* یک ارتفاع برای همه‌ی کنترل‌ها */
 /* `.item-picker-trigger` همان دکمه‌ی `SearchSelect` و انتخابگرِ کالاست. */
@@ -12934,6 +12936,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jh-field--sub { grid-column: 5; }
   /* فیلدِ آخرِ سربرگی که فقط دو فیلد دارد (مانده اول دوره): از بدهکار تا لبه. */
   .jh-field--rest { grid-column: 3 / -1; }
+  .jh-field--tail { grid-column: 4 / -1; }
   /* فیلدهای کسب‌وکاری (یک تا چهار) روی همان خانه‌ها؛ اولی تا وقتی جا هست دو خانه‌ی اول را می‌گیرد و
    * آخری تا لبه می‌کشد — سطر خانه‌ی خالی ندارد. */
   .jh-row--sub > .jh-field:first-child { grid-column: 1 / 3; }
@@ -12993,9 +12996,9 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jh-field--rest,
   .jh-row--sub > .jh-field:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .jh-field + .jh-field { border-inline-start: 0; }
-  .jh-row > .jh-field--status,
+  .jh-row > :is(.jh-field--status, .jh-field--tail),
   .jh-row--sub > .jh-field:nth-child(even) { border-inline-start: 1px solid var(--xl-line); }
-  .jh-row > :is(.jh-field--date, .jh-field--status, .jh-field--sub, .jh-field--rest),
+  .jh-row > :is(.jh-field--date, .jh-field--status, .jh-field--sub, .jh-field--rest, .jh-field--tail),
   .jh-row--sub > .jh-field:nth-child(n + 3) { border-block-start: 1px solid var(--xl-line); }
   .jh-row:first-child > .jh-field:last-child > .jh-label { border-start-end-radius: 0; }
   .jh-row:first-child > .jh-field--grow > .jh-label { border-start-end-radius: calc(var(--radius-md) - 1px); }
@@ -13406,6 +13409,27 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 /* خانه‌ی محاسبه‌شده‌ی رنگی (درصدِ تغییرِ نرخ): رنگِ `xl-ro` (متنِ پررنگ) رنگِ بالا/پایین را می‌پوشاند. */
 .page .ef-table-wrap > table.jg-table.xl-grid td.xl-ro.pos-in { color: var(--success); }
 .page .ef-table-wrap > table.jg-table.xl-grid td.xl-ro.pos-out { color: var(--danger); }
+/* ── اسناد تکرارشونده: فهرستِ قالب‌ها (گریدِ فقط‌خواندنی، کارتی در موبایل) ──
+ * «عنوان» باقی را می‌گیرد؛ بقیه عرضِ ثابتِ خوانا. خانه‌ی وضعیت خودِ دکمه است (بی‌حاشیه، مثلِ برگه‌ی تفصیلی). */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.rc-list { table-layout: fixed; inline-size: 100%; min-inline-size: 760px; }
+  .page .ef-table-wrap > table.rc-list > thead > tr:first-child > th { position: relative; }
+  .rc-list col.rc-c-rowhead { width: 44px; }
+  .rc-list col.rc-c-freq { width: 96px; }
+  .rc-list col.rc-c-next { width: 150px; }
+  .rc-list col.rc-c-last { width: 100px; }
+  .rc-list col.rc-c-amount { width: 130px; }
+  .rc-list col.rc-c-state { width: 96px; }
+  .rc-list col.rc-c-actions { width: 112px; }
+  .page .ef-table-wrap > table.rc-list td.rc-state { padding: 0; }
+  .page .ef-table-wrap > table.rc-list td :is(.xl-ro-note) { display: block; }
+}
+.rc-due { margin-inline-start: 6px; }
+.rc-empty { padding: 12px 4px; }
+/* قالبی که همین حالا در فرمِ بالا باز است. */
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--editing > td { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.page .ef-table-wrap > table.xl-grid > tbody > tr.xl-row--editing > td:first-child { border-inline-start: 3px solid var(--accent); }
+
 /* انتخاب‌گرِ «فقط یک ارز» سرِ کارتِ نرخ‌ها — هم‌قدِ کادرِ جست‌وجوی سرِ کارتِ سند. */
 .cur-only { inline-size: 220px; }
 .cur-only .item-picker-trigger { min-height: 32px; block-size: 32px; padding-block: 0; border-radius: var(--radius-sm); font-size: var(--fs-sm); }

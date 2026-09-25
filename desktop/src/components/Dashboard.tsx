@@ -729,7 +729,7 @@ export function Dashboard({
           {page === 'ledgerreport' && <LedgerReportPage token={token} />}
           {page === 'integrity' && <IntegrityPage token={token} />}
           {page === 'entrylist' && <EntryListPage token={token} />}
-          {page === 'recurringlist' && <RecurringListPage token={token} accounts={accounts} />}
+          {page === 'recurringlist' && <RecurringListPage token={token} />}
           {page === 'budgetlist' && <BudgetListPage token={token} accounts={accounts} />}
           {page === 'currencylist' && <CurrencyListPage token={token} />}
           {page === 'periodcloselist' && <PeriodCloseListPage token={token} />}
