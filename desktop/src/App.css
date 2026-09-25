@@ -12441,6 +12441,19 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
  * همین کار را با آن می‌کنند. */
 .jg-actions { text-align: end; }
 .jg-actions .row-actions { gap: 2px; }
+/* کنش‌های ردیف (تکرار، کپی از قبلی، حذف) فقط روی ردیفِ زیرِ ماوس و ردیفی که فوکوس دارد پیدا
+ * می‌شوند: سه آیکونِ تکراری در هر ردیف ستون‌ها را شلوغ می‌کرد، در حالی که کاربرِ صفحه‌کلید
+ * همین‌ها را با Ctrl+D / Ctrl+Shift+C / Ctrl+Delete می‌زند. جا را نگه می‌دارند (`opacity`، نه
+ * `display`) تا ستون‌ها با حرکتِ ماوس نپرند. دستگاهِ بی‌hover (لمسی) همیشه می‌بیندشان —
+ * وگرنه راهی به آن‌ها نمی‌ماند. */
+.jg-actions .ef-row-btn { width: 28px; height: 28px; min-height: 28px; border-color: transparent; background: transparent; }
+@media (hover: hover) {
+  .jg-table .jg-actions .row-actions { opacity: 0; transition: opacity 120ms ease; }
+  .jg-table tbody tr:is(:hover, :focus-within) .jg-actions .row-actions { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jg-table .jg-actions .row-actions { transition: none; }
+}
 
 /* فوکوس باید در گرید **دیده شود** (§۳۶). ردیفِ فشرده بدونِ این، کاربرِ
  * صفحه‌کلید را گم می‌کند — همان چیزی که کلِ این حالت برای رفعش ساخته شد. */
@@ -12518,19 +12531,45 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .jh-seg .jh-seg-opt--permanent[aria-checked='true'] { background: var(--success-bg); color: var(--success); }
 .jh-seg .jh-seg-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* ── راهنمای میان‌برها، زیرِ گرید ── */
-.jg-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
+/* ── راهنمای میان‌برها: یک خطِ کم‌رنگ زیرِ گرید، تاشو ──
+ * بسته فقط یک خط است؛ باز، چهار دسته کنارِ هم. `summary` خودش کنترلِ صفحه‌کلید است
+ * (Enter/Space) و Ctrl+/ فقط همان را برمی‌گرداند. */
+.jg-keys {
   margin-block-start: var(--sp-3);
-  padding-block-start: 10px;
-  border-block-start: 1px dashed var(--border);
   color: var(--text-muted);
   font-size: var(--fs-xs);
+  /* وقتی Ctrl+/ آن را به دید می‌آورد، زیرِ نوارِ شناورِ پایین نماند. */
+  scroll-margin-block-end: 110px;
 }
-.jg-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.jg-legend kbd {
+.jg-keys > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.jg-keys > summary::-webkit-details-marker { display: none; }
+.jg-keys > summary:hover { background: var(--surface-2); color: var(--text); }
+.jg-keys > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.jg-keys-title { font-weight: 700; }
+.jg-keys-peek { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; }
+.jg-keys-peek > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.jg-keys-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+  color: var(--accent-on-tint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.jg-keys-more svg { transition: transform 150ms ease; }
+.jg-keys[open] .jg-keys-more svg { transform: rotate(180deg); }
+.jg-keys kbd {
   padding: 1px 6px;
   border: 1px solid var(--border-strong);
   border-block-end-width: 2px;
@@ -12540,39 +12579,133 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font: inherit;
   font-size: 0.72rem;
   direction: ltr;
+  white-space: nowrap;
 }
-
-/* ── نوارِ جمع و توازن (نوارِ چسبنده‌ی پایین، هر دو حالت) ──
- * سه خانه: جمعِ بدهکار، جمعِ بستانکار، اختلاف. رنگِ توازن فقط روی خانه‌ی سوم و قابِ نوار
- * است تا دو عددِ اول همیشه خوانا و بی‌رنگ بمانند. */
-.jb-sum {
+.jg-keys-panel {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, auto));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px 28px;
+  margin-block-start: 6px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  background: var(--surface-2);
+}
+/* هر دسته یک جدولِ دوستونه: ستونِ کلید به پهنای بلندترین کلیدِ همان دسته، تا شرح‌ها زیرِ هم
+ * بنشینند و جا برای متن بماند. ردیف‌ها `display: contents` اند و خانه‌هایشان مستقیم در این گرید. */
+.jg-keys-group {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-content: start;
+  align-items: center;
+  gap: 7px 10px;
+}
+.jg-keys-group-title { grid-column: 1 / -1; color: var(--text-h); font-weight: 700; }
+.jg-keys-row { display: contents; }
+.jg-keys-row kbd { justify-self: start; }
+
+/* ── نوارِ شناورِ پایینِ سند (هر دو حالت) ──
+ * `bottom` منفیِ همان paddingِ پایینِ `.app-content` (۲۸px) است: نوارِ چسبنده در آن padding
+ * می‌ایستد، یعنی ۲۸px بالاتر از لبه‌ی پنجره، و ردیف‌ها از زیرش پیدا بودند. حالا چسبیده به
+ * لبه می‌نشیند. `scroll-state` (Chromium، یعنی اپِ ویندوز) گوشه‌های پایین را وقتِ چسبیدن
+ * صاف می‌کند؛ مرورگری که آن را ندارد همان نوارِ گرد را می‌بیند. */
+.jf-dock {
+  position: sticky;
+  bottom: -28px;
+  z-index: 20;
+  container-type: scroll-state;
+}
+.jf-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  /* رنگِ توازن روی لبه‌ی بالای کلِ نوار — از گوشه‌ی چشم هم دیده می‌شود. */
+  border-block-start: 3px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.08);
+}
+.jf-foot--ok { border-block-start-color: var(--success); }
+.jf-foot--err { border-block-start-color: var(--danger); }
+@container scroll-state(stuck: bottom) {
+  .jf-foot {
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.14);
+  }
+}
+.jf-msg {
+  display: flex;
+  flex: 1 1 160px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.jf-msg:empty { display: none; }
+.jf-msg .is-ok { color: var(--success); }
+.jf-msg .is-err { color: var(--danger); }
+.jf-msg svg { flex: 0 0 auto; }
+.jf-foot .jf-submit {
+  gap: 8px;
+  min-height: 48px;
+  margin-inline-start: auto;
+  padding: 0 26px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.jf-submit-kbd {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-radius: 4px;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+/* ── سه عددِ سند ──
+ * بدهکار و بستانکار بی‌رنگ و درشت؛ رنگِ توازن فقط روی خانه‌ی سوم (و لبه‌ی نوار) تا دو عددِ
+ * اول همیشه خوانا بمانند. خانه‌ی سوم یک «چیپ» است: خاکستری، سبز یا قرمز. */
+.jb-sum {
+  display: flex;
+  align-items: stretch;
   font-variant-numeric: tabular-nums;
 }
-.jb-stat { display: grid; gap: 1px; min-width: 130px; padding: 5px 14px; }
+.jb-stat { display: grid; align-content: center; gap: 2px; min-width: 150px; padding: 4px 18px; }
+.jb-stat:first-child { padding-inline-start: 4px; }
 .jb-stat + .jb-stat { border-inline-start: 1px solid var(--border); }
-.jb-k { font-size: var(--fs-xs); color: var(--text-muted); }
+.jb-sum .jb-stat--diff {
+  margin-inline-start: 8px;
+  padding-inline: 16px;
+  border-inline-start: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.jb-k { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; }
 .jb-v {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   color: var(--text-h);
-  font-size: var(--fs-base);
+  font-size: var(--fs-xl);
   font-weight: 700;
+  line-height: 1.3;
   white-space: nowrap;
 }
 .jb-v small { font-size: var(--fs-xs); font-weight: 600; }
-.jb-sum--ok { border-color: var(--success); }
 .jb-sum--ok .jb-stat--diff { background: var(--success-bg); }
 .jb-sum--ok .jb-stat--diff .jb-v { color: var(--success); }
-.jb-sum--err { border-color: var(--danger); }
 .jb-sum--err .jb-stat--diff { background: var(--danger-bg); }
 .jb-sum--err .jb-stat--diff .jb-v { color: var(--danger); }
-.jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: var(--fs-sm); font-weight: 500; }
+.jb-sum--empty .jb-stat--diff .jb-v { color: var(--text-muted); font-size: var(--fs-md); font-weight: 500; }
 
 @media (max-width: 760px) {
   /* شرح تمام‌عرض؛ تاریخ و وضعیت کنارِ هم؛ شماره‌ی فرعی زیرشان. */
@@ -12580,12 +12713,18 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jh-field--grow { grid-column: 1 / -1; }
   .jh-row--sub { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* صفحه‌کلیدِ فیزیکی نیست؛ راهنما فقط جای ردیف‌ها را می‌گیرد. */
-  .jg-legend { display: none; }
-  /* نوارِ چسبنده روی ردیف‌ها می‌نشیند؛ هر پیکسلش از گرید کم می‌شود. */
-  .jb-sum { inline-size: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .jb-stat { min-width: 0; padding: 3px 6px; }
+  .jg-keys { display: none; }
+  /* نوارِ چسبنده روی ردیف‌ها می‌نشیند؛ هر پیکسلش از گرید کم می‌شود — این‌جا فشردگی، نه درشتی. */
+  .jf-foot { gap: 10px; padding: 10px 12px; }
+  .jb-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); inline-size: 100%; }
+  .jb-stat,
+  .jb-stat:first-child { min-width: 0; padding: 3px 8px; }
+  .jb-sum .jb-stat--diff { margin-inline-start: 4px; padding-inline: 8px; }
   .jb-k { font-size: 11px; }
-  .jb-v { font-size: var(--fs-sm); flex-wrap: wrap; white-space: normal; }
+  .jb-v { flex-wrap: wrap; font-size: var(--fs-md); white-space: normal; }
+  .jf-msg { flex-basis: 100%; }
+  .jf-foot .jf-submit { justify-content: center; inline-size: 100%; min-height: 44px; margin-inline-start: 0; }
+  .jf-submit-kbd { display: none; }
 }
 
 /* ── انتخابِ حالتِ کار (پروفایل) ───────────────────────────────────────────── */

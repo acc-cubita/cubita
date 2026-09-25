@@ -1,12 +1,11 @@
-import { useId, type KeyboardEvent } from 'react'
-import { AlertTriangle, BookOpen, Check, CheckCircle2, Rows3, Trash2 } from 'lucide-react'
+import { useId, useState, type KeyboardEvent } from 'react'
+import { AlertTriangle, BookOpen, Check, CheckCircle2, ChevronDown, Keyboard, Rows3, Trash2 } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { SearchSelect } from './SearchSelect'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import {
-  ActionBar,
   AddRowButton,
   CountBadge,
   FormField,
@@ -30,9 +29,9 @@ const fa = (n: number) => n.toLocaleString('fa-IR')
  * در یک ردیف)، گرید، و راهنمای میان‌برها — تا چشم از سربرگ تا اولین ردیف راهی نرود.
  * حالتِ ساده همان دو کارتِ راهنما را دارد (سربرگ با «گزینه‌های بیشتر»، و جدولِ ساده).
  *
- * در هر دو، نوارِ چسبنده‌ی پایین سه عدد را همیشه جلوی چشم نگه می‌دارد: جمعِ بدهکار، جمعِ
- * بستانکار، و اختلاف با رنگِ توازن — سندی که جمعش نمی‌خواند نباید تا لحظه‌ی زدنِ دکمه
- * پنهان بماند، و حسابدار نباید تفاضل را در ذهن حساب کند.
+ * در هر دو، نوارِ شناورِ پایین ([JournalFooter]) سه عدد و دکمه‌ی ثبت را همیشه جلوی چشم
+ * نگه می‌دارد: جمعِ بدهکار، جمعِ بستانکار، و اختلاف با رنگِ توازن — سندی که جمعش نمی‌خواند
+ * نباید تا لحظه‌ی زدنِ دکمه پنهان بماند، و حسابدار نباید تفاضل را در ذهن حساب کند.
  */
 export function JournalEntryForm({
   token,
@@ -49,6 +48,11 @@ export function JournalEntryForm({
   //: از بین نمی‌برد — نه ردیفی، نه مبلغی (§۳۵). این خاصیتِ طراحی است، نه کدِ
   //: اضافه: چیزی برای «انتقال» وجود ندارد چون حالت اصلاً مالکِ داده نیست.
   const { isAccountant } = useExperienceMode()
+  const [keysOpen, setKeysOpenState] = useState(readKeysOpen)
+  const setKeysOpen = (open: boolean) => {
+    setKeysOpenState(open)
+    writeKeysOpen(open)
+  }
 
   if (d.postableAccounts.length === 0) {
     return (
@@ -158,21 +162,6 @@ export function JournalEntryForm({
     ...(d.currencies.length > 0 ? ['ارز'] : []),
   ].join('، ')
 
-  const actionBar = (
-    <ActionBar
-      status={
-        <>
-          <FormStatus msg={d.message} />
-          <BalanceSummary d={d} />
-        </>
-      }
-    >
-      <button type="submit" className="btn-primary" disabled={d.submitting}>
-        <Check size={16} /> {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
-      </button>
-    </ActionBar>
-  )
-
   if (isAccountant) {
     return (
       <form
@@ -180,6 +169,25 @@ export function JournalEntryForm({
         onSubmit={(e) => {
           e.preventDefault()
           void d.submit()
+        }}
+        onKeyDown={(e) => {
+          if (!(e.ctrlKey || e.metaKey)) return
+          //: Ctrl+S از **هر جای** فرم، نه فقط از خانه‌های گرید — کنارِ دکمه نوشته شده، پس
+          //: باید از سربرگ هم کار کند (در مرورگر وگرنه «ذخیره‌ی صفحه» باز می‌شد). گرید خودش
+          //: همین را زودتر می‌گیرد و `preventDefault` می‌کند؛ این شرط جلوی ثبتِ دوباره را می‌گیرد.
+          if (e.code === 'KeyS' && !e.defaultPrevented) {
+            e.preventDefault()
+            if (!d.submitting) void d.submit()
+          }
+          //: Ctrl+/ راهنما را باز و بسته می‌کند — همان قراردادِ رایجِ «فهرستِ میان‌برها».
+          //: `code` و نه `key`: روی چیدمانِ فارسی `key` این کلید «/» نیست.
+          if (e.code === 'Slash') {
+            e.preventDefault()
+            setKeysOpen(!keysOpen)
+            //: راهنما زیرِ آخرین ردیف است؛ در سندِ بلند بی این، باز می‌شد و دیده نمی‌شد.
+            const guide = e.currentTarget.querySelector('.jg-keys')
+            if (!keysOpen) requestAnimationFrame(() => guide?.scrollIntoView?.({ block: 'nearest' }))
+          }
         }}
       >
         <SectionCard
@@ -192,9 +200,9 @@ export function JournalEntryForm({
           <JournalGrid d={d} />
           {/* دکمه برای کاربرِ ماوس می‌ماند — حتی در حالت حسابدار (§۲۱، §۴۵). */}
           <AddRowButton onClick={d.addLine}>افزودن ردیف (Ctrl+Enter)</AddRowButton>
-          <ShortcutLegend />
+          <ShortcutGuide open={keysOpen} onOpenChange={setKeysOpen} />
         </SectionCard>
-        {actionBar}
+        <JournalFooter d={d} shortcut />
       </form>
     )
   }
@@ -237,7 +245,7 @@ export function JournalEntryForm({
         <AddRowButton onClick={d.addLine}>افزودن ردیف</AddRowButton>
       </SectionCard>
 
-      {actionBar}
+      <JournalFooter d={d} />
     </form>
   )
 }
@@ -436,46 +444,163 @@ function StatusToggle({
 }
 
 /**
- * راهنمای میان‌برها، همیشه زیرِ گرید — نه پشتِ یک `title` که کسی پیدایش نمی‌کرد.
+ * راهنمای میان‌برها — یک خطِ کم‌رنگ زیرِ گرید که با کلیک یا Ctrl+/ باز می‌شود.
  *
- * فقط پرکاربردها؛ فهرستِ کامل در «میان‌برهای صفحه‌کلید» است. در موبایل پنهان است:
- * آنجا صفحه‌کلیدِ فیزیکی نیست و این نوار فقط جای ردیف‌ها را می‌گیرد.
+ * بسته: سه میان‌برِ اصلی و راهِ دیدنِ بقیه، در یک خط. باز: همه، در چهار دسته. پیش‌تر
+ * ده میان‌بر همیشه باز بود و دو خطِ پُر زیرِ هر سند می‌گرفت؛ حسابداری که یادشان گرفته
+ * دیگر لازمشان ندارد، و تازه‌کار با یک کلیک همه را می‌بیند. باز/بسته روی همین دستگاه
+ * می‌ماند. در موبایل پنهان است: صفحه‌کلیدِ فیزیکی نیست.
  */
-const LEGEND: [string, string][] = [
+const KEY_PEEK: [string, string][] = [
   ['Enter', 'خانه‌ی بعد'],
-  ['Tab', 'خانه‌ی بعد؛ در پایان، ردیفِ تازه'],
-  ['← → ↑ ↓', 'جابه‌جایی'],
-  ['F2', 'ویرایشِ متنِ خانه'],
   ['F4', 'فهرستِ حساب‌ها'],
-  ['Ctrl+Enter', 'ردیفِ تازه'],
-  ['Ctrl+D', 'تکرارِ ردیف'],
-  ['Ctrl+Delete', 'حذفِ ردیف'],
-  ['Ctrl+G', 'رفتن به ردیف'],
-  ['Ctrl+S', 'ثبتِ سند'],
+  ['Ctrl+S', 'ثبت'],
 ]
 
-function ShortcutLegend() {
+const KEY_GROUPS: { title: string; keys: [string, string][] }[] = [
+  {
+    title: 'حرکت',
+    keys: [
+      ['Enter', 'خانه‌ی بعد'],
+      ['Tab', 'خانه‌ی بعد؛ در پایان، ردیفِ تازه'],
+      ['← → ↑ ↓', 'جابه‌جایی بینِ خانه‌ها'],
+      ['Ctrl+G', 'رفتن به ردیف'],
+    ],
+  },
+  {
+    title: 'ورود و انتخاب',
+    keys: [
+      ['F2', 'ویرایشِ متنِ خانه'],
+      ['F4', 'فهرستِ حساب‌ها'],
+      ['Alt+↓', 'فهرستِ همین خانه'],
+    ],
+  },
+  {
+    title: 'ردیف‌ها',
+    keys: [
+      ['Ctrl+Enter', 'ردیفِ تازه'],
+      ['Ctrl+D', 'تکرارِ ردیف'],
+      ['Ctrl+Shift+C', 'کپیِ حساب از ردیفِ قبل'],
+      ['Ctrl+Delete', 'حذفِ ردیف'],
+    ],
+  },
+  {
+    title: 'سند',
+    keys: [
+      ['Ctrl+S', 'ثبتِ سند'],
+      ['Ctrl+/', 'باز و بسته کردنِ این راهنما'],
+    ],
+  },
+]
+
+const KEYS_OPEN_KEY = 'cubita.journal.shortcutsOpen'
+
+//: ترجیحِ نمایشی است، نه داده: اگر ذخیره‌گاه در دسترس نبود راهنما بسته شروع می‌شود.
+function readKeysOpen(): boolean {
+  try {
+    return localStorage.getItem(KEYS_OPEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeKeysOpen(open: boolean) {
+  try {
+    localStorage.setItem(KEYS_OPEN_KEY, open ? '1' : '0')
+  } catch {
+    /* بی‌ذخیره هم کار می‌کند */
+  }
+}
+
+function ShortcutGuide({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
-    <div className="jg-legend" role="note" aria-label="میان‌برهای صفحه‌کلید">
-      {LEGEND.map(([keys, what]) => (
-        <span key={keys} className="jg-legend-item">
-          <kbd dir="ltr">{keys}</kbd> {what}
+    <details className="jg-keys" open={open} onToggle={(e) => onOpenChange(e.currentTarget.open)}>
+      <summary aria-keyshortcuts="Control+/">
+        <Keyboard size={15} aria-hidden="true" />
+        <span className="jg-keys-title">میان‌برها</span>
+        <span className="jg-keys-peek">
+          {KEY_PEEK.map(([keys, what]) => (
+            <span key={keys}>
+              <kbd dir="ltr">{keys}</kbd> {what}
+            </span>
+          ))}
         </span>
-      ))}
+        <span className="jg-keys-more">
+          {open ? 'بستن' : 'همه‌ی میان‌برها'} <kbd dir="ltr">Ctrl+/</kbd>
+          <ChevronDown size={14} aria-hidden="true" />
+        </span>
+      </summary>
+      <div className="jg-keys-panel">
+        {KEY_GROUPS.map((g) => (
+          <div key={g.title} className="jg-keys-group" role="group" aria-label={g.title}>
+            <div className="jg-keys-group-title">{g.title}</div>
+            {g.keys.map(([keys, what]) => (
+              <div key={keys} className="jg-keys-row">
+                <kbd dir="ltr">{keys}</kbd>
+                <span>{what}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </details>
+  )
+}
+
+type BalanceState = 'empty' | 'ok' | 'err'
+
+function balanceState(d: JournalEntryDraft): BalanceState {
+  if (d.totalDebit === 0 && d.totalCredit === 0) return 'empty'
+  return d.isBalanced ? 'ok' : 'err'
+}
+
+/**
+ * نوارِ شناورِ پایینِ سند: جمع‌ها و دکمه‌ی ثبت، همیشه در دیدرس.
+ *
+ * هر دو حالت همین را دارند. جای `ActionBar`ِ عمومی، چون این‌جا نوار خودش محتوای اصلی
+ * است، نه جای یک دکمه: عددها درشت‌اند، رنگِ توازن روی لبه‌ی بالای کلِ نوار می‌نشیند، و
+ * دکمه‌ی ثبت بزرگ‌تر از دکمه‌ی فرم‌های دیگر است. `shortcut` فقط در حالتِ حسابدار
+ * «Ctrl+S» را کنارِ دکمه می‌نویسد — حالتِ ساده آن میان‌بر را ندارد.
+ *
+ * **چرا دو لایه (`jf-dock` و `jf-foot`).** لایه‌ی بیرونی می‌چسبد و ظرفِ `scroll-state`
+ * است؛ لایه‌ی درونی ظاهر است و وقتی نوار واقعاً چسبیده، گوشه‌های پایینش صاف می‌شود.
+ * پرس‌وجوی `scroll-state` فقط فرزندان را می‌تواند رنگ کند، نه خودِ ظرف را.
+ */
+function JournalFooter({ d, shortcut = false }: { d: JournalEntryDraft; shortcut?: boolean }) {
+  const state = balanceState(d)
+  return (
+    <div className="jf-dock">
+      <div className={`jf-foot jf-foot--${state}`}>
+        <BalanceSummary d={d} state={state} />
+        <div className="jf-msg">
+          <FormStatus msg={d.message} />
+        </div>
+        <button
+          type="submit"
+          className="btn-primary jf-submit"
+          disabled={d.submitting}
+          aria-keyshortcuts={shortcut ? 'Control+S' : undefined}
+        >
+          <Check size={18} aria-hidden="true" /> {d.submitting ? 'در حال ثبت…' : 'ثبت سند'}
+          {shortcut && (
+            <kbd className="jf-submit-kbd" dir="ltr" aria-hidden="true">
+              Ctrl+S
+            </kbd>
+          )}
+        </button>
+      </div>
     </div>
   )
 }
 
 /**
- * جمعِ زنده‌ی سند در نوارِ چسبنده‌ی پایین: سه عدد، و رنگِ توازن روی خودِ نوار.
+ * سه عددِ زنده‌ی سند: جمعِ بدهکار، جمعِ بستانکار، و اختلاف.
  *
  * سبز = متوازن، قرمز = اختلاف (با اینکه کدام طرف بیشتر است، تا حسابدار بداند ردیفِ بعد
  * بدهکار است یا بستانکار)، خاکستری = هنوز مبلغی نیست. اختلاف `aria-live` دارد تا
  * صفحه‌خوان هم بشنودش.
  */
-function BalanceSummary({ d }: { d: JournalEntryDraft }) {
-  const empty = d.totalDebit === 0 && d.totalCredit === 0
-  const state = empty ? 'empty' : d.isBalanced ? 'ok' : 'err'
+function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceState }) {
   const diff = Math.abs(d.totalDebit - d.totalCredit)
   return (
     <div className={`jb-sum jb-sum--${state}`} role="group" aria-label="جمعِ سند">
@@ -494,11 +619,11 @@ function BalanceSummary({ d }: { d: JournalEntryDraft }) {
             'مبلغی وارد نشده'
           ) : state === 'ok' ? (
             <>
-              <CheckCircle2 size={15} aria-hidden="true" /> متوازن
+              <CheckCircle2 size={18} aria-hidden="true" /> متوازن
             </>
           ) : (
             <>
-              <AlertTriangle size={15} aria-hidden="true" /> {fa(diff)}
+              <AlertTriangle size={18} aria-hidden="true" /> {fa(diff)}
               <small>{d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'}</small>
             </>
           )}
