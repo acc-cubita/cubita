@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
-import { ChevronRight, ListChecks, Loader2, Play, Inbox } from 'lucide-react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronRight, ChevronUp, ListChecks, Loader2, Play, Inbox, RotateCcw } from 'lucide-react'
 import { MODULE_SECTIONS, listSections, opsSections, type SectionDef } from './moduleSections'
 import {
   LIST_MENUS,
@@ -12,6 +12,7 @@ import {
   type ListRow,
 } from './moduleLists'
 import { menuEntryVisible, type NavGroup } from '../lib/navModel'
+import { useMenuOrder, type MenuOrderApi } from '../lib/menuOrder'
 import type { PageKey } from './Sidebar'
 
 /**
@@ -24,6 +25,10 @@ import type { PageKey } from './Sidebar'
  *
  * هر کارت جداگانه جمع‌شدنی است؛ روی نمایشگرِ کوچک، فضای فرم و جدول مهم‌تر از دیدنِ
  * همیشگیِ این دو ستون است. وضعیتِ جمع‌بودن در localStorage می‌ماند تا هر بار تکرار نشود.
+ *
+ * **ترتیبِ منوها دستِ کاربر است** (`MenuItem`): فلشِ بالا/پایین روی هر ردیف (با hover یا فوکوس)
+ * یا Alt+↑/↓ روی خودِ منو. هر فهرست دامنه‌ی خودش را دارد و جابه‌جایی فقط داخلِ همان فهرست است؛
+ * ترتیب روی همین دستگاه می‌ماند (`lib/menuOrder`) و «ترتیبِ پیش‌فرض» ته کارت برش می‌گرداند.
  */
 
 const COLLAPSE_KEY = 'cubita.modulePanels.collapsed'
@@ -93,6 +98,7 @@ export function ModulePanels({
   token: string
 }) {
   const [collapsed, setCollapsed] = useState<Collapsed>(loadCollapsed)
+  const mo = useMenuOrder()
   const toggle = (which: keyof Collapsed) =>
     setCollapsed((c) => {
       const next = { ...c, [which]: !c[which] }
@@ -134,6 +140,19 @@ export function ModulePanels({
   //: دفتری، نه رکوردِ زنده، کارت نمی‌آید.
   const hasList = Boolean(listMenu?.length) || sectionLists.length > 0 || listDefFor(page, activeSection) !== null
 
+  //: دامنه‌های ترتیب — هر فهرستی که روی کارت می‌آید یکی. نامِ گروه و نه صفحه، چون همان منوی
+  //: گروه از هر صفحه‌ی آن دیده می‌شود و باید یک ترتیب داشته باشد.
+  const gk = group?.heading ?? page
+  const secOps = (p: PageKey) => `sec-ops:${p}`
+  const opsScopes = opsMenu
+    ? [`ops:${gk}`]
+    : pages.length > 0
+      ? [`pages:${gk}`, ...pages.map((p) => secOps(p.key))]
+      : [secOps(page)]
+  const listScopes = listMenu?.length ? [`list:${gk}`] : sectionLists.length > 0 ? [`sec-list:${page}`] : []
+  const sortedPages = mo.sort(`pages:${gk}`, pages, (p) => p.key)
+  const pageKeys = sortedPages.map((p) => p.key)
+
   // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
   if (!hasModulePanels(page, groups)) return null
@@ -154,34 +173,35 @@ export function ModulePanels({
             <ChevronRight size={15} className="mod-panel-chev" />
           </button>
           <div className="mod-panel-body">
-            {opsMenu && menuButtons(opsMenu, page, activeSection, onSelectSection, onNavigate)}
+            {opsMenu && menuButtons(opsMenu, page, activeSection, onSelectSection, onNavigate, mo, `ops:${gk}`)}
             {/* صفحه‌های هم‌گروه، و زیرِ صفحه‌ی فعال بخش‌های خودش — همان چیزی که
                 پیش‌تر دراپ‌داونِ نوارِ بالا نشان می‌داد، حالا این‌جا. */}
-            {!opsMenu && pages.map((it) => {
+            {!opsMenu && sortedPages.map((it) => {
               // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
               // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
               // مستقیم در سطحِ اول می‌نشینند.
               const redundant = it.label === group?.heading
-              const own = opsSections(MODULE_SECTIONS[it.key] ?? [])
+              const own = mo.sort(secOps(it.key), opsSections(MODULE_SECTIONS[it.key] ?? []), (x) => x.key)
               if (redundant && own.length > 0) {
+                const ownKeys = own.map((x) => x.key)
                 return (
                   <Fragment key={it.key}>
                     {own.map((s) => {
                       const Icon = s.icon
                       const on = it.key === page && activeSection === s.key
                       return (
-                        <button
+                        <MenuItem
                           key={s.key}
-                          type="button"
+                          mo={mo}
+                          scope={secOps(it.key)}
+                          keys={ownKeys}
+                          itemKey={s.key}
+                          label={s.label}
+                          icon={<Icon size={16} />}
                           className={`mod-op${on ? ' active' : ''}`}
-                          aria-current={on ? 'page' : undefined}
-                          onClick={() =>
-                            it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key)
-                          }
-                        >
-                          <Icon size={16} />
-                          <span>{s.label}</span>
-                        </button>
+                          current={on}
+                          onClick={() => (it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key))}
+                        />
                       )
                     })}
                   </Fragment>
@@ -191,28 +211,34 @@ export function ModulePanels({
               const expanded = current && own.length > 0
               return (
                 <Fragment key={it.key}>
-                  <button
-                    type="button"
+                  <MenuItem
+                    mo={mo}
+                    scope={`pages:${gk}`}
+                    keys={pageKeys}
+                    itemKey={it.key}
+                    label={it.label}
+                    icon={it.icon}
                     //: صفحه‌ای که بخش‌هایش زیرش باز است «والد» است نه «فعال»: هایلایت
                     //: مالِ بخشِ انتخاب‌شده است. اگر هر دو یک‌جور برجسته شوند، دیگر
                     //: پیدا نیست کاربر دقیقاً روی کدام زیرمنو ایستاده.
                     className={`mod-op${expanded ? ' mod-op--parent' : current ? ' active' : ''}`}
-                    aria-current={current && !expanded ? 'page' : undefined}
+                    current={current && !expanded}
                     onClick={() => onNavigate(it.key)}
-                  >
-                    {it.icon}
-                    <span>{it.label}</span>
-                  </button>
+                  />
                   {expanded && (
-                    <div className="mod-sub">{sectionButtons(own, activeSection, onSelectSection)}</div>
+                    <div className="mod-sub">
+                      {sectionButtons(own, activeSection, onSelectSection, mo, secOps(it.key))}
+                    </div>
                   )}
                 </Fragment>
               )
             })}
             {/* ماژولِ تک‌صفحه‌ای (تولید، دارایی ثابت، …) ردیفی با نامِ خودش نمی‌گیرد: نامش
                 همین حالا در نوارِ بالا هست و تکرارش در «عملیات» یک زیرمنوی بی‌معناست. */}
-            {!opsMenu && pages.length === 0 && sectionButtons(ops, activeSection, onSelectSection)}
+            {!opsMenu && pages.length === 0 && sectionButtons(ops, activeSection, onSelectSection, mo, secOps(page))}
           </div>
+          {/* بیرون از بدنه‌ی اسکرول‌خور تا همیشه دیده شود و روی منوی آخر ننشیند. */}
+          {mo.customized(opsScopes) && <ResetOrder onReset={() => mo.reset(opsScopes)} />}
         </section>
       )}
 
@@ -232,14 +258,15 @@ export function ModulePanels({
         <div className="mod-panel-body">
           {listMenu?.length ? (
             // هر ورودی صفحه‌ی همان فهرست را باز می‌کند (یا تبِ آن، اگر `section` دارد).
-            menuButtons(listMenu, page, activeSection, onSelectSection, onNavigate)
+            menuButtons(listMenu, page, activeSection, onSelectSection, onNavigate, mo, `list:${gk}`)
           ) : sectionLists.length > 0 ? (
-            sectionButtons(sectionLists, activeSection, onSelectSection)
+            sectionButtons(sectionLists, activeSection, onSelectSection, mo, `sec-list:${page}`)
           ) : (
             // دفترِ جدا ندارد: چند رکوردِ آخرِ همین عملیات، زنده.
             <ListPanel token={token} page={page} section={activeSection} />
           )}
         </div>
+        {mo.customized(listScopes) && <ResetOrder onReset={() => mo.reset(listScopes)} />}
       </section>
       )}
     </div>
@@ -254,21 +281,28 @@ function menuButtons(
   activeSection: string | null,
   onSelectSection: (key: string) => void,
   onNavigate: (page: PageKey, section?: string | null) => void,
+  mo: MenuOrderApi,
+  scope: string,
 ) {
-  return entries.map((e) => {
+  const keyOf = (e: ListMenuItem) => `${e.key}:${e.section ?? ''}`
+  const sorted = mo.sort(scope, entries, keyOf)
+  const keys = sorted.map(keyOf)
+  return sorted.map((e) => {
     const Icon = e.icon
     const on = menuEntryActive(e, page, activeSection)
     return (
-      <button
-        key={`${e.key}:${e.section ?? ''}`}
-        type="button"
+      <MenuItem
+        key={keyOf(e)}
+        mo={mo}
+        scope={scope}
+        keys={keys}
+        itemKey={keyOf(e)}
+        label={e.label}
+        icon={<Icon size={16} />}
         className={`mod-op${on ? ' active' : ''}`}
-        aria-current={on ? 'page' : undefined}
+        current={on}
         onClick={() => (e.key === page && e.section ? onSelectSection(e.section) : onNavigate(e.key, e.section ?? null))}
-      >
-        <Icon size={16} />
-        <span>{e.label}</span>
-      </button>
+      />
     )
   })
 }
@@ -278,22 +312,121 @@ function sectionButtons(
   sections: SectionDef[],
   activeSection: string | null,
   onSelectSection: (key: string) => void,
+  mo: MenuOrderApi,
+  scope: string,
 ) {
-  return sections.map((s) => {
+  const sorted = mo.sort(scope, sections, (s) => s.key)
+  const keys = sorted.map((s) => s.key)
+  return sorted.map((s) => {
     const Icon = s.icon
     return (
-      <button
+      <MenuItem
         key={s.key}
-        type="button"
+        mo={mo}
+        scope={scope}
+        keys={keys}
+        itemKey={s.key}
+        label={s.label}
+        icon={<Icon size={16} />}
         className={`mod-op${activeSection === s.key ? ' active' : ''}`}
-        aria-current={activeSection === s.key ? 'page' : undefined}
+        current={activeSection === s.key}
         onClick={() => onSelectSection(s.key)}
-      >
-        <Icon size={16} />
-        <span>{s.label}</span>
-      </button>
+      />
     )
   })
+}
+
+/**
+ * یک ردیفِ منو، جابه‌جاشدنی.
+ *
+ * فلش‌ها کنارِ خودِ منو‌اند نه داخلش (دکمه در دکمه مجاز نیست) و فقط با hover یا فوکوسِ همان
+ * ردیف پیدا می‌شوند تا کارت شلوغ نشود؛ دستگاهِ بی‌hover همیشه می‌بیندشان. `tabIndex={-1}`:
+ * کاربرِ صفحه‌کلید با Alt+↑/↓ روی خودِ منو جابه‌جا می‌کند، و سه ایستگاهِ Tab برای هر منو پیمایشِ
+ * کارت را سه برابر می‌کرد. بعد از جابه‌جایی با صفحه‌کلید، فوکوس روی همان منو می‌ماند.
+ */
+function MenuItem({
+  mo,
+  scope,
+  keys,
+  itemKey,
+  label,
+  icon,
+  className,
+  current,
+  onClick,
+}: {
+  mo: MenuOrderApi
+  scope: string
+  keys: string[]
+  itemKey: string
+  label: string
+  icon: ReactNode
+  className: string
+  current: boolean
+  onClick: () => void
+}) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const i = keys.indexOf(itemKey)
+  const move = (dir: -1 | 1, refocus: boolean) => {
+    if (!mo.move(scope, keys, itemKey, dir)) return
+    //: جابه‌جاییِ گره در DOM فوکوس را می‌اندازد — برمی‌گردد روی همان منو.
+    if (refocus) requestAnimationFrame(() => ref.current?.focus())
+  }
+  return (
+    <div className="mod-op-row">
+      <button
+        ref={ref}
+        type="button"
+        className={className}
+        aria-current={current ? 'page' : undefined}
+        aria-keyshortcuts={keys.length > 1 ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
+        onClick={onClick}
+        onKeyDown={(e) => {
+          if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+          e.preventDefault()
+          move(e.key === 'ArrowUp' ? -1 : 1, true)
+        }}
+      >
+        {icon}
+        <span>{label}</span>
+      </button>
+      {keys.length > 1 && (
+        <span className="mod-op-move">
+          <button
+            type="button"
+            tabIndex={-1}
+            className="mod-op-arrow"
+            aria-label={`بالا بردنِ «${label}»`}
+            title="بالا (Alt+↑)"
+            disabled={i <= 0}
+            onClick={() => move(-1, false)}
+          >
+            <ChevronUp size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            className="mod-op-arrow"
+            aria-label={`پایین بردنِ «${label}»`}
+            title="پایین (Alt+↓)"
+            disabled={i >= keys.length - 1}
+            onClick={() => move(1, false)}
+          >
+            <ChevronDown size={14} aria-hidden="true" />
+          </button>
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** ته کارت، فقط وقتی کاربر ترتیب را عوض کرده. */
+function ResetOrder({ onReset }: { onReset: () => void }) {
+  return (
+    <button type="button" className="mod-order-reset" onClick={onReset}>
+      <RotateCcw size={13} aria-hidden="true" /> ترتیبِ پیش‌فرض
+    </button>
+  )
 }
 
 function ListPanel({ token, page, section }: { token: string; page: PageKey; section: string | null }) {

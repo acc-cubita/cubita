@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, BookOpen, Check, CheckCircle2, Keyboard, Rows3, Trash2, X } from 'lucide-react'
 import type { AccountCache } from '../electron.d'
@@ -20,6 +20,7 @@ import { useJournalEntryDraft, type JournalEntryDraft } from '../lib/journalEntr
 import { useExperienceMode } from '../lib/experienceMode'
 import { JournalGrid } from './JournalGrid'
 import { openCellPicker } from '../lib/gridPicker'
+import { useFitText } from '../lib/useFitText'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
@@ -615,18 +616,23 @@ function JournalFooter({ d, shortcut = false }: { d: JournalEntryDraft; shortcut
  * سبز = متوازن، قرمز = نامتوازن (با مبلغِ اختلاف و اینکه کدام طرف بیشتر است، تا حسابدار
  * بداند ردیفِ بعد بدهکار است یا بستانکار)، خاکستری = هنوز مبلغی نیست. وضعیت `aria-live`
  * دارد تا صفحه‌خوان هم بشنودش.
+ *
+ * **سه خانه اندازه‌ی ثابت دارند** (CSS) و با تایپِ هر رقم بزرگ و کوچک نمی‌شوند — نوار
+ * جلوی چشمِ حسابدار است و هر لرزشش حواس را می‌بَرد. عددی که در خانه جا نشود به‌جای
+ * پهن‌کردنِ خانه، به نسبت کوچک می‌شود (`FitText`).
  */
 function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceState }) {
   const diff = Math.abs(d.totalDebit - d.totalCredit)
+  const side = d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'
   return (
     <div className={`jb-sum jb-sum--${state}`} role="group" aria-label="جمعِ سند">
       <div className="jb-stat">
         <span className="jb-k">جمع بدهکار</span>
-        <span className="jb-v">{fa(d.totalDebit)}</span>
+        <FitText className="jb-v" text={fa(d.totalDebit)} />
       </div>
       <div className="jb-stat">
         <span className="jb-k">جمع بستانکار</span>
-        <span className="jb-v">{fa(d.totalCredit)}</span>
+        <FitText className="jb-v" text={fa(d.totalCredit)} />
       </div>
       <div className="jb-stat jb-stat--diff" aria-live="polite">
         <span className="jb-k">وضعیتِ توازن</span>
@@ -643,13 +649,30 @@ function BalanceSummary({ d, state }: { d: JournalEntryDraft; state: BalanceStat
             </>
           )}
         </span>
+        {/* در موبایل فقط مبلغ: خانه‌ی ۱۰۰ پیکسلی جای «بدهکار بیشتر» را ندارد، و طرفِ بزرگ‌تر از دو
+            جمعِ کنارش پیداست. */}
         {state === 'err' && (
-          <span className="jb-sub">
-            اختلاف {fa(diff)} — {d.totalDebit > d.totalCredit ? 'بدهکار بیشتر' : 'بستانکار بیشتر'}
-          </span>
+          <FitText className="jb-sub" min={0.75} text={`${fa(diff)} ${side}`}>
+            {fa(diff)}
+            <span className="jb-sub-side"> {side}</span>
+          </FitText>
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * متنِ یک خانه‌ی ثابت‌عرض — به‌جای پهن‌کردنِ خانه، کوچک می‌شود ([useFitText]). `text` کلیدِ
+ * سنجشِ دوباره است؛ `children` اگر باشد به‌جایش رندر می‌شود (برای بخشی که CSS در موبایل پنهان
+ * می‌کند — سنجش از پهنای واقعاً رندرشده است).
+ */
+function FitText({ className, min, text, children }: { className: string; min?: number; text: string; children?: ReactNode }) {
+  const ref = useFitText<HTMLSpanElement>(text, min)
+  return (
+    <span ref={ref} className={`${className} jb-fit`}>
+      {children ?? text}
+    </span>
   )
 }
 
