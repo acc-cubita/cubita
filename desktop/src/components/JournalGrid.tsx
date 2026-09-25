@@ -51,20 +51,8 @@ function isRtl(el: Element): boolean {
  * تولیدش می‌کند. به‌علاوه این‌طور `SearchSelect` و `NumberInput` دست‌نخورده
  * می‌مانند — هیچ‌کدام لازم نیست ref بپذیرند.
  */
-//: عرضِ پیش‌فرضِ هر ستون، وقتی کاربر عرضی را کشیده و بقیه باید پیکسلی شوند (`useColumnWidths`).
-const COL_FALLBACK: Record<string, number> = {
-  num: 44,
-  account: 320,
-  fx: 130,
-  tafsili: 150,
-  costCenter: 150,
-  description: 140,
-  debit: 170,
-  credit: 170,
-  trackingNo: 130,
-  trackingDate: 130,
-  actions: 104,
-}
+//: ستون‌بندیِ «جا در قاب»: شماره و آیکون‌های کنش ثابت، «حساب» باقی را می‌گیرد (`useColumnWidths`).
+const GRID_LAYOUT = { fixed: ['num', 'actions'], auto: 'account' } as const
 
 export function JournalGrid({
   d,
@@ -89,9 +77,7 @@ export function JournalGrid({
   const [advance, setAdvance] = useState<{ row: number; how: ComboCommit } | null>(null)
   //: انتخابِ ردیف با سرستونِ ردیف (شماره)، مثلِ اکسل — برای حذفِ دسته‌ای و جمعِ انتخاب.
   const { selected, click: clickRowHead, clear: clearSelection } = useRowSelection()
-  //: ستونِ کنش‌ها (آخرین) کشسان است: جای خالیِ باریک‌کردنِ یک ستون ته جدول می‌ماند و ستون‌های دیگر
-  //: جابه‌جا نمی‌شوند.
-  const cw = useColumnWidths('cubita.journalGrid.widths', COL_FALLBACK, 'actions')
+  const cw = useColumnWidths('cubita.journalGrid.shares', GRID_LAYOUT)
 
   //: مخزنِ حافظه‌ی شرح از `ref` خوانده می‌شود، نه از `d.lines`: تابعی که به ردیف‌ها
   //: می‌رسد باید پایدار بماند، وگرنه `memo`ِ هر ۳۰۰ ردیف با هر کلید می‌شکست.
@@ -507,12 +493,11 @@ export function JournalGrid({
       aria-label="ردیف‌های سند"
     >
       <table
-        className={`ef-table ef-table--edit jg-table xl-grid table-plain${cw.customized ? ' xl-custom' : ''}`}
-        style={cw.table(['num', ...cols, 'actions'])}
+        className="ef-table ef-table--edit jg-table xl-grid table-plain"
       >
         {/* عرضِ ستون‌ها (`table-layout: fixed`): حساب هرچه بماند می‌گیرد؛ شماره و شرح باریک،
-            مبلغ‌ها پهن تا عددِ میلیاردی بی‌برش دیده شود. کاربر با کشیدنِ لبه‌ی سرستون عوضشان
-            می‌کند (`useColumnWidths`). */}
+            مبلغ‌ها پهن تا عددِ میلیاردی بی‌برش دیده شود. کاربر لبه‌ی میانِ دو ستون را می‌کشد و فقط
+            همان دو عوض می‌شوند؛ جدول همیشه هم‌عرضِ قاب است (`useColumnWidths`). */}
         <colgroup>
           <col className="jg-c-num" style={cw.col('num')} />
           <col className="jg-c-account" style={cw.col('account')} />
@@ -540,10 +525,13 @@ export function JournalGrid({
                 ['credit', 'بستانکار'],
                 ...(showTracking ? [['trackingNo', 'شماره پیگیری'], ['trackingDate', 'تاریخ پیگیری']] : []),
               ] as [string, string][]
-            ).map(([id, label]) => (
+            ).map(([id, label], k, all) => (
               <th key={id} data-col={id}>
                 {label}
-                <ColResizer onBegin={(e) => cw.begin(e, id)} onReset={cw.reset} />
+                {/* لبه‌ی کنارِ ستونِ آیکون‌ها (ثابت) کشیدنی نیست. */}
+                {cw.canResize(id, all[k + 1]?.[0] ?? 'actions') && (
+                  <ColResizer onBegin={(e) => cw.begin(e, id)} onReset={cw.reset} />
+                )}
               </th>
             ))}
             <th className="ef-col-min" data-col="actions" aria-label="کنش‌ها" />
