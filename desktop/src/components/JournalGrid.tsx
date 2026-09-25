@@ -89,7 +89,9 @@ export function JournalGrid({
   const [advance, setAdvance] = useState<{ row: number; how: ComboCommit } | null>(null)
   //: انتخابِ ردیف با سرستونِ ردیف (شماره)، مثلِ اکسل — برای حذفِ دسته‌ای و جمعِ انتخاب.
   const { selected, click: clickRowHead, clear: clearSelection } = useRowSelection()
-  const cw = useColumnWidths('cubita.journalGrid.widths', COL_FALLBACK)
+  //: ستونِ کنش‌ها (آخرین) کشسان است: جای خالیِ باریک‌کردنِ یک ستون ته جدول می‌ماند و ستون‌های دیگر
+  //: جابه‌جا نمی‌شوند.
+  const cw = useColumnWidths('cubita.journalGrid.widths', COL_FALLBACK, 'actions')
 
   //: مخزنِ حافظه‌ی شرح از `ref` خوانده می‌شود، نه از `d.lines`: تابعی که به ردیف‌ها
   //: می‌رسد باید پایدار بماند، وگرنه `memo`ِ هر ۳۰۰ ردیف با هر کلید می‌شکست.
@@ -505,7 +507,7 @@ export function JournalGrid({
       aria-label="ردیف‌های سند"
     >
       <table
-        className="ef-table ef-table--edit jg-table xl-grid table-plain"
+        className={`ef-table ef-table--edit jg-table xl-grid table-plain${cw.customized ? ' xl-custom' : ''}`}
         style={cw.table(['num', ...cols, 'actions'])}
       >
         {/* عرضِ ستون‌ها (`table-layout: fixed`): حساب هرچه بماند می‌گیرد؛ شماره و شرح باریک،

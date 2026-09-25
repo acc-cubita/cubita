@@ -176,13 +176,15 @@ function EntryTable({
   const pg = usePagination(entries, pageSize)
   const total = (e: JournalEntryRecord) =>
     e.lines.reduce((sum, l) => sum + Number(l.debit || 0), 0)
-  const cw = useColumnWidths('cubita.grid.journalList', LIST_COL_FALLBACK)
+  const withActions = Boolean(onVoid || onPrint)
+  //: ستونِ آخر کشسان است (کنش‌ها، یا مبلغ اگر کنشی نیست): جای خالیِ باریک‌کردنِ یک ستون ته جدول
+  //: می‌ماند و ستون‌های دیگر جابه‌جا نمی‌شوند.
+  const cw = useColumnWidths('cubita.grid.journalList', LIST_COL_FALLBACK, withActions ? 'actions' : 'amount')
   const { selected, click, clear } = useRowSelection()
   //: فیلترِ تازه یعنی فهرستِ دیگری؛ انتخابِ قبلی دیگر معنا ندارد.
   useEffect(() => clear(), [entries, clear])
   const order = pg.pageItems.map((e) => e.id)
   const chosen = entries.filter((e) => selected.has(e.id))
-  const withActions = Boolean(onVoid || onPrint)
   const colIds = ['rowhead', 'number', 'atf', 'sub', 'date', 'desc', 'source', 'status', 'lines', 'amount', ...(withActions ? ['actions'] : [])]
 
   const head = (id: string, label: ReactNode) => (
@@ -205,7 +207,10 @@ function EntryTable({
 
   return (
     <div className="table-scroll ef-table-wrap">
-      <table className="cards-on-mobile acc-table ef-table xl-grid xl-grid--list" style={cw.table(colIds)}>
+      <table
+        className={`cards-on-mobile acc-table ef-table xl-grid xl-grid--list${cw.customized ? ' xl-custom' : ''}`}
+        style={cw.table(colIds)}
+      >
         <colgroup>
           {colIds.map((id) => (
             <col key={id} className={`xl-c-${id}`} style={cw.col(id)} />
