@@ -972,3 +972,16 @@ textarea.ad-mono { width: 100%; box-sizing: border-box; word-break: break-all; r
     margin-inline-start: 0;
   }
 }
+
+/* ── درخواست‌های خرید ── */
+/* انتخاب‌گرِ کوچکِ سرِ جدول با برچسبِ کنارش (فیلترِ وضعیت). */
+.ad-field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.ad-field-inline select { min-width: 150px; }
+/* متنِ چندخطیِ کاربر (پیامِ درخواست، یادداشتِ پیگیری) — شکستنِ سطرها همان‌طور که نوشته شده. */
+.ad-pre { white-space: pre-wrap; overflow-wrap: anywhere; }

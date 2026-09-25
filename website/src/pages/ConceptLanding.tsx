@@ -27,13 +27,23 @@ import {
   Rocket,
   ChevronDown,
   DatabaseZap,
-  Wallet,
   Users,
   Download,
   Check,
+  Building2,
+  MessagesSquare,
+  PhoneCall,
 } from 'lucide-react'
-import { ConceptPricing } from '../concept/ConceptPricing'
-import { ANDROID_APK_URL, APP_URL, DOWNLOAD_URL, SiteFooter, SiteHeader, TRIAL_URL } from '../concept/SiteChrome'
+import { ContactSection, openContact } from '../concept/ContactSection'
+import {
+  ANDROID_APK_URL,
+  APP_URL,
+  DOWNLOAD_URL,
+  ENTERPRISE_DOWNLOAD_URL,
+  SiteFooter,
+  SiteHeader,
+  TRIAL_URL,
+} from '../concept/SiteChrome'
 import '../concept/concept.css'
 
 //: چهار واقعیتِ پایه‌ای که کنارِ متنِ هیرو می‌نشینند — جایگزینِ خوشه‌ی کارت‌های شناور، به
@@ -41,7 +51,7 @@ import '../concept/concept.css'
 const FACTS = [
   { icon: DatabaseZap, value: 'داده‌ی ایزوله', label: 'اطلاعاتِ هر کسب‌وکار در پایگاه‌داده‌ی جدا' },
   { icon: MonitorSmartphone, value: 'وب، ویندوز، اندروید', label: 'یک حساب، سه نسخه‌ی هم‌گام' },
-  { icon: Wallet, value: 'پرداختِ زرین‌پال', label: 'خریدِ پلن امن و آنی' },
+  { icon: Building2, value: 'نسخه‌ی سازمانی', label: 'سرور در خودِ شرکت، حسابدارها روی شبکه‌ی داخلی' },
   { icon: Users, value: 'چندکاربره', label: 'نقش‌های مدیر، حسابدار، فروشنده، انباردار' },
 ]
 
@@ -67,6 +77,15 @@ const PLATFORMS = [
     points: ['ثبتِ فاکتور و دریافت در حرکت', 'اعلانِ زنده‌ی هشدارها', 'به‌روزرسانیِ خودکار'],
     action: { href: ANDROID_APK_URL, label: 'دانلودِ اپ اندروید' },
   },
+  {
+    icon: Building2,
+    title: 'کوبیتا سازمانی',
+    desc: 'برای شرکت‌ها و سازمان‌ها: یک رایانه‌ی شرکت سرور می‌شود و حسابدارها از شبکه‌ی داخلی وصل می‌شوند — داده از شرکت بیرون نمی‌رود.',
+    points: ['سرور و کلاینت روی شبکه‌ی داخلی', 'داده‌ی کاملاً درون‌سازمانی', 'فعال‌سازی با کدِ مجوز'],
+    action: { href: ENTERPRISE_DOWNLOAD_URL, label: 'دانلودِ نصاب', download: true },
+    //: نصاب ۳۰ روز آزمایشی کار می‌کند؛ برای کارِ واقعی کدِ مجوز لازم است — از همان فرمِ خرید.
+    contact: 'enterprise' as const,
+  },
 ]
 
 const INDUSTRIES = [
@@ -91,10 +110,10 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { icon: MousePointerClick, title: 'انتخابِ پلن', desc: 'بر اساسِ تعدادِ کاربران و نیازتان، یکی از پلن‌های پایه، حرفه‌ای یا سازمانی را انتخاب کنید.' },
-  { icon: CreditCard, title: 'پرداختِ امن', desc: 'مبلغِ پلن را از درگاهِ معتبرِ زرین‌پال پرداخت کنید — امن و آنی.' },
-  { icon: Settings2, title: 'ساختِ نسخه‌ی اختصاصی', desc: 'بعد از تأییدِ پرداخت، نسخه‌ی ایزوله‌ی شما ساخته و لینکِ تعیینِ رمز به ایمیلتان ارسال می‌شود.' },
-  { icon: Rocket, title: 'شروعِ کار', desc: 'رمز را تعیین کنید، وارد نسخه‌ی وب یا ویندوز شوید و اولین فاکتور را ثبت کنید.' },
+  { icon: MousePointerClick, title: 'امتحانِ رایگان', desc: 'ثبت‌نام کنید و ۱۴ روز با همه‌ی امکاناتِ اصلی کار کنید — بدونِ پرداخت.' },
+  { icon: MessagesSquare, title: 'گفت‌وگو با کارشناس', desc: 'فرمِ «خرید و مشاوره» را پر کنید؛ کارشناسِ فروش تماس می‌گیرد و نسخه و قیمتِ مناسبِ شما را می‌گوید.' },
+  { icon: Settings2, title: 'راه‌اندازی', desc: 'حسابتان تمدید و ارتقا می‌شود، یا برای کوبیتا سازمانی کدِ مجوز صادر می‌شود — داده‌ی دوره‌ی آزمایشی می‌ماند.' },
+  { icon: Rocket, title: 'شروعِ کار', desc: 'وارد نسخه‌ی وب یا ویندوز شوید و اولین فاکتور را ثبت کنید.' },
 ]
 
 const WHY = [
@@ -105,11 +124,12 @@ const WHY = [
 
 const FAQS = [
   { q: 'آیا داده‌های کسب‌وکار من امن است؟', a: 'بله. هر مشتری روی یک نسخه‌ی کاملاً ایزوله (دیتابیس، سرویس و آدرس اختصاصی) اجرا می‌شود؛ داده‌ی هیچ کسب‌وکاری با دیگری در یک دیتابیس مشترک نیست. اتصال هم همیشه از طریق HTTPS رمزنگاری‌شده است.' },
-  { q: 'نسخه‌ی آزمایشیِ رایگان چطور کار می‌کند؟', a: 'ثبت‌نام می‌کنید و ۱۴ روز کاملِ رایگان همه‌ی امکاناتِ اصلی را دارید. اگر پیش از پایانِ دوره پلن بخرید، همه‌ی اطلاعاتتان حفظ می‌شود.' },
+  { q: 'نسخه‌ی آزمایشیِ رایگان چطور کار می‌کند؟', a: 'ثبت‌نام می‌کنید و ۱۴ روز کاملِ رایگان همه‌ی امکاناتِ اصلی را دارید. اگر خرید کنید، همه‌ی اطلاعاتِ دوره‌ی آزمایشی حفظ می‌شود.' },
   { q: 'اگر اینترنت قطع شود چه اتفاقی می‌افتد؟', a: 'نسخه‌ی ویندوز کاملاً آفلاین کار می‌کند: فاکتور، سندِ حسابداری و بقیه‌ی عملیات محلی ذخیره می‌شوند و با اتصالِ دوباره، خودکار با سرورِ مرکزی هم‌گام می‌شوند.' },
-  { q: 'چند نفر می‌توانند هم‌زمان استفاده کنند؟', a: 'بسته به پلن، از یک تا چند کاربرِ هم‌زمان — هرکدام با نقشِ مشخص (مدیر، حسابدار، فروشنده، انباردار، مسئولِ حقوق) و دسترسیِ محدود به همان بخش.' },
-  { q: 'بعد از پرداخت، چقدر طول می‌کشد؟', a: 'بلافاصله. بعد از پرداختِ موفق، نسخه‌ی اختصاصی و ایزوله‌ی شما همان لحظه ساخته می‌شود و لینکِ تعیینِ رمزِ عبور به ایمیلتان می‌رسد.' },
-  { q: 'امکانِ اتصال به سامانه‌ی مؤدیان هست؟', a: 'بله، در پلنِ سازمانی. صورتحساب‌های الکترونیکی مطابق با الزاماتِ سازمانِ امورِ مالیاتی ارسال می‌شوند.' },
+  { q: 'چند نفر می‌توانند هم‌زمان استفاده کنند؟', a: 'به اندازه‌ی نیازتان — هر کاربر با نقشِ مشخص (مدیر، حسابدار، فروشنده، انباردار، مسئولِ حقوق) و دسترسیِ محدود به همان بخش. تعدادِ کاربر را در فرمِ «خرید و مشاوره» بنویسید.' },
+  { q: 'چطور بخرم؟', a: 'فرمِ «خرید و مشاوره» پایینِ همین صفحه را پر کنید. کارشناسِ فروش در ساعاتِ کاری تماس می‌گیرد، بر اساسِ کسب‌وکار و تعدادِ کاربرتان نسخه‌ی مناسب را پیشنهاد می‌کند و قیمت را می‌گوید.' },
+  { q: 'کوبیتا سازمانی چه فرقی دارد؟', a: 'کوبیتا سازمانی روی سرورِ خودِ شرکت نصب می‌شود و حسابدارها از رایانه‌های شبکه‌ی داخلی وصل می‌شوند؛ داده هیچ‌وقت از شرکت بیرون نمی‌رود و به اینترنت هم نیازی نیست. نصاب را دانلود کنید — ۳۰ روز آزمایشی کار می‌کند — و برای کدِ مجوز با ما تماس بگیرید.' },
+  { q: 'امکانِ اتصال به سامانه‌ی مؤدیان هست؟', a: 'بله. صورتحساب‌های الکترونیکی مطابق با الزاماتِ سازمانِ امورِ مالیاتی ارسال می‌شوند؛ شرایطش را کارشناسِ فروش برای نسخه‌ی شما می‌گوید.' },
 ]
 
 //: ورودِ آرام و کوتاه — سایتِ اداری جای حرکتِ نمایشی نیست. `MotionConfig` بالای صفحه
@@ -181,8 +201,8 @@ function Hero() {
             <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
               شروعِ ۱۴ روز رایگان
             </a>
-            <a className="cc-btn cc-btn-outline" href="#cc-pricing">
-              مشاهده‌ی پلن‌ها
+            <a className="cc-btn cc-btn-outline" href="#cc-contact">
+              <PhoneCall size={16} /> خرید و مشاوره
             </a>
           </div>
           <ul className="cc-hero-trust">
@@ -227,8 +247,12 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; 
 function Platforms() {
   return (
     <section className="cc-section cc-section-alt" id="cc-platforms">
-      <SectionHead eyebrow="نسخه‌ها" title="یک حساب، روی وب، ویندوز و اندروید" sub="هرجا راحت‌ترید کار کنید؛ داده‌ی شما همیشه بینِ هر سه نسخه هم‌گام است." />
-      <div className="cc-grid cc-grid-3">
+      <SectionHead
+        eyebrow="نسخه‌ها"
+        title="وب، ویندوز، اندروید — و نسخه‌ی سازمانی"
+        sub="یک حسابِ ابری روی هر سه نسخه، همیشه هم‌گام؛ و برای شرکت‌هایی که داده باید در خودِ شرکت بماند، کوبیتا سازمانی."
+      />
+      <div className="cc-grid cc-grid-4 cc-platform-grid">
         {PLATFORMS.map((p) => (
           <motion.div key={p.title} className="cc-card cc-platform" {...reveal}>
             <span className="cc-icon cc-icon-lg">
@@ -243,14 +267,21 @@ function Platforms() {
                 </li>
               ))}
             </ul>
-            <a
-              className="cc-btn cc-btn-outline cc-card-action"
-              href={p.action.href}
-              {...('external' in p.action ? { target: '_blank', rel: 'noreferrer' } : {})}
-              {...('download' in p.action ? { download: true } : {})}
-            >
-              {p.action.label}
-            </a>
+            <div className="cc-card-action cc-card-actions">
+              <a
+                className="cc-btn cc-btn-outline"
+                href={p.action.href}
+                {...('external' in p.action ? { target: '_blank', rel: 'noreferrer' } : {})}
+                {...('download' in p.action ? { download: true } : {})}
+              >
+                {p.action.label}
+              </a>
+              {'contact' in p && p.contact && (
+                <button type="button" className="cc-btn cc-btn-primary" onClick={() => openContact(p.contact)}>
+                  درخواستِ مجوز
+                </button>
+              )}
+            </div>
           </motion.div>
         ))}
       </div>
@@ -298,7 +329,7 @@ function Industries() {
 function HowItWorks() {
   return (
     <section className="cc-section" id="cc-how">
-      <SectionHead eyebrow="شروعِ کار" title="در چهار قدم شروع کنید" sub="از انتخابِ پلن تا ثبتِ اولین فاکتور، چند دقیقه بیشتر طول نمی‌کشد." />
+      <SectionHead eyebrow="شروعِ کار" title="در چهار قدم شروع کنید" sub="از اولین امتحان تا ثبتِ اولین فاکتور — بی‌آنکه چیزی را از دست بدهید." />
       <ol className="cc-grid cc-grid-4 cc-steps">
         {STEPS.map((s, i) => (
           <motion.li key={s.title} className="cc-card cc-step" {...reveal}>
@@ -367,14 +398,14 @@ function FinalCta() {
       <div className="cc-final-cta-in">
         <div>
           <h2>همین امروز، رایگان شروع کنید</h2>
-          <p>۱۴ روز کاملِ رایگان. اگر پسندیدید، همه‌ی اطلاعاتتان حفظ می‌شود.</p>
+          <p>۱۴ روز کاملِ رایگان. اگر پسندیدید، با کارشناسِ فروش تماس بگیرید — همه‌ی اطلاعاتتان حفظ می‌شود.</p>
         </div>
         <div className="cc-final-cta-btns">
           <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
             شروعِ ۱۴ روز رایگان
           </a>
-          <a className="cc-btn cc-btn-on-dark" href={DOWNLOAD_URL} download>
-            <Download size={16} /> دانلود برای ویندوز
+          <a className="cc-btn cc-btn-on-dark" href="#cc-contact">
+            <PhoneCall size={16} /> تماس برای خرید
           </a>
         </div>
       </div>
@@ -394,7 +425,7 @@ export function ConceptLanding() {
           <Features />
           <Industries />
           <HowItWorks />
-          <ConceptPricing />
+          <ContactSection />
           <WhySection />
           <FaqSection />
           <FinalCta />

@@ -5,7 +5,7 @@
  * ستاد** است، نه ماژولِ فعالِ یک کسب‌وکار. یکی‌کردنشان یعنی دو معنا روی یک
  * سازوکار سوار می‌شد و اولین تغییرِ یکی، دیگری را بی‌صدا می‌شکست.
  *
- * فهرست تخت است چون هست — نُه صفحه سلسله‌مراتب نمی‌خواهد.
+ * فهرست تخت است چون هست — این‌قدر صفحه سلسله‌مراتب نمی‌خواهد.
  */
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   CreditCard,
   KeyRound,
   Percent,
+  PhoneCall,
   ShieldCheck,
   Users,
 } from 'lucide-react'
@@ -27,6 +28,7 @@ export type PageKey =
   | 'commissions'
   | 'purchases'
   | 'licenses'
+  | 'sales'
   | 'errors'
   | 'staff'
 
@@ -46,6 +48,7 @@ export const NAV: NavItem[] = [
   { key: 'commissions', label: 'کمیسیون بازار', icon: Percent, area: 'commissions' },
   { key: 'purchases', label: 'خریدهای سایت', icon: CreditCard, area: 'billing' },
   { key: 'licenses', label: 'مجوزهای سازمانی', icon: KeyRound, area: 'licenses' },
+  { key: 'sales', label: 'درخواست‌های خرید', icon: PhoneCall, area: 'sales' },
   { key: 'errors', label: 'گزارش خطاها', icon: AlertTriangle, area: 'errors' },
   { key: 'staff', label: 'کاربران ستاد', icon: Users, area: 'staff', ownerOnly: true },
 ]
@@ -56,6 +59,7 @@ export const PAGE_TITLES: Record<PageKey, string> = {
   commissions: 'کمیسیون بازار',
   purchases: 'خریدهای سایت',
   licenses: 'مجوزهای سازمانی',
+  sales: 'درخواست‌های خرید',
   errors: 'گزارش خطاها',
   staff: 'کاربران ستاد',
 }

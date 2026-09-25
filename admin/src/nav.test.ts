@@ -52,6 +52,11 @@ describe('منویِ ستاد', () => {
     expect(keys).toEqual(['licenses'])
   })
 
+  it('«درخواست‌های خرید» برای پشتیبانی (پیگیریِ تماس) و مالی (فقط دیدن)', () => {
+    expect(visibleNav(me('support', { sales: ['view', 'edit'] })).map((i) => i.key)).toEqual(['sales'])
+    expect(visibleNav(me('finance', { sales: ['view'] })).map((i) => i.key)).toEqual(['sales'])
+  })
+
   it('مجوزِ خالی یعنی هیچ منویی — بسته می‌شکند، نه باز', () => {
     expect(visibleNav(me('support', {}))).toEqual([])
   })

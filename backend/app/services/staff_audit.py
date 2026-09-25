@@ -55,6 +55,7 @@ ACTIONS = frozenset(
         "license_transfer",
         "license_revoke",
         "license_code_regenerate",
+        "sales_inquiry_update",
     }
 )
 
