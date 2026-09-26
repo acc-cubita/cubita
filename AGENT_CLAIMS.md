@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/package.json`، `desktop/package-lock.json`، `PROJECT_OVERVIEW.md`، `backend/dist/server-bundle` (ساخت، نه مخزن) | انتشارِ نصاب و به‌روزرسانیِ دسکتاپ v1.9.0 (ابری و سازمانی) | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `components/LoginScreen.tsx` (+تست)، `lib/rememberedLogin.ts` (+تست)، `App.css` (`login-remember`)، `PROJECT_OVERVIEW.md` | «نام کاربری را به خاطر بسپار» در صفحه‌ی ورود | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `pages/accounting/{MergeEntriesPage,RenumberEntriesPage,EntryCartablePage,JournalPages}.tsx` (+تست‌ها)، `lib/{mergeSheet,renumberSheet,useCtrlS}.ts` (+تست)، `api.ts`، `Dashboard.tsx`، `App.css` (`rn-*`، `mg-*`)، `HelpPage.tsx`، بک‌اند `services/accounting_ops.py` + `routers/accounting_ops.py` + `schemas/accounting_ops.py` + `test_accounting_ops.py`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «ادغام اسناد» و «شماره‌گذاری مجدد اسناد» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `pages/accounting/{YearEndPage,EntryCartablePage,ClosingPages,JournalPages}.tsx` (+تست‌ها)، `lib/{yearEnd,cartable}.ts` (+تست)، `api.ts`، `Dashboard.tsx`، `App.css` (`ye-*`، `cb-*`)، `HelpPage.tsx`، بک‌اند `services/accounting_ops.py` + `schemas/accounting_ops.py` + `test_closing_dimensions.py`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «صدور سند اختتامیه و افتتاحیه» و «کارتابل اسناد موقت» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
