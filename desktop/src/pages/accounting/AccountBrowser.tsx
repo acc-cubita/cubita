@@ -433,15 +433,6 @@ export function AccountBrowsePage({
     document.getElementById(`ab-hit-${hitIndex}`)?.scrollIntoView({ block: 'nearest' })
   }, [hitIndex])
 
-  const setFiscalYear = (id: string) => {
-    const fy = (fiscalYears.data ?? []).find((y) => y.id === id)
-    if (!fy) return
-    setCustom({ from: fy.start_date, to: fy.end_date })
-    setPreset('custom')
-  }
-  const activeFy = (fiscalYears.data ?? []).find(
-    (y) => preset === 'custom' && y.start_date === custom.from && y.end_date === custom.to,
-  )
 
   const loadingFirst = tree.loading && !tree.data
 
@@ -456,23 +447,7 @@ export function AccountBrowsePage({
         //: بازه (پیش‌تنظیم + از/تا همیشه‌دیده) و سالِ مالی، سطرِ دوم فیلترهای دفتر، سطرِ سوم نماها و میان‌برها.
         <div className="jh-bar jh-bar--report" role="group" aria-label="بازه و فیلترهای مرور حساب‌ها">
           <div className="jh-row rh-row--range">
-            <RangeCells range={range} />
-            <label className="jh-field">
-              <span className="jh-label">سال مالی</span>
-              <SearchSelect
-                aria-label="سال مالی"
-                value={activeFy?.id ?? ''}
-                onChange={(e) => setFiscalYear(e.target.value)}
-                disabled={(fiscalYears.data ?? []).length === 0}
-              >
-                <option value="">—</option>
-                {(fiscalYears.data ?? []).map((y) => (
-                  <option key={y.id} value={y.id}>
-                    {y.title}
-                  </option>
-                ))}
-              </SearchSelect>
-            </label>
+            <RangeCells range={range} years={fiscalYears.data ?? []} />
           </div>
           <div className="jh-row jh-row--sub rh-row--filters">
             <ReportFilterBar token={token} filters={filters} onChange={setFilters} variant="cells" />

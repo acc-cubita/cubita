@@ -14023,3 +14023,147 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .jh-bar.jh-bar--report > .rh-row--range > .jh-field:nth-child(4) { grid-column: 1 / -1; }
   .jh-bar.jh-bar--report > .rh-row--filters > .jh-field:nth-child(n + 3) { border-block-start: 1px solid var(--xl-line); }
 }
+
+/* ── «گزارش ترازها» (تمِ اکسلی) ──
+ * سطرِ «قالب» در سربرگ: نوعِ برگه، شمارِ ستون، سطح و نوعِ مانده — همان خانه‌های `rh-seg`ِ بازه. */
+.jh-bar--report > .rh-row--shape { --rh-cols: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); }
+.ef-form .jh-bar--report .cc-presets.rh-seg button:disabled { color: var(--text-muted); opacity: 0.55; cursor: not-allowed; }
+@container (max-width: 900px) {
+  .jh-bar.jh-bar--report > .rh-row--shape > .jh-field:nth-child(n + 2) { border-inline-start: 1px solid var(--xl-line); }
+}
+/* قابِ موبایل: «قالب» و «ستون‌ها» تمام‌عرض (چهار نیمه‌ی «دو/چهار/شش/هشت» در نیم‌خانه جا نمی‌شوند)، سطح و نوعِ مانده
+ * کنارِ هم. */
+@container (max-width: 560px) {
+  .jh-bar--report > .rh-row--shape { --rh-cols: repeat(2, minmax(0, 1fr)); }
+  .jh-bar.jh-bar--report > .rh-row--shape > .jh-field.jh-field { border-inline-start: 0; }
+  .jh-bar.jh-bar--report > .rh-row--shape > .jh-field.jh-field:nth-child(-n + 2) { grid-column: 1 / -1; }
+  .jh-bar.jh-bar--report > .rh-row--shape > .jh-field:nth-child(4) { border-inline-start: 1px solid var(--xl-line); }
+  .jh-bar.jh-bar--report > .rh-row--shape > .jh-field:nth-child(n + 2) { border-block-start: 1px solid var(--xl-line); }
+}
+
+/* گرید: قابِ لغزشِ خودش با سرستون و «جمع»ِ چسبنده، تا با صدها حساب هم سرستون و جمع دیده شوند. */
+.br-scroll { max-block-size: max(320px, calc(100vh - 170px)); overflow: auto; outline: none; }
+.br-scroll:focus-visible { box-shadow: 0 0 0 2px var(--accent-bg); }
+.br-scroll.is-loading { opacity: 0.6; }
+/* کفِ عرض با هر جفت ستونِ مبلغ بزرگ می‌شود تا «نام» له نشود؛ جا نشد، گرید درونِ قاب می‌لغزد. مبلغ‌ها عرضِ پیکسلیِ
+ * ثابت دارند (جای میخ پایدار) و «نام» باقیِ عرض را می‌گیرد. */
+.page .ef-table-wrap > table.br-table {
+  --br-amt: 116px;
+  table-layout: fixed;
+  inline-size: 100%;
+  min-inline-size: calc(40px + 84px + 190px + var(--br-pairs, 3) * 2 * var(--br-amt));
+}
+.br-table col.br-c-rowhead { width: 40px; }
+.br-table col.br-c-code { width: 84px; }
+.br-table col.br-c-amt { width: var(--br-amt); }
+.page .ef-table-wrap > table.br-table > thead { position: sticky; inset-block-start: 0; z-index: 3; }
+.page .ef-table-wrap > table.br-table > thead th { padding: 6px 8px; }
+/* سرستونِ دوطبقه: نامِ گروه وسطِ جفتش، با خطِ ظریف تا زیرسرستون‌ها — مثلِ خانه‌ی ادغام‌شده‌ی اکسل. */
+.page .ef-table-wrap > table.br-table > thead th.br-group { border-block-end-color: var(--xl-line); text-align: center; }
+/* مرزِ گروه‌ها پررنگ‌تر — جفتِ بدهکار/بستانکار یک واحد خوانده شود. */
+.page .ef-table-wrap > table.br-table :is(th, td).br-gs { border-inline-start: 1px solid var(--border-strong); }
+.page .ef-table-wrap > table.br-table td {
+  block-size: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page .ef-table-wrap > table.br-table td.xl-rowhead { padding: 0; }
+.br-table > tbody > tr { scroll-margin-block: 72px 40px; }
+.br-table > tbody > tr.acc-row--clickable { cursor: pointer; }
+.page .ef-table-wrap > table.br-table > tbody > tr.acc-row--idle > td:not(.xl-rowhead) { color: var(--text-muted); }
+/* ردیفِ فعال (مکان‌نمای کیبورد) فقط وقتی گرید فوکوس دارد رنگ می‌گیرد — در بارگذاری، ردیفِ اولِ رنگی انتخاب خوانده می‌شد.
+ * انتخاب پس از آن و با اختصاصیتِ برابر، تا ردیفِ انتخاب‌شده‌ی فعال رنگِ انتخاب بماند. */
+.page .br-scroll:focus-within > table.br-table > tbody > tr.is-active > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.page .ef-table-wrap.br-scroll > table.br-table > tbody > tr.is-selected > td:not(.xl-rowhead) { background: var(--accent-bg); }
+.br-scroll:focus .br-table > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.page .ef-table-wrap > table.br-table > tbody > tr > td.br-status { padding: 18px 12px; color: var(--text-muted); text-align: center; white-space: normal; }
+.br-code-inline { display: none; }
+/* ستون‌های «ردیف، کد، نام» سمتِ راستِ قاب میخ‌اند (مثلِ «ثابت‌کردنِ ستون»ِ اکسل): در قالبِ پهن فقط مبلغ‌ها زیرشان
+ * می‌لغزند. زمینه‌ی میخ مات است و رنگِ حالِ ردیف (`--accent-bg` نیمه‌شفاف) رویش لایه می‌شود — وگرنه مبلغی که زیرش
+ * می‌لغزد پیدا بود. */
+.br-table :is(th, td).br-pin { position: sticky; z-index: 1; }
+.br-table .br-pin--row { inset-inline-start: 0; }
+.br-table .br-pin--code { inset-inline-start: 40px; }
+.br-table .br-pin--name { inset-inline-start: 124px; }
+.br-table :is(th, td).br-pin--name,
+.br-table > tfoot td.br-pin--code { box-shadow: -4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent); }
+.page .ef-table-wrap > table.br-table > tbody > tr > td.br-pin:not(.xl-rowhead) { background: var(--surface); }
+.page .ef-table-wrap > table.br-table > tbody > tr:hover > td.br-pin:not(.xl-rowhead) { background: linear-gradient(color-mix(in srgb, var(--accent) 5%, transparent), color-mix(in srgb, var(--accent) 5%, transparent)), var(--surface); }
+.page .br-scroll:focus-within > table.br-table > tbody > tr.is-active > td.br-pin:not(.xl-rowhead) { background: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)), var(--surface); }
+.page .ef-table-wrap.br-scroll > table.br-table > tbody > tr.is-selected > td.br-pin:not(.xl-rowhead) { background: linear-gradient(var(--accent-bg), var(--accent-bg)), var(--surface); }
+.br-scroll:focus .br-table > tbody > tr.is-active > td.br-pin--name {
+  box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent), -4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent);
+}
+/* «جمع»: ته‌رنگِ سرستون و چسبیده به پایینِ قاب، با نشانِ توازن. */
+.page .ef-table-wrap > table.br-table > tfoot { position: sticky; inset-block-end: 0; z-index: 3; }
+.page .ef-table-wrap > table.br-table > tfoot td {
+  block-size: 36px;
+  padding: 0 8px;
+  border-block-start: 1px solid var(--border-strong);
+  border-block-end: 0;
+  background: var(--xl-head);
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.page .ef-table-wrap > table.br-table > tfoot td small { color: var(--text-muted); font-weight: 400; }
+.page .ef-table-wrap > table.br-table > tfoot td.br-off { color: var(--danger); }
+.br-total-label { margin-inline-end: 8px; }
+.br-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  vertical-align: middle;
+}
+.br-check--ok { background: var(--success-bg); color: var(--success); }
+.br-check--off { background: var(--danger-bg); color: var(--danger); }
+/* دو کارتِ کنترلِ زیرِ تراز همان گریدِ اکسلی‌اند، فقط‌خواندنی و بی‌میخ. */
+.page .ef-table-wrap > table.br-check-table td { padding-block: 6px; font-size: var(--fs-sm); }
+
+@media (max-width: 760px) {
+  /* تراز کارت می‌شود و «جمع» کارتِ آخر است؛ میخ، چسبندگی و قابِ لغزش در کارت معنا ندارند. */
+  .br-scroll { max-block-size: none; overflow: visible; }
+  .page .ef-table-wrap > table.br-table { min-inline-size: 0; table-layout: auto; }
+  .br-table tfoot { display: block; }
+  .page .ef-table-wrap > table.br-table > tfoot { position: static; }
+  .br-table :is(th, td).br-pin { position: static; }
+  .page .ef-table-wrap > table.br-table td { block-size: auto; white-space: normal; }
+  /* خانه‌ی صفر در کارت فقط «—» است و کارت را بلند می‌کند؛ مبلغ‌های واقعی می‌مانند. */
+  .page .ef-table-wrap > table.br-table td.br-zero { display: none; }
+  .br-code-inline { display: inline; margin-inline-end: 6px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  /* `:is(*, :focus-within)` هم‌وزنِ قاعده‌های حالِ ردیفِ بالاست تا در کارت هم رویشان بنشیند. */
+  .page .ef-table-wrap.br-scroll:is(*, :focus-within) > table.br-table > :is(tbody, tfoot) > tr > td:not(.br-none),
+  .page .ef-table-wrap.br-scroll:is(*, :focus-within) > table.br-table > :is(tbody, tfoot) > tr > td.br-pin:not(.xl-rowhead),
+  .page .ef-table-wrap.br-scroll:is(*, :focus-within) > table.br-table > tbody > tr:is(:hover, .is-active, .is-selected) > td:not(.br-none),
+  .page .ef-table-wrap.br-scroll:is(*, :focus-within) > table.br-table > tbody > tr:is(:hover, .is-active, .is-selected) > td.br-pin:not(.xl-rowhead) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .br-table > tbody > tr.is-active { border-color: var(--accent); }
+  .br-table > tbody > tr.is-selected { background: var(--accent-bg); }
+  .br-table > tfoot > tr { background: var(--xl-head); }
+  .page .ef-table-wrap > table.br-table > tfoot td.card-title { flex-wrap: wrap; gap: 6px; }
+  .br-keys { display: none; }
+  /* کارت‌های کنترل: خطوطِ گرید در کارت برداشته شوند. */
+  .page .ef-table-wrap > table.br-check-table td { padding: 1px 0; border: 0; background: transparent; }
+}
+
+@media print {
+  .ef-head:has(.jh-bar--report),
+  .br-keys,
+  .jg-head-actions:has(.jg-find) { display: none !important; }
+  .br-scroll { max-block-size: none; overflow: visible; }
+  .page .ef-table-wrap > table.br-table { min-inline-size: 0; }
+  .page .ef-table-wrap > table.br-table > :is(thead, tfoot),
+  .br-table :is(th, td).br-pin { position: static; box-shadow: none; }
+}

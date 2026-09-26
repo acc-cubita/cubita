@@ -4,7 +4,8 @@ import type { LucideIcon } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { isoToJalali, jalaliToIso, toFaDigits, todayIso } from '../../lib/jalali'
-import type { EntrySource } from '../../api'
+import type { EntrySource, FiscalYearRecord } from '../../api'
+import { SearchSelect } from '../../components/SearchSelect'
 
 /**
  * قطعاتِ مشترکِ هجده صفحه‌ی ماژولِ حسابداری.
@@ -359,10 +360,22 @@ export function RangeBar({ range, extra }: { range: RangeState; extra?: ReactNod
  * دو خانه‌ی **همیشه‌دیده** — تا حسابدار بازه‌ی واقعیِ «امسال» یا «این فصل» را هم ببیند، نه فقط نامش. ویرایشِ هر
  * تاریخ بازه را «دلخواه» می‌کند و از همان دو تاریخِ فعلی شروع می‌شود؛ پاک‌کردن یعنی بی‌کران (از ابتدا / تا امروز).
  * پیش‌تنظیم‌ها کلاسِ `cc-presets`ِ نوارِ قدیمی را نگه می‌دارند (آزمون‌ها و نمای ذخیره‌شده همان را می‌شناسند).
+ *
+ * با `years` خانه‌ی چهارمِ «سال مالی» هم می‌آید: انتخابش بازه را دلخواه و برابرِ همان سال می‌کند، و وقتی بازه دقیقاً
+ * یک سال است، همان سال را نشان می‌دهد.
  */
-export function RangeCells({ range }: { range: RangeState }) {
+export function RangeCells({ range, years }: { range: RangeState; years?: readonly FiscalYearRecord[] }) {
   const edit = (patch: Partial<{ from: string; to: string }>) => {
     range.setCustom({ from: range.from ?? '', to: range.to ?? '', ...patch })
+    range.setPreset('custom')
+  }
+  const activeYear = (years ?? []).find(
+    (y) => range.preset === 'custom' && y.start_date === range.custom.from && y.end_date === range.custom.to,
+  )
+  const pickYear = (id: string) => {
+    const fy = (years ?? []).find((y) => y.id === id)
+    if (!fy) return
+    range.setCustom({ from: fy.start_date, to: fy.end_date })
     range.setPreset('custom')
   }
   return (
@@ -401,6 +414,24 @@ export function RangeCells({ range }: { range: RangeState }) {
           clearLabel="تا امروز"
         />
       </div>
+      {years && (
+        <label className="jh-field">
+          <span className="jh-label">سال مالی</span>
+          <SearchSelect
+            aria-label="سال مالی"
+            value={activeYear?.id ?? ''}
+            onChange={(e) => pickYear(e.target.value)}
+            disabled={years.length === 0}
+          >
+            <option value="">—</option>
+            {years.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.title}
+              </option>
+            ))}
+          </SearchSelect>
+        </label>
+      )}
     </>
   )
 }

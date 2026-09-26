@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `BalanceReportPage.tsx` (+test)، `lib/balanceReport.ts` (+test)، `ReportPages.tsx`، `kit.tsx` (`RangeCells` با `years`)، `AccountBrowser.tsx`، `Dashboard.tsx`، `App.css` (`br-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «گزارش ترازها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |
 | Claude Code (آرش) | `desktop/src/pages/accounting/{AccountBrowser,kit}.tsx`، `desktop/src/components/ReportFilterBar.tsx`، `App.css` | سربرگِ فیلترِ «مرور حساب‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |
 | Claude Code (آرش) | `desktop/src/pages/accounting/AccountBrowser{,.test}.tsx`، `HelpPage.tsx`، `App.css` (بلوکِ `ab-*`) | «مرور حساب‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |
 | Claude Code (آرش) | `desktop/src/pages/accounting/{ChartPages,ReclassifyPage}.tsx`، `desktop/src/lib/reclassifySheet.ts` (تازه)، `SheetFooter.tsx`، `HelpPage.tsx`، `App.css`، `backend/app/services/accounting_ops.py` (`reclassify_accounts`) | «انتقال حساب به سرفصل دیگر» با تمِ اکسلی + اصلاحِ دسته‌ی جابه‌جایی در سرور | ۱۴۰۵/۰۷/۰۳ |
