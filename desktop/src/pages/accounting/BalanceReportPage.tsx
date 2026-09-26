@@ -552,12 +552,12 @@ export function BalanceReportPage({ token, onNavigate }: { token: string; onNavi
                   <td className="card-title br-pin br-pin--code" colSpan={2}>
                     <span className="br-total-label">جمع</span>
                     {check.kind === 'ok' ? (
-                      <span className="br-check br-check--ok">
+                      <span className="xl-check xl-check--ok">
                         <CheckCircle2 size={13} aria-hidden="true" /> تراز است
                       </span>
                     ) : check.kind === 'off' ? (
                       <span
-                        className="br-check br-check--off"
+                        className="xl-check xl-check--off"
                         role="alert"
                         title={check.off.map((o) => `اختلافِ ${GROUP_LABELS[o.group]}: ${fa(Math.abs(o.diff))}`).join('، ')}
                       >

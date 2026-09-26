@@ -53,12 +53,21 @@ export function KardexSummary({ data }: { data: KardexReport }) {
  * راهنمای شناور. ردیفِ سندِ باطل و جبرانش کم‌رنگ‌اند: جمعشان صفر است و میانگین را
  * تکان نمی‌دهند.
  */
-export function KardexTable({ data, className = 'kardex-table' }: { data: KardexReport; className?: string }) {
+export function KardexTable({
+  data,
+  className = 'kardex-table',
+  grid = false,
+}: {
+  data: KardexReport
+  className?: string
+  /** گریدِ اکسلی (`xl-grid`) — صفحه‌ی «گزارش‌ها». پیش‌فرض همان جدولِ کارتیِ انبار. */
+  grid?: boolean
+}) {
   if (data.lines.length === 0) return <p className="muted">هیچ حرکتی برای این کالا ثبت نشده.</p>
   return (
     <div className="entity-table-wrap">
-      <div className="table-scroll">
-        <table className={`entity-table ${className} cards-on-mobile`}>
+      <div className={grid ? 'table-scroll ef-table-wrap rp-scroll' : 'table-scroll'}>
+        <table className={`${grid ? 'ef-table xl-grid rp-table' : 'entity-table'} ${className} cards-on-mobile`}>
           <thead>
             <tr>
               <th>تاریخ</th>

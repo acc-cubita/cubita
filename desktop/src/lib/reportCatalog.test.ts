@@ -5,6 +5,7 @@ import {
   MODE_REPORT_ORDER,
   REPORT_GROUPS,
   REPORT_TABS,
+  REPORT_TAB_GROUPS,
   buildReportCatalog,
   filterReportCatalog,
   isReportKind,
@@ -105,5 +106,13 @@ describe('صافیِ متنی', () => {
   it('بی‌نتیجه → خالی؛ کوئریِ خالی → همه', () => {
     expect(found('چیزی که نیست')).toEqual([])
     expect(filterReportCatalog(cat, '  ')).toBe(cat)
+  })
+})
+
+describe('دسته‌های تبِ صفحه‌ی «گزارش‌ها»', () => {
+  it('هر تب دقیقاً یک بار، زیرِ همان دسته‌ی کاتالوگ', () => {
+    const keys = REPORT_TAB_GROUPS.flatMap((g) => g.tabs.map((t) => t.key))
+    expect([...keys].sort()).toEqual(REPORT_TABS.map((t) => t.key).sort())
+    expect(REPORT_TAB_GROUPS.map((g) => g.heading)).toEqual(['صورت‌های مالی', 'اشخاص و فروش', 'انبار', 'مالیات'])
   })
 })
