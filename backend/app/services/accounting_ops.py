@@ -802,6 +802,8 @@ def _pnl_rows(db: Session, date_from: date_ | None, date_to: date_) -> list[dict
                 "balance": raw,
             }
         )
+        #: شرحِ ردیفِ سند همین‌جا ساخته می‌شود تا پیش‌نمایش همان متنی را نشان دهد که صدور می‌نویسد.
+        rows[-1]["description"] = _pnl_line_description(rows[-1])
     return rows
 
 
@@ -832,6 +834,11 @@ def pnl_close_entry_in(db: Session, date_from: date_ | None, date_to: date_) -> 
     return query.order_by(JournalEntry.number.desc()).first()
 
 
+def _pnl_destination_description(net_profit: Decimal) -> str:
+    """شرحِ خطِ مقصد (سود انباشته) — پیش‌نمایش و صدور هر دو از همین."""
+    return "انتقال سود دوره به سود انباشته" if net_profit >= 0 else "انتقال زیان دوره به سود انباشته"
+
+
 def pnl_close_preview(db: Session, date_to: date_) -> dict:
     """پیش‌نمایشِ سندی که بستنِ سود و زیان خواهد زد — بدونِ زدنش."""
     previous = get_latest_close_date(db)
@@ -857,6 +864,7 @@ def pnl_close_preview(db: Session, date_to: date_) -> dict:
         "net_profit": net_profit,
         "destination_account_code": destination.code,
         "destination_account_name": destination.name,
+        "destination_description": _pnl_destination_description(net_profit),
         "total_debit": total_debit,
         "total_credit": total_credit,
         "difference": total_debit - total_credit,
@@ -897,7 +905,7 @@ def issue_pnl_close(db: Session, user: User, date_to: date_, description: str = 
             cost_center_id=r["cost_center_id"],
             debit=r["debit"],
             credit=r["credit"],
-            description=_pnl_line_description(r),
+            description=r["description"],
         )
         for r in rows
     ]
@@ -908,7 +916,7 @@ def issue_pnl_close(db: Session, user: User, date_to: date_, description: str = 
                 account_id=destination.id,
                 debit=0,
                 credit=net_profit,
-                description="انتقال سود دوره به سود انباشته",
+                description=_pnl_destination_description(net_profit),
             )
         )
     elif net_profit < 0:
@@ -917,7 +925,7 @@ def issue_pnl_close(db: Session, user: User, date_to: date_, description: str = 
                 account_id=destination.id,
                 debit=abs(net_profit),
                 credit=0,
-                description="انتقال زیان دوره به سود انباشته",
+                description=_pnl_destination_description(net_profit),
             )
         )
 

@@ -250,6 +250,12 @@ def test_the_preview_matches_what_gets_issued(db, user):
     out = ops.issue_pnl_close(db, user, CLOSING)
     assert out["line_count"] == len(preview["rows"]) + 1  # ردیف‌ها + خطِ مقصد
     assert Decimal(out["net_profit"]) == Decimal(preview["net_profit"])
+    #: شرحِ ردیف‌ها هم یکی است — رابط شرحِ پیش‌نمایش را همان‌طور نشان می‌دهد که در سند می‌نشیند.
+    entry = _closing_entry(db, out)
+    assert sorted(line.description for line in entry.lines) == sorted(
+        [r["description"] for r in preview["rows"]] + [preview["destination_description"]]
+    )
+    assert "شرکت آلفا" in next(r["description"] for r in preview["rows"] if r["analytic_id"] == alpha.id)
 
 
 def test_a_zero_balance_account_makes_no_line(db, user):

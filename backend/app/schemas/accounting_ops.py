@@ -217,6 +217,8 @@ class PnlRowOut(BaseModel):
     #: شکلِ قدیمیِ همان دو ستون، برای رابط.
     side: str
     amount: Decimal
+    #: شرحِ همین ردیف در سندِ بستن — همان متنی که صدور می‌نویسد.
+    description: str = ""
 
 
 class PnlPreviewOut(BaseModel):
@@ -229,6 +231,8 @@ class PnlPreviewOut(BaseModel):
     #: حسابِ مقصد از `system_role` پیدا می‌شود، نه از کد — کد مالِ مشتری است.
     destination_account_code: str
     destination_account_name: str
+    #: شرحِ خطِ مقصد در سند («انتقال سود/زیان دوره به سود انباشته»).
+    destination_description: str = ""
     total_debit: Decimal
     total_credit: Decimal
     #: باید صفر باشد؛ رابط تا صفر نشود دکمه‌ی صدور را فعال نمی‌کند.

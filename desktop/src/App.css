@@ -14677,3 +14677,71 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .ig-go { display: none !important; }
   .page .ef-table-wrap > table.ig-sheet { min-inline-size: 0; }
 }
+
+/* ── «بستن حساب‌های سود و زیان» و «انتقال مانده به حساب دیگر» (تمِ اکسلی، الگوی «ج») ──
+ * هر دو پیش‌نمایشِ سندِ خودکارند، هم‌سبکِ تسعیر: سربرگِ خانه‌ای روی گرید، گریدِ فقط‌خواندنی، نوارِ سندِ هم‌خط. */
+.acc-note--warn { color: color-mix(in srgb, var(--warning) 70%, var(--text-h)); }
+/* خانه‌ی فقط‌خواندنیِ سربرگ («از تاریخ»، «آخرین دوره‌ی قفل‌شده»): متنِ ساده هم‌قدِ کادرهای خانه. */
+.jh-static {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--ef-h, 36px);
+  padding-inline: 10px;
+  overflow: hidden;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* بستنِ سود و زیان: «حساب» باقی را می‌گیرد؛ شرحِ ردیف از سرور و کم‌رنگ (متنِ خودکار)؛ خطِ «سود انباشته» ته سند با
+ * ته‌رنگِ سرستون و مرزِ پررنگ، تا خطِ مقصد از ردیف‌های بسته‌شونده جدا خوانده شود. */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.pc-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 700px; }
+  .pc-sheet col.pc-c-rowhead { width: 44px; }
+  .pc-sheet col.pc-c-desc { width: 30%; }
+  .pc-sheet col.pc-c-money { width: 15%; }
+  .page .ef-table-wrap > table.pc-sheet td { overflow: hidden; text-overflow: ellipsis; }
+}
+.page .ef-table-wrap > table.pc-sheet td:nth-child(3) { color: var(--text-muted); }
+.page .ef-table-wrap > table.pc-sheet > tbody > tr.pc-dest > td {
+  border-block-start: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--xl-head) 45%, var(--surface));
+  color: var(--text-h);
+  font-weight: 700;
+}
+.page .ef-table-wrap > table.pc-sheet > tbody > tr.pc-dest > td.xl-rowhead { color: var(--text-muted); text-align: center; }
+.pc-sheet.is-loading tbody { opacity: 0.55; transition: opacity 120ms ease; }
+.pc-lock:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+
+/* انتقالِ مانده: کلِ ردیف برای انتخاب کلیک می‌خورد؛ مقصد در پانویسِ چسبنده. */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.rb-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 720px; }
+  .rb-sheet col.rb-c-rowhead { width: 44px; }
+  .rb-sheet col.rb-c-analytic { width: 20%; }
+  .rb-sheet col.rb-c-money { width: 13%; }
+  .page .ef-table-wrap > table.rb-sheet td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+.rb-sheet > tbody > tr.acc-row--clickable { cursor: pointer; user-select: none; }
+.page .ef-table-wrap > table.rb-sheet td.xl-rowhead { padding: 0; }
+.page .lr-scroll:focus-within > table.rb-sheet > tbody > tr.is-active:not(.is-selected) > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.lr-scroll:focus .rb-sheet > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.rb-dest td svg { vertical-align: -2px; }
+.rb-sheet.is-loading tbody td.num:nth-child(n + 5),
+.rb-sheet.is-loading tfoot td.num { opacity: 0.55; }
+.jg-head-actions .cc-presets.rb-view { flex-wrap: nowrap; }
+.link-btn svg { vertical-align: -2px; }
+
+@media (max-width: 760px) {
+  /* کارت: ردیفِ انتخاب‌شده کارتِ ته‌رنگی با لبه‌ی accent؛ قابِ فوکوس و ته‌رنگِ گرید برداشته. */
+  .page .ef-table-wrap.lr-scroll:is(*, :focus-within) > table.rb-sheet > tbody > tr:is(.is-active, .is-selected, :hover) > td {
+    background: transparent;
+    box-shadow: none;
+  }
+  .rb-sheet > tbody > tr.is-selected { border-color: var(--accent); background: var(--accent-bg); }
+  .page .ef-table-wrap > table.pc-sheet > tbody > tr.pc-dest > td { border: 0; background: transparent; }
+  .pc-sheet > tbody > tr.pc-dest { border-color: var(--border-strong); background: color-mix(in srgb, var(--xl-head) 45%, var(--surface)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-sheet.is-loading tbody { transition: none; }
+}
