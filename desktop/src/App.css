@@ -14578,3 +14578,35 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .ca-sheet col.ca-c-act { width: 64px; }
   .page .ef-table-wrap > table.ca-sheet td.ca-name { padding-inline-start: calc(2px + var(--ca-depth, 0) * 8px); }
 }
+
+/* ── «دفاتر تجارت الکترونیک» (تمِ اکسلی): گریدِ دفترِ حسابِ «گزارش دفتر» (`lr-ledger`) بی ستونِ مانده ──
+ * شماره‌ی ردیفِ پیوسته در ستونِ ردیف، کدِ حساب ستونِ خودش را دارد، و شماره و تاریخِ سند فقط روی ردیفِ اولِ هر سند
+ * (ردیف‌های بعدی آن‌ها را دارند ولی پنهان — کارتِ موبایل و صفحه‌خوان نشانشان می‌دهند). */
+.page .ef-table-wrap > table.lr-ledger.eb-sheet { min-inline-size: calc(40px + 100px + 88px + 84px + 180px + 200px + 2 * 128px); }
+.eb-sheet col.eb-c-code { width: 84px; }
+.eb-sheet col.eb-c-amt { width: 128px; }
+.lr-ledger.eb-sheet .lr-pin--credit { inset-inline-end: 0; }
+.lr-ledger.eb-sheet .lr-pin--debit { inset-inline-end: 128px; }
+/* مرزِ سند: خطِ پررنگ بالای ردیفِ اولِ هر سند، مثلِ خطِ زیرِ هر سند در دفترِ کاغذی. */
+.page .ef-table-wrap > table.eb-sheet > tbody > tr.eb-first + tr.eb-first > td,
+.page .ef-table-wrap > table.eb-sheet > tbody > tr.eb-cont + tr.eb-first > td { border-block-start: 1px solid var(--border-strong); }
+.eb-sheet > tbody > tr.eb-cont .eb-rep { visibility: hidden; }
+.eb-rep { unicode-bidi: isolate; }
+.page .ef-table-wrap > table.eb-sheet > tbody > tr.eb-void > td:not(.xl-rowhead) { color: var(--text-muted); }
+.page .ef-table-wrap > table.eb-sheet > tbody > tr.eb-void > td.num { text-decoration: line-through; }
+.lr-badge.eb-badge--void { background: var(--danger-bg); }
+.eb-more-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+
+@media (max-width: 760px) {
+  .page .ef-table-wrap > table.lr-ledger.eb-sheet { min-inline-size: 0; }
+  .eb-sheet > tbody > tr.eb-cont .eb-rep { visibility: visible; }
+  .page .ef-table-wrap > table.eb-sheet > tbody > tr:is(.eb-first, .eb-cont) + tr.eb-first > td { border-block-start: 0; }
+}
+
+@media print {
+  /* برگه‌ی چاپی: همه‌ی ردیف‌ها (چاپ اول همه را می‌سازد)، بی میخ و بی کفِ عرض؛ شماره‌ی ردیف می‌ماند. */
+  .page .ef-table-wrap > table.lr-ledger.eb-sheet { min-inline-size: 0; }
+  .eb-sheet :is(th, td).lr-pin { position: static; box-shadow: none; }
+  .eb-more,
+  .lr-keys { display: none !important; }
+}
