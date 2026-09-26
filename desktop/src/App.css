@@ -14283,8 +14283,11 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font-weight: 700;
 }
 .page .ef-table-wrap > table.rp-statement > tbody > tr.rp-sub > td:nth-child(2) { padding-inline-start: 22px; }
-/* جمعِ نهایی خطِ دوتایی زیرِ عدد دارد — قراردادِ صورتِ مالیِ چاپی. */
-.page .ef-table-wrap > table.rp-statement > tfoot > tr:last-child > td.num { text-decoration: underline double; text-underline-offset: 4px; }
+/* جمعِ نهایی خطِ دوتایی زیرِ عدد دارد — قراردادِ صورتِ مالیِ چاپی؛ زیرِ «—»ِ صفر نه، که «=» خوانده می‌شد. */
+.page .ef-table-wrap > table.rp-statement > tfoot > tr:last-child > td.num:not(.rp-zero) { text-decoration: underline double; text-underline-offset: 4px; }
+/* جمعی که ردیفِ اولِ بدنه است (مانده‌ی ابتدای دوره) خطِ بالایش با خطِ زیرِ سرستون دوتا می‌شد. */
+.page .ef-table-wrap > table.rp-statement > tbody > tr.rp-sub:first-child > td { border-block-start-color: transparent; }
+.page .ef-table-wrap > table.rp-statement > tbody > tr.rp-none > td { padding-inline-start: 22px; color: var(--text-muted); font-size: var(--fs-xs); font-style: italic; }
 .page .ef-table-wrap > table.rp-table > tfoot td .xl-check { margin-inline-start: 8px; }
 
 /* ارزشِ موجودی: سرستونِ دوطبقه (مثلِ تراز) و کد/نامِ میخ‌شده سمتِ راست؛ فقط ستون‌های عددی می‌لغزند. */

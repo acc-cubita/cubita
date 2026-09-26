@@ -34,6 +34,7 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/src/components/{ReportCatalog,Reports,Dashboard}.tsx`، `desktop/src/pages/accounting/{ReportPages,VatPage}.tsx` (+تست)، `desktop/src/lib/vat*.ts`، `desktop/src/App.css` (بلوک‌های `rc-*` و `vat-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md` §۱۰، مهارتِ `cubita-excel-theme` | «همه‌ی گزارش‌ها» به‌شکلِ فهرستِ اکسلی + «مالیات بر ارزش افزوده» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 
 > **حادثه‌ی «دو سرِ زنجیره» — بسته شد (۱۴۰۵/۰۶/۲۴).**
 >
