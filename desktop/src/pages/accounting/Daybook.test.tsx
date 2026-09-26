@@ -90,12 +90,16 @@ const calls = (path: string) =>
     .filter((u) => u.pathname === path)
 
 const text = () => container.textContent ?? ''
+/** خانه‌ی جمعِ پانویسِ گریدِ روزنامه — «جمعِ بازه» از سرور. */
+const footCell = (label: string) => container.querySelector(`.lr-daybook tfoot td[data-label="${label}"]`)?.textContent ?? ''
+const footLabel = () => container.querySelector('.lr-daybook tfoot .card-title')?.textContent ?? ''
 const moreButton = () =>
   [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('سندِ بعدی'))
 
 function fieldByLabel(label: string): HTMLInputElement {
+  //: خانه‌های سربرگِ اکسلی: «از/تا شماره سند» یک خانه است و هر کادر نامش را در `aria-label` دارد.
   const host = [...container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))
-  const input = host?.querySelector('input')
+  const input = container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`) ?? host?.querySelector('input')
   if (!input) throw new Error(`فیلدِ «${label}» پیدا نشد`)
   return input
 }
@@ -112,8 +116,10 @@ describe('دفتر روزنامه', () => {
   it('جمع از سرور می‌آید، نه از سندهای بارگذاری‌شده', async () => {
     stub()
     await render()
-    expect(text()).toContain((999000).toLocaleString('fa-IR'))
-    expect(text()).toContain('جمعِ بدهکار')
+    expect(footCell('جمعِ بدهکار')).toBe((999000).toLocaleString('fa-IR'))
+    expect(footCell('جمعِ بستانکار')).toBe((999000).toLocaleString('fa-IR'))
+    expect(footLabel()).toContain(`همه‌ی ${(3).toLocaleString('fa-IR')} سند`)
+    expect(footLabel()).toContain('تراز است')
     expect(text()).toContain(`نمایشِ ${(2).toLocaleString('fa-IR')} از ${(3).toLocaleString('fa-IR')} سند`)
   })
 
@@ -189,7 +195,7 @@ describe('دفتر روزنامه', () => {
   it('با فیلترِ مرکز هزینه، جمع و برچسبش می‌گویند فقط ردیف‌های منطبق', async () => {
     stub()
     await render()
-    expect(text()).toContain('جمعِ بدهکار')
+    expect(footLabel()).toContain('همه‌ی')
     const center = [...container.querySelectorAll('label')]
       .find((l) => l.textContent?.includes('مرکز هزینه'))
       ?.querySelector('select')
@@ -202,8 +208,10 @@ describe('دفتر روزنامه', () => {
 
     expect(calls('/api/journal-entries/summary').at(-1)?.searchParams.get('cost_center_id')).toBe('cc1')
     expect(calls('/api/journal-entries').at(-1)?.searchParams.get('cost_center_id')).toBe('cc1')
-    expect(text()).toContain('بدهکارِ ردیف‌های منطبق')
-    expect(text()).not.toContain('جمعِ بدهکار')
+    //: جمعِ ردیف‌های منطبق بخشی از هر سند است: برچسب همین را می‌گوید و توازن سنجیده نمی‌شود.
+    expect(footLabel()).toContain('ردیف‌های منطبق')
+    expect(footLabel()).not.toContain('همه‌ی')
+    expect(footLabel()).not.toContain('تراز است')
   })
 
   it('جست‌وجو برچسبِ درست دارد: سند، نه حساب', async () => {
@@ -235,7 +243,7 @@ describe('دفتر روزنامه', () => {
     await render()
     expect(text()).toContain('دریافت اطلاعات ناموفق بود (500)')
     expect(text()).toContain('جمعِ دفتر نیامد')
-    //: سربرگ و تب‌ها سرِ جایشان‌اند.
-    expect(text()).toContain('دفتر معین')
+    //: سربرگ و انتخابِ دفتر سرِ جایشان‌اند.
+    expect([...container.querySelectorAll('[aria-label="دفتر"] button')].map((b) => b.textContent)).toContain('معین')
   })
 })

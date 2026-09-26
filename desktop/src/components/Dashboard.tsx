@@ -726,7 +726,7 @@ export function Dashboard({
           {page === 'ebooks' && <LegalBooksPage token={token} />}
           {page === 'accountbrowse' && <AccountBrowsePage token={token} onNavigate={navigate} />}
           {page === 'balancereport' && <BalanceReportPage token={token} onNavigate={navigate} />}
-          {page === 'ledgerreport' && <LedgerReportPage token={token} />}
+          {page === 'ledgerreport' && <LedgerReportPage token={token} onNavigate={navigate} />}
           {page === 'integrity' && <IntegrityPage token={token} />}
           {page === 'entrylist' && <EntryListPage token={token} />}
           {page === 'recurringlist' && <RecurringListPage token={token} />}
