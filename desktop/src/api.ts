@@ -6546,6 +6546,8 @@ export interface PnlPreviewRow {
   credit: string
   side: string
   amount: string
+  /** شرحِ همین ردیف در سندِ بستن — همان متنی که صدور می‌نویسد. */
+  description: string
 }
 
 export interface PnlPreview {
@@ -6557,6 +6559,8 @@ export interface PnlPreview {
   net_profit: string
   destination_account_code: string
   destination_account_name: string
+  /** شرحِ خطِ مقصد («انتقال سود/زیان دوره به سود انباشته»). */
+  destination_description: string
   total_debit: string
   total_credit: string
   difference: string

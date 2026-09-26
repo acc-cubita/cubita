@@ -719,7 +719,7 @@ export function Dashboard({
           )}
           {page === 'analytics' && <AnalyticsPage token={token} />}
           {page === 'fxrevaluation' && <FxRevaluationPage token={token} />}
-          {page === 'balancereclass' && <BalanceReclassPage token={token} />}
+          {page === 'balancereclass' && <BalanceReclassPage token={token} onNavigate={navigate} />}
           {page === 'closepnl' && <ClosePnlPage token={token} />}
           {page === 'closingopening' && <ClosingOpeningPage token={token} />}
           {page === 'vat' && <VatPage token={token} />}
