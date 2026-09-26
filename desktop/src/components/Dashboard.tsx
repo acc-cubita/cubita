@@ -723,7 +723,7 @@ export function Dashboard({
           {page === 'closepnl' && <ClosePnlPage token={token} />}
           {page === 'closingopening' && <ClosingOpeningPage token={token} />}
           {page === 'vat' && <VatPage token={token} />}
-          {page === 'ebooks' && <LegalBooksPage token={token} />}
+          {page === 'ebooks' && <LegalBooksPage token={token} onNavigate={navigate} />}
           {page === 'accountbrowse' && <AccountBrowsePage token={token} onNavigate={navigate} />}
           {page === 'balancereport' && <BalanceReportPage token={token} onNavigate={navigate} />}
           {page === 'ledgerreport' && <LedgerReportPage token={token} onNavigate={navigate} />}
