@@ -14129,6 +14129,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 }
 .xl-check--ok { background: var(--success-bg); color: var(--success); }
 .xl-check--off { background: var(--danger-bg); color: var(--danger); }
+/* بدهیِ عادی (مالیاتِ پرداختنی): نه خطا نه تأیید — ته‌رنگِ هشدار با متنِ پررنگ برای خوانایی روی هر دو تم. */
+.xl-check--due { background: var(--warning-bg); color: var(--text-h); }
 /* دو کارتِ کنترلِ زیرِ تراز همان گریدِ اکسلی‌اند، فقط‌خواندنی و بی‌میخ. */
 .page .ef-table-wrap > table.br-check-table td { padding-block: 6px; font-size: var(--fs-sm); }
 
@@ -14289,6 +14291,20 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .page .ef-table-wrap > table.rp-statement > tbody > tr.rp-sub:first-child > td { border-block-start-color: transparent; }
 .page .ef-table-wrap > table.rp-statement > tbody > tr.rp-none > td { padding-inline-start: 22px; color: var(--text-muted); font-size: var(--fs-xs); font-style: italic; }
 .page .ef-table-wrap > table.rp-table > tfoot td .xl-check { margin-inline-start: 8px; }
+
+/* «مالیات بر ارزش افزوده»: سال، فصل و بازه در یک سطر؛ ردیف‌های معافِ ترکیبِ پایه کم‌رنگ‌تر. */
+.jh-bar--report > .vat-row--period { --rh-cols: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr); }
+@container (max-width: 900px) {
+  .jh-bar.jh-bar--report > .vat-row--period > .jh-field:nth-child(n + 2) { border-inline-start: 1px solid var(--xl-line); }
+}
+@container (max-width: 560px) {
+  .jh-bar--report > .vat-row--period { --rh-cols: minmax(0, 1fr); }
+  .jh-bar.jh-bar--report > .vat-row--period > .jh-field.jh-field { border-inline-start: 0; }
+  .jh-bar.jh-bar--report > .vat-row--period > .jh-field:nth-child(n + 2) { border-block-start: 1px solid var(--xl-line); }
+}
+.page .ef-table-wrap > table.vat-base { max-inline-size: 780px; }
+.rp-scroll:has(> table.vat-base, > table.vat-mixed) { max-inline-size: 780px; }
+.page .ef-table-wrap > table.vat-base > tbody > tr.vat-exempt > td:first-child { color: var(--text-muted); }
 
 /* ارزشِ موجودی: سرستونِ دوطبقه (مثلِ تراز) و کد/نامِ میخ‌شده سمتِ راست؛ فقط ستون‌های عددی می‌لغزند. */
 .page .ef-table-wrap > table.rp-inv { table-layout: fixed; min-inline-size: calc(80px + 180px + 60px + 9 * 112px); }

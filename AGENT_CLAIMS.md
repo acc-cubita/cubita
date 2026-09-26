@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Claude Code (آرش) | `desktop/src/components/{ReportCatalog,Reports,Dashboard}.tsx`، `desktop/src/pages/accounting/{ReportPages,VatPage}.tsx` (+تست)، `desktop/src/lib/vat*.ts`، `desktop/src/App.css` (بلوک‌های `rc-*` و `vat-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md` §۱۰، مهارتِ `cubita-excel-theme` | «همه‌ی گزارش‌ها» به‌شکلِ فهرستِ اکسلی + «مالیات بر ارزش افزوده» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 
 > **حادثه‌ی «دو سرِ زنجیره» — بسته شد (۱۴۰۵/۰۶/۲۴).**
 >
@@ -118,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `components/{ReportCatalog,Reports,ReportViews,Dashboard}.tsx`، `pages/accounting/{VatPage,ReportPages}.tsx` (+تست)، `lib/vatSheet.ts` (+تست)، `App.css` (`rc-*`، `vat-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «همه‌ی گزارش‌ها» فهرستِ اکسلی + «مالیات بر ارزش افزوده» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `components/{Reports,ReportViews,KardexTable}.tsx` (+تست‌ها)، `lib/{reportSheets,reportCatalog}.ts` (+تست‌ها)، `BalanceReportPage.tsx` (`xl-check`)، `App.css` (`rp-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | صفحه‌ی «گزارش‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `BalanceReportPage.tsx` (+test)، `lib/balanceReport.ts` (+test)، `ReportPages.tsx`، `kit.tsx` (`RangeCells` با `years`)، `AccountBrowser.tsx`، `Dashboard.tsx`، `App.css` (`br-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «گزارش ترازها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |
 | Claude Code (آرش) | `desktop/src/pages/accounting/{AccountBrowser,kit}.tsx`، `desktop/src/components/ReportFilterBar.tsx`، `App.css` | سربرگِ فیلترِ «مرور حساب‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |

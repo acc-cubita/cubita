@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  AlertTriangle,
   BookOpenCheck,
   Download,
   FileSpreadsheet,
   Landmark,
   Layers,
   Library,
-  Percent,
   Printer,
-  TrendingDown,
-  TrendingUp,
   Wallet,
 } from 'lucide-react'
 import {
@@ -21,11 +17,9 @@ import {
   fetchJournalEntriesPage,
   fetchJournalEntriesSummary,
   fetchLegalBook,
-  fetchVatReport,
   type GeneralLedger,
   type JournalEntryRecord,
   type ReportFilters,
-  type VatBreakdown,
 } from '../../api'
 import { EntryCard } from '../../components/EntryCard'
 import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
@@ -36,7 +30,7 @@ import { SearchField } from '../../components/form/FormKit'
 import { Pager, usePagination } from '../../components/Pager'
 import { levelOf } from '../../lib/balanceReport'
 import { downloadCsv } from '../../lib/csv'
-import { formatJalali, isoToJalali, jalaaliMonthLength, jalaliToIso, todayIso } from '../../lib/jalali'
+import { formatJalali, todayIso } from '../../lib/jalali'
 import {
   AsyncBlock,
   BalanceFooter,
@@ -606,244 +600,8 @@ function SubsidiaryCard({
 
 // ═════════════ ۳) مالیات بر ارزش افزوده ═════════════
 
-const QUARTERS = [
-  { value: 1, label: 'بهار (فروردین—خرداد)' },
-  { value: 2, label: 'تابستان (تیر—شهریور)' },
-  { value: 3, label: 'پاییز (مهر—آذر)' },
-  { value: 4, label: 'زمستان (دی—اسفند)' },
-]
-
-export function VatPage({ token }: { token: string }) {
-  const now = isoToJalali(todayIso())
-  const [year, setYear] = useState(now.jy)
-  const [quarter, setQuarter] = useState(Math.ceil(now.jm / 3))
-
-  // بازه‌ی فصل به تقویمِ شمسی — اظهارنامه فصلی است، نه سه‌ماهه‌ی میلادی.
-  const { from, to } = useMemo(() => {
-    const startMonth = (quarter - 1) * 3 + 1
-    const endMonth = startMonth + 2
-    return {
-      from: jalaliToIso(year, startMonth, 1),
-      to: jalaliToIso(year, endMonth, jalaaliMonthLength(year, endMonth)),
-    }
-  }, [year, quarter])
-
-  const report = useAsync(() => fetchVatReport(token, from, to), [token, from, to])
-  const data = report.data
-  const net = Number(data?.net_vat ?? 0)
-
-  //: فروش و خرید در یک فهرست با برچسبِ نوع — کاربر دنبالِ «کدام فاکتور» است، نه
-  //: دنبالِ دو جدولِ جدا که باید بینشان چشم بچرخاند.
-  const mixed = [
-    ...(data?.mixed_sales_invoices ?? []).map((m) => ({ ...m, kind: 'فروش' })),
-    ...(data?.mixed_purchase_invoices ?? []).map((m) => ({ ...m, kind: 'خرید' })),
-  ]
-
-  const rows = data
-    ? [
-        //: پیش‌تر «فروشِ مشمول» نوشته بود، ولی این جمعِ کل است نه بخشِ مشمول؛
-        //: تفکیکِ مشمول/معاف در کارتِ «ترکیبِ پایه» است.
-        { label: 'فروش', net: data.sales_net, vat: data.output_vat, sign: 1 },
-        { label: 'برگشت از فروش', net: data.sales_returns_net, vat: data.sales_returns_vat, sign: -1 },
-        { label: 'خرید', net: data.purchase_net, vat: data.input_vat, sign: -1 },
-        {
-          label: 'برگشت از خرید',
-          net: data.purchase_returns_net,
-          vat: data.purchase_returns_vat,
-          sign: 1,
-        },
-      ]
-    : []
-
-  return (
-    <OpsPage
-      canvas
-      icon={Percent}
-      title="مالیات بر ارزش افزوده"
-      description="مالیاتِ فروش منهای اعتبارِ مالیاتیِ خرید در یک فصل — همان عددی که در اظهارنامه‌ی فصلی می‌رود."
-      head={
-        <div className="cc-head">
-          <div className="cc-toolbar">
-            <label className="acc-inline-field">
-              سالِ مالی
-              <SearchSelect value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                {[now.jy + 1, now.jy, now.jy - 1, now.jy - 2].map((y) => (
-                  <option key={y} value={y}>
-                    {fa(y)}
-                  </option>
-                ))}
-              </SearchSelect>
-            </label>
-            <label className="acc-inline-field">
-              فصل
-              <SearchSelect value={quarter} onChange={(e) => setQuarter(Number(e.target.value))}>
-                {QUARTERS.map((q) => (
-                  <option key={q.value} value={q.value}>
-                    {q.label}
-                  </option>
-                ))}
-              </SearchSelect>
-            </label>
-          </div>
-          <div className="cc-summary">
-            <Metric
-              icon={<TrendingUp size={14} />}
-              label="مالیاتِ فروش"
-              value={data ? fa(data.output_vat) : '—'}
-              tone="in"
-            />
-            <Metric
-              icon={<TrendingDown size={14} />}
-              label="اعتبارِ خرید"
-              value={data ? fa(data.input_vat) : '—'}
-              tone="out"
-            />
-            <Metric
-              icon={<Percent size={14} />}
-              label={net >= 0 ? 'قابلِ پرداخت' : 'قابلِ استرداد'}
-              value={data ? fa(Math.abs(net)) : '—'}
-              tone={net >= 0 ? 'out' : 'in'}
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Percent}
-        title="ریزِ محاسبه"
-        description={`${formatJalali(from)} تا ${formatJalali(to)}`}
-        actions={
-          <button
-            type="button"
-            className="ef-btn-secondary"
-            disabled={!data}
-            onClick={() =>
-              data &&
-              downloadCsv(
-                `vat-${year}-q${quarter}`,
-                ['شرح', 'مبلغ خالص', 'مالیات'],
-                rows.map((r) => [r.label, Number(r.net), Number(r.vat)]),
-              )
-            }
-          >
-            <Download size={14} /> خروجی CSV
-          </button>
-        }
-      >
-        <AsyncBlock loading={report.loading} error={report.error}>
-          <div className="table-scroll ef-table-wrap">
-            <table className="ef-table cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>شرح</th>
-                  <th>مبلغِ خالص</th>
-                  <th>مالیات</th>
-                  <th>اثر</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.label}>
-                    <td className="card-title" data-label="شرح">
-                      {r.label}
-                    </td>
-                    <td data-label="مبلغِ خالص" className="num">
-                      {faAmount(r.net)}
-                    </td>
-                    <td data-label="مالیات" className="num">
-                      {faAmount(r.vat)}
-                    </td>
-                    <td data-label="اثر" className={r.sign > 0 ? 'pos-out' : 'pos-in'}>
-                      {r.sign > 0 ? 'افزاینده‌ی بدهی' : 'کاهنده‌ی بدهی'}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="acc-row--total">
-                  <td className="card-title" data-label="شرح">مالیاتِ خالصِ فصل</td>
-                  <td className="num" data-label="مبلغِ خالص">—</td>
-                  <td className="num" data-label="مالیات">{fa(net)}</td>
-                  <td data-label="اثر">{net >= 0 ? 'پرداختنی' : 'استردادی'}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-
-      <SectionCard
-        icon={Percent}
-        title="ترکیبِ پایه"
-        description="چقدر از فروش و خریدِ دوره مشمول بوده و چقدر معاف. وضعیت از لحظه‌ی معامله می‌آید، نه از وضعیتِ امروزِ کالا. برگشت‌ها در این جدول نمی‌آیند."
-      >
-        <AsyncBlock loading={report.loading} error={report.error}>
-          <div className="table-scroll ef-table-wrap">
-            <table className="ef-table cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>طبقه</th>
-                  <th>فروش</th>
-                  <th>خرید</th>
-                </tr>
-              </thead>
-              <tbody>
-                {([
-                  ['کالای مشمول', 'taxable_goods'],
-                  ['خدمتِ مشمول', 'taxable_services'],
-                  ['کالای معاف', 'exempt_goods'],
-                  ['خدمتِ معاف', 'exempt_services'],
-                ] as [string, keyof VatBreakdown][]).map(([label, key]) => (
-                  <tr key={key}>
-                    <td className="card-title" data-label="طبقه">{label}</td>
-                    <td data-label="فروش" className="num">
-                      {faAmount(data?.sales_breakdown[key] ?? 0)}
-                    </td>
-                    <td data-label="خرید" className="num">
-                      {faAmount(data?.purchase_breakdown[key] ?? 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {mixed.length > 0 && (
-            <>
-              <p className="fy-note fy-note--warn">
-                <AlertTriangle size={14} />{' '}
-                {fa(mixed.length)} فاکتور ردیفِ معاف و مشمول را با هم دارند و نرخِ سربرگشان غیرصفر
-                است — یعنی روی ردیفِ معاف هم مالیات گرفته شده.
-              </p>
-              <div className="table-scroll ef-table-wrap">
-                <table className="ef-table cards-on-mobile acc-table">
-                  <thead>
-                    <tr>
-                      <th>فاکتور</th>
-                      <th>تاریخ</th>
-                      <th>خالصِ معاف</th>
-                      <th>مالیاتِ فاکتور</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mixed.map((m) => (
-                      <tr key={m.invoice_id}>
-                        <td className="card-title" data-label="فاکتور">
-                          {m.kind} {fa(m.number ?? 0)}
-                        </td>
-                        <td data-label="تاریخ">{formatJalali(m.invoice_date)}</td>
-                        <td data-label="خالصِ معاف" className="num">{faAmount(m.exempt_net)}</td>
-                        <td data-label="مالیاتِ فاکتور" className="num">{faAmount(m.tax_amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
+/** «مالیات بر ارزش افزوده» فایلِ خودش را دارد (تمِ اکسلی)؛ از این‌جا هم صادر می‌شود تا واردکننده‌ها دست نخورند. */
+export { VatPage } from './VatPage'
 
 // ═════════════ ۴) دفاتر تجارت الکترونیک ═════════════
 

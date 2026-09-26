@@ -30,7 +30,7 @@ export interface OpenAccount {
 const fa = (v: string | number) => Number(v || 0).toLocaleString('fa-IR')
 
 /** مبلغِ گزارش: صفر «—»، منفی در پرانتز و قرمز — قراردادِ صورت‌های مالی. */
-function Amount({ value }: { value: string | number }) {
+export function Amount({ value }: { value: string | number }) {
   const v = Number(value || 0)
   if (v === 0) return <>—</>
   if (v < 0) return <span className="rp-neg">({fa(-v)})</span>
