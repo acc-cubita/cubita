@@ -135,6 +135,24 @@ def test_renumber_refuses_to_collide_with_outside_numbers(db, user):
     assert err.value.status_code == 400
 
 
+def test_the_renumber_preview_names_the_clash_before_apply_does(db, user):
+    """پیش‌نمایش همان شماره‌ای را می‌گوید که اجرا با آن رد می‌شود — رابط پیش از زدنِ دکمه صدورش را می‌بندد."""
+    outside = _entry(db, user, day=date(2026, 5, 1), status="permanent")
+    _entry(db, user, day=date(2026, 6, 2))
+    preview = ops.preview_renumber(db, date(2026, 6, 1), date(2026, 6, 30), outside.number)
+    assert preview["first_clash"] == outside.number
+    assert ops.preview_renumber(db, date(2026, 6, 1), date(2026, 6, 30), outside.number + 5000)["first_clash"] is None
+
+
+def test_the_renumber_preview_plans_only_the_chosen_entries(db, user):
+    """انتخابِ دستی جای بازه می‌نشیند، در پیش‌نمایش هم مثلِ اجرا — نه نقشه‌ی کلِ بازه."""
+    first = _entry(db, user, day=date(2026, 6, 2))
+    _entry(db, user, day=date(2026, 6, 3))
+    third = _entry(db, user, day=date(2026, 6, 4))
+    preview = ops.preview_renumber(db, None, None, 9000, [third.id, first.id])
+    assert [(r["id"], r["new_number"]) for r in preview["rows"]] == [(first.id, 9000), (third.id, 9001)]
+
+
 def test_renumber_moves_the_counter_forward(db, user):
     """اگر شمارنده عقب بماند، اولین سندِ بعدی با خطای قیدِ یکتا شکست می‌خورد."""
     _entry(db, user, day=date(2026, 6, 2))

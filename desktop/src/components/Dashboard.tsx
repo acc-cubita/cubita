@@ -712,8 +712,8 @@ export function Dashboard({
             />
           )}
           {page === 'entrycartable' && <EntryCartablePage token={token} onNavigate={navigate} />}
-          {page === 'renumber' && <RenumberEntriesPage token={token} />}
-          {page === 'mergeentries' && <MergeEntriesPage token={token} />}
+          {page === 'renumber' && <RenumberEntriesPage token={token} onNavigate={navigate} />}
+          {page === 'mergeentries' && <MergeEntriesPage token={token} onNavigate={navigate} />}
           {page === 'reclassify' && (
             <ReclassifyPage token={token} onChanged={() => void refreshFromLocalCache()} />
           )}

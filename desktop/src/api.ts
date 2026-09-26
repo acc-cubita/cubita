@@ -6464,20 +6464,32 @@ export interface RenumberRow {
   accounts: string[]
 }
 
+export interface RenumberPreview {
+  count: number
+  changed_count: number
+  /** اسنادِ دائمِ بازه که دست نمی‌خورند. */
+  skipped_permanent: number
+  rows: RenumberRow[]
+  truncated: boolean
+  /** اولین شماره‌ی نقشه که سندی بیرونِ نقشه دارد (اجرا ردش می‌کند)؛ null یعنی اجراشدنی. */
+  first_clash: number | null
+}
+
+/** `entryIds` (انتخابِ دستی) مثلِ اجرا **جای** بازه می‌نشیند؛ خالی یعنی کلِ بازه. */
 export const fetchRenumberPreview = (
-  token: string, dateFrom: string | undefined, dateTo: string | undefined, startNumber: number,
+  token: string,
+  dateFrom: string | undefined,
+  dateTo: string | undefined,
+  startNumber: number,
+  entryIds?: readonly string[],
 ) => {
   const qs = new URLSearchParams({ start_number: String(startNumber) })
-  if (dateFrom) qs.set('date_from', dateFrom)
-  if (dateTo) qs.set('date_to', dateTo)
-  return authedGet<{
-    count: number
-    changed_count: number
-    /** اسنادِ دائمِ بازه که دست نمی‌خورند. */
-    skipped_permanent: number
-    rows: RenumberRow[]
-    truncated: boolean
-  }>(token, `/api/accounting/entries/renumber/preview?${qs}`)
+  if (entryIds && entryIds.length) entryIds.forEach((id) => qs.append('entry_ids', id))
+  else {
+    if (dateFrom) qs.set('date_from', dateFrom)
+    if (dateTo) qs.set('date_to', dateTo)
+  }
+  return authedGet<RenumberPreview>(token, `/api/accounting/entries/renumber/preview?${qs}`)
 }
 
 export const renumberEntries = (
