@@ -28,7 +28,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | انتقال حساب به سرفصل دیگر | #216 | ب: یک ستونِ ویرایشی روی ردیف‌های ثبت‌شده، بی ردیفِ تازه؛ ذخیره‌ی اتمیِ یک‌درخواسته | [ReclassifyPage.tsx](../../../desktop/src/pages/accounting/ReclassifyPage.tsx) |
 | مرور حساب‌ها | #217، #218 (سربرگ) | د: درختِ گریدی + گردشِ فقط‌خواندنی با انتخاب و جمعِ انتخاب، «مانده‌ی اول» و «جمعِ بازه» در خودِ گرید، ستون‌های مبلغِ میخ‌شده | [AccountBrowser.tsx](../../../desktop/src/pages/accounting/AccountBrowser.tsx) |
 | گزارش ترازها | #219 | د: سرستونِ دوطبقه (گروه بالای جفتِ بدهکار/بستانکار)، «جمع» با نشانِ توازن در `tfoot`، ستون‌های حسابِ میخ‌شده سمتِ راست، سطرِ «قالب» در سربرگ | [BalanceReportPage.tsx](../../../desktop/src/pages/accounting/BalanceReportPage.tsx) |
-| گزارش‌ها (دوازده گزارش) | این PR | د: صورت‌های مالی برگه‌ی بخش/قلم/جمع (`StatementGrid` + `lib/reportSheets.ts`)، بقیه گریدِ ساده با `tfoot`؛ انتخابِ گزارش خانه‌های سربرگ به دسته‌های کاتالوگ | [Reports.tsx](../../../desktop/src/components/Reports.tsx)، [ReportViews.tsx](../../../desktop/src/components/ReportViews.tsx) |
+| گزارش‌ها (دوازده گزارش) | #220 | د: صورت‌های مالی برگه‌ی بخش/قلم/جمع (`StatementGrid` + `lib/reportSheets.ts`)، بقیه گریدِ ساده با `tfoot`؛ انتخابِ گزارش خانه‌های سربرگ به دسته‌های کاتالوگ | [Reports.tsx](../../../desktop/src/components/Reports.tsx)، [ReportViews.tsx](../../../desktop/src/components/ReportViews.tsx) |
 
 **بعدی:** وقتی صفحه‌ای تمام شد، ردیفش را این‌جا اضافه کن. صفحه‌ی بعدی را آرش انتخاب می‌کند.
 منوهای حسابداری پیش از این در #211 بازچینی شدند (شش دسته، تکراری‌ها ادغام) — صفحه‌ای را که ادغام شده
