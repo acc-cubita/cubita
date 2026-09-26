@@ -159,9 +159,9 @@ const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelect
 const rowIds = () => [...document.querySelectorAll('[role="treeitem"]')].map((el) => el.id.replace('ab-node-', ''))
 const selectedId = () => $('[role="treeitem"][aria-selected="true"]')?.id.replace('ab-node-', '') ?? null
 
-function key(el: Element, k: string) {
+function key(el: Element, k: string, init: KeyboardEventInit = {}) {
   act(() => {
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }))
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init }))
   })
 }
 
@@ -206,11 +206,13 @@ describe('مرور حساب — سناریوی بانک (§۳۷)', () => {
     key(treeEl, 'ArrowLeft')
     expect(selectedId()).toBe('melli')
 
-    // خلاصه‌ی حساب: فقط ارقامِ سرور
-    const metrics = $('.ab-metrics')!.textContent!
-    expect(metrics).toContain((250000000).toLocaleString('fa-IR'))
-    expect(metrics).toContain((3200000000).toLocaleString('fa-IR'))
-    expect(metrics).toContain((2600000000).toLocaleString('fa-IR'))
+    // گریدِ گردش همان لحظه ساخته می‌شود: «مانده‌ی اول دوره» و «جمعِ بازه» از گره‌ی درخت (سرور)،
+    // پیش از رسیدنِ دفتر — نه جمعی در مرورگر.
+    expect($('.ab-carry')!.textContent).toContain((250000000).toLocaleString('fa-IR'))
+    const foot = $('.ab-total')!.textContent!
+    expect(foot).toContain((3200000000).toLocaleString('fa-IR'))
+    expect(foot).toContain((2600000000).toLocaleString('fa-IR'))
+    expect(foot).toContain((20000000).toLocaleString('fa-IR'))
 
     key(treeEl, 'Enter')
     await wait(250)
@@ -253,6 +255,46 @@ describe('مرور حساب — سناریوی بانک (§۳۷)', () => {
     await wait(250)
     expect(calls.some((c) => c.includes('general-ledger/melli') && c.includes('offset=100'))).toBe(true)
     expect($('.ab-pager')!.textContent).toContain((150).toLocaleString('fa-IR'))
+  })
+})
+
+describe('انتخابِ ردیفِ گردش (تمِ اکسلی)', () => {
+  async function openMelli() {
+    await mount()
+    typeSearch('بانک ملی')
+    key($('.ab-search input')!, 'Enter')
+    key($('[role="tree"]')!, 'Enter')
+    await wait(250)
+    return $('.ab-ledger-scroll')!
+  }
+  const head = (i: number) => document.querySelector<HTMLButtonElement>(`#ab-line-${i} .xl-rowhead-btn`)!
+
+  it('شماره‌ی ردیف انتخاب می‌کند (نه سند را باز)، و نوارِ انتخاب جمع می‌زند', async () => {
+    await openMelli()
+    act(() => head(0).click())
+    act(() => head(1).dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true })))
+    expect(document.querySelector('.drawer-panel')).toBeNull()
+    expect($('#ab-line-0')!.className).toContain('is-selected')
+    expect($('#ab-line-1')!.className).toContain('is-selected')
+    const bar = $('.xl-selbar')!.textContent!
+    expect(bar).toContain('۲ ردیف انتخاب شد')
+    //: هر ردیفِ جعلی ۲۰ میلیون بدهکار است.
+    expect(bar).toContain((40000000).toLocaleString('fa-IR'))
+  })
+
+  it('Shift+↓ انتخاب را می‌کشد، Space برمی‌دارد، Esc اول انتخاب را پاک می‌کند بعد به درخت', async () => {
+    const ledgerEl = await openMelli()
+    key(ledgerEl, 'ArrowDown', { shiftKey: true })
+    key(ledgerEl, 'ArrowDown', { shiftKey: true })
+    expect($('.xl-selbar')!.textContent).toContain('۳ ردیف انتخاب شد')
+    key(ledgerEl, ' ')
+    expect($('.xl-selbar')!.textContent).toContain('۲ ردیف انتخاب شد')
+    key(ledgerEl, 'Escape')
+    expect($('.xl-selbar')).toBeNull()
+    expect(document.activeElement).toBe(ledgerEl)
+    key(ledgerEl, 'Escape')
+    await wait()
+    expect(document.activeElement).toBe($('[role="tree"]'))
   })
 })
 

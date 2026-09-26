@@ -13703,7 +13703,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 
 .ab-split {
   display: grid;
-  grid-template-columns: minmax(420px, 46%) minmax(0, 1fr);
+  /* درخت فقط کد، نام و مانده لازم دارد (دو ستونِ گردش وقتی قاب جا دارد)؛ باقی مالِ گردش است که هفت ستون دارد. */
+  grid-template-columns: minmax(340px, 36%) minmax(0, 1fr);
   gap: var(--sp-4, 16px);
   height: calc(100vh - 230px);
   min-height: 520px;
@@ -13731,40 +13732,50 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .ab-notice { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 4px 0; }
 .ab-empty { padding: 16px 6px; }
 
-/* ستون‌های درخت: پیچک · کد · نام · گردشِ بد · گردشِ بس · مانده */
-.ab-tree-head,
-.ab-row {
-  display: grid;
-  grid-template-columns: 16px minmax(56px, auto) minmax(0, 1fr) 0 0 128px;
-  align-items: center;
-  column-gap: 8px;
+/* ── گریدِ درخت (تمِ اکسلی) ──
+ * جدولِ `xl-grid` با نقشِ درخت: سرستونِ خاکستری و چسبنده، خطوطِ ظریف، کد در ستونِ خودش و تورفتگیِ عمق فقط
+ * در ستونِ نام (`--ab-depth`) تا کدها زیرِ هم بمانند. دو ستونِ گردش فقط وقتی *قابِ درخت* جا دارد دیده
+ * می‌شوند (کوئریِ ظرف، نه عرضِ پنجره — پهنای قاب به نسبتِ تقسیم بستگی دارد). */
+.ab-pane--tree { container-type: inline-size; }
+.ab-tree { flex: 1; min-height: 0; overflow: auto; outline: none; }
+.ab-tree:focus-visible { box-shadow: 0 0 0 2px var(--accent-bg); }
+.page .ef-table-wrap > table.ab-treegrid { table-layout: fixed; inline-size: 100%; }
+.ab-treegrid col.ab-c-code { width: 76px; }
+.ab-treegrid col.ab-c-turn { width: 108px; }
+.ab-treegrid col.ab-c-bal { width: 128px; }
+.page .ef-table-wrap > table.ab-treegrid > thead th { position: sticky; inset-block-start: 0; z-index: 2; }
+.page .ef-table-wrap > table.ab-treegrid td {
+  block-size: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.ab-tree-head { padding: 4px 6px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: var(--fs-xs); }
-.ab-tree-head > span:first-child { grid-column: 1 / span 3; }
-.ab-turn { overflow: hidden; visibility: hidden; }
-@media (min-width: 1500px) {
-  .ab-tree-head,
-  .ab-row { grid-template-columns: 16px minmax(56px, auto) minmax(0, 1fr) 104px 104px 128px; }
-  .ab-turn { visibility: visible; }
-}
-.ab-tree-head .ab-turn,
-.ab-tree-head .ab-bal { text-align: left; }
-
-.ab-tree { flex: 1; min-height: 0; overflow: auto; outline: none; border-radius: var(--radius-sm); }
-.ab-tree:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-bg); }
-.ab-row { min-height: 26px; padding-block: 2px; padding-inline-end: 6px; border-radius: var(--radius-sm); cursor: default; font-size: var(--fs-sm); user-select: none; }
-.ab-row:hover { background: var(--surface-hover); }
-.ab-row.is-group { font-weight: 600; }
-.ab-row.is-selected { background: var(--accent-bg); color: var(--accent-on-tint, var(--text)); }
-.ab-tree:focus .ab-row.is-selected { box-shadow: inset 0 0 0 1px var(--accent); }
+.page .ef-table-wrap > table.ab-treegrid td.ab-name-cell { padding-inline-start: calc(4px + var(--ab-depth, 0) * 16px); }
+.ab-row { cursor: default; user-select: none; }
+.page .ef-table-wrap > table.ab-treegrid > tbody > tr.is-group > td { font-weight: 700; }
+.page .ef-table-wrap > table.ab-treegrid > tbody > tr > td.ab-turn { color: var(--text-muted); font-weight: 400; }
+/* ردیفِ فعالِ درختِ فوکوس‌دار: قابِ accent مثلِ خانه‌ی انتخاب‌شده‌ی اکسل. */
+.ab-tree:focus .ab-treegrid > tbody > tr.is-selected > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 .ab-row.is-inactive .ab-name-text,
 .ab-row.is-inactive .ab-code { color: var(--text-muted); text-decoration: line-through; text-decoration-color: var(--border-strong); }
-.ab-twisty { display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; }
-.ab-code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.8em; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ab-twisty { display: inline-flex; flex: 0 0 16px; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; }
+.ab-code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.85em; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ab-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ab-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ab-bal, .ab-turn { text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.ab-row .ab-turn { color: var(--text-muted); font-weight: 400; }
+@container (max-width: 560px) {
+  .ab-treegrid .ab-turn { display: none; }
+}
+/* قابِ خیلی باریک (موبایل): ستونِ کد می‌رود و کد جلوی نام می‌نشیند، تورفتگی نصف — تا نام خوانا بماند. */
+.ab-code-inline { display: none; }
+@container (max-width: 300px) {
+  .ab-treegrid .ab-codecol { display: none; }
+  .ab-treegrid .ab-code-inline { display: inline; }
+  .ab-treegrid col.ab-c-bal { width: 124px; }
+  .page .ef-table-wrap > table.ab-treegrid td.ab-bal { padding-inline: 6px; font-size: var(--fs-xs); }
+  .page .ef-table-wrap > table.ab-treegrid td.ab-name-cell { padding-inline-start: calc(4px + var(--ab-depth, 0) * 8px); }
+}
 
 .ab-amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ab-amt small { font-size: 0.75em; font-weight: 600; }
@@ -13795,40 +13806,100 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .ab-summary-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ab-summary-title strong { font-size: var(--fs-md); }
 .ab-warn { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--warning); }
-.ab-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.ab-metrics > div { padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-md); }
-.ab-metrics dt { color: var(--text-muted); font-size: var(--fs-xs); }
-.ab-metrics dd { margin: 2px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: left; }
 .ab-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .ab-actions > button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; font-size: var(--fs-sm); }
 
+/* ── گردشِ حساب (تمِ اکسلی، الگوی «د») ──
+ * شماره‌ی ردیف برای انتخاب (کلیک / Ctrl / Shift، Space و Shift+↑↓)، ردیفِ «مانده‌ی اول دوره» بالا و ردیفِ
+ * «جمعِ بازه» چسبیده به پایینِ قاب — هم‌ستون با بدهکار، بستانکار و مانده؛ ارقامِ هر دو از سرور. */
 .ab-ledger { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .ab-ledger-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: var(--fs-sm); }
 .ab-ledger-head strong { display: inline-flex; align-items: center; gap: 6px; }
-.ab-pager { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--fs-xs); }
-.ab-ledger-scroll { flex: 1; min-height: 0; overflow: auto; outline: none; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.ab-pager { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.ab-ledger-scroll { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .ab-ledger-scroll:focus-visible { box-shadow: 0 0 0 2px var(--accent-bg); }
 .ab-ledger-scroll.is-loading { opacity: 0.6; }
-.ab-ledger-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
-.ab-ledger-table th { position: sticky; top: 0; z-index: 1; padding: 5px 8px; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: var(--fs-xs); font-weight: 500; text-align: start; white-space: nowrap; }
-.ab-ledger-table td { padding: 3px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.ab-ledger-table td.num { text-align: left; font-variant-numeric: tabular-nums; }
-.ab-ledger-table td.ab-desc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
-.ab-ledger-table tr.is-active td { background: var(--accent-bg); }
-.ab-ledger-scroll:focus tr.is-active td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
-.ab-ledger-table .ab-carry td { color: var(--text-muted); font-size: var(--fs-xs); background: var(--surface-hover); }
-.ab-ledger-table td .ab-badge { margin-inline-start: 4px; }
-
-@media (max-width: 1200px) {
-  .ab-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* عرضِ پیکسلی برای تاریخ، سند و سه مبلغ (رقمِ میلیاردی باید کامل دیده شود) و «شرح» باقی را می‌گیرد. گردشِ یک
+ * حسابِ سطحِ آخر در ۱۴۴۰ با منوی کناری بی‌لغزش جا می‌شود؛ ستونِ «حساب» (سرفصل) یا تفصیلی/مرکز که اضافه شود،
+ * گرید درونِ قابِ خودش می‌لغزد. ۶۳۴ = ستون‌های ثابت (۵۱۴) + کفِ «شرح» (۱۲۰)؛ هر ستونِ اختیاری ۱۲۸ دیگر (`--ab-opt` از خودِ جدول). */
+.page .ef-table-wrap > table.ab-ledger-table { table-layout: fixed; inline-size: 100%; min-inline-size: calc(634px + var(--ab-opt, 0) * 128px); }
+.ab-ledger-table col.ab-lc-rowhead { width: 40px; }
+.ab-ledger-table col.ab-lc-date { width: 82px; }
+.ab-ledger-table col.ab-lc-doc { width: 60px; }
+.ab-ledger-table col:is(.ab-lc-account, .ab-lc-analytic, .ab-lc-center) { width: 128px; }
+.ab-ledger-table col:is(.ab-lc-debit, .ab-lc-credit) { width: 104px; }
+.ab-ledger-table col.ab-lc-bal { width: 124px; }
+.page .ef-table-wrap > table.ab-ledger-table > thead th { position: sticky; inset-block-start: 0; z-index: 2; }
+.page .ef-table-wrap > table.ab-ledger-table td {
+  block-size: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.page .ef-table-wrap > table.ab-ledger-table td.xl-rowhead { padding: 0; }
+.ab-ledger-table > tbody > tr.acc-row--clickable { cursor: pointer; }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr.is-active > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.ab-ledger-scroll:focus .ab-ledger-table > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr.ab-carry > td { background: color-mix(in srgb, var(--xl-head) 45%, var(--surface)); color: var(--text-muted); font-size: var(--fs-xs); }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr > td.ab-ledger-status { padding: 18px 12px; color: var(--text-muted); text-align: center; white-space: normal; }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr > td.ab-ledger-status--err { color: var(--danger); }
+.ab-ledger-table td .ab-badge { margin-inline-start: 4px; }
+/* سه ستونِ مبلغ سمتِ چپِ قاب میخ شده‌اند (مثلِ «ثابت‌کردنِ ستون»ِ اکسل): ستونِ «حساب» یا تفصیلی/مرکز که گرید را از
+ * قاب پهن‌تر کند، ستون‌های متنی زیرشان می‌لغزند و مبلغ همیشه دیده می‌شود — در RTL شروعِ لغزش سمتِ راست است و
+ * بی این، مانده بیرونِ قاب می‌ماند. پس‌زمینه‌ی خانه‌ی میخ‌شده اختصاصیتِ کم دارد تا ته‌رنگِ ردیف رویش بنشیند. */
+.ab-ledger-table :is(th, td).ab-pin { position: sticky; z-index: 1; }
+/* رنگِ حالِ ردیف (`--accent-bg` نیمه‌شفاف است) روی زمینه‌ی مات لایه می‌شود — وگرنه ستونی که زیرِ خانه‌ی میخ‌شده
+ * می‌لغزد از آن پیدا بود. همان چهار حالِ ردیف، همان رنگ‌ها. */
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr > td.ab-pin { background: var(--surface); }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr:hover > td.ab-pin { background: linear-gradient(color-mix(in srgb, var(--accent) 5%, transparent), color-mix(in srgb, var(--accent) 5%, transparent)), var(--surface); }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr.is-active > td.ab-pin { background: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)), var(--surface); }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr.is-selected > td.ab-pin { background: linear-gradient(var(--accent-bg), var(--accent-bg)), var(--surface); }
+.page .ef-table-wrap > table.ab-ledger-table > tbody > tr.ab-carry > td.ab-pin { background: linear-gradient(color-mix(in srgb, var(--xl-head) 45%, transparent), color-mix(in srgb, var(--xl-head) 45%, transparent)), var(--surface); }
+.ab-ledger-table .ab-pin--bal { inset-inline-end: 0; }
+.ab-ledger-table .ab-pin--credit { inset-inline-end: 124px; }
+.ab-ledger-table .ab-pin--debit { inset-inline-end: 228px; box-shadow: 4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent); }
+.page .ef-table-wrap > table.ab-ledger-table > thead th.ab-pin { z-index: 3; }
+/* «جمعِ بازه»: ته‌رنگِ سرستون و چسبیده به پایینِ قاب، تا با اسکرولِ صد ردیف هم دیده شود. */
+.page .ef-table-wrap > table.ab-ledger-table > tfoot td {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 2;
+  block-size: 34px;
+  padding: 0 8px;
+  border-block-start: 1px solid var(--border-strong);
+  background: var(--xl-head);
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.page .ef-table-wrap > table.ab-ledger-table > tfoot td small { color: var(--text-muted); font-weight: 400; }
+.page .ef-table-wrap > table.ab-ledger-table > tfoot td.ab-pin { z-index: 3; }
+
 @media (max-width: 980px) {
   .ab-split { grid-template-columns: minmax(0, 1fr); height: auto; }
   .ab-tree { max-height: 60vh; }
   .ab-ledger-scroll { max-height: 70vh; }
 }
 @media (max-width: 760px) {
-  .ab-ledger-table td { white-space: normal; }
-  .ab-ledger-table td.ab-desc { max-width: none; }
-  .ab-row { grid-template-columns: 16px auto minmax(0, 1fr) 0 0 auto; }
+  /* گردش کارت می‌شود؛ ستونِ ثابت و چسبندگیِ پانویس در کارت معنا ندارند. */
+  .page .ef-table-wrap > table.ab-ledger-table { min-inline-size: 0; }
+  .ab-ledger-table tfoot { display: block; }
+  .page .ef-table-wrap > table.ab-ledger-table td { block-size: auto; white-space: normal; }
+  .page .ef-table-wrap > table.ab-ledger-table > tfoot td,
+  .ab-ledger-table :is(th, td).ab-pin { position: static; box-shadow: none; }
+  /* در کارت، خانه‌ها زمینه، خط و قابِ فوکوسِ گرید را ندارند؛ حالِ ردیف روی خودِ کارت است. */
+  .page .ef-table-wrap > table.ab-ledger-table > :is(tbody, tfoot) > tr > td,
+  .page .ef-table-wrap > table.ab-ledger-table > :is(tbody, tfoot) > tr > td.ab-pin,
+  .page .ef-table-wrap > table.ab-ledger-table > tbody > tr:is(:hover, .is-active, .is-selected, .ab-carry) > td,
+  .page .ef-table-wrap > table.ab-ledger-table > tbody > tr:is(:hover, .is-active, .is-selected, .ab-carry) > td.ab-pin {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .ab-ledger-table > tbody > tr.is-active { border-color: var(--accent); }
+  .ab-ledger-table > tfoot > tr { background: var(--xl-head); }
 }
