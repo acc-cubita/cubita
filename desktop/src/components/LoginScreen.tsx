@@ -8,6 +8,7 @@ import {
   resetPasswordSms,
   type MeResponse,
 } from '../api'
+import { loadRememberedEmail, rememberEmail } from '../lib/rememberedLogin'
 
 const FEATURES = [
   { icon: ShoppingCart, text: 'فروش، خرید و انبارداری یکپارچه' },
@@ -27,7 +28,11 @@ export function LoginScreen({
   /** `onHaveCode`: کارمندی که از مدیر کدِ دعوت یا بازنشانی گرفته (سرورِ شرکت ایمیل ندارد). */
   enterprise?: { serverUrl: string; onChangeServer: () => void; onHaveCode: () => void }
 }) {
-  const [email, setEmail] = useState('')
+  //: «نام کاربری را به خاطر بسپار»: ایمیلِ ذخیره‌شده از پیش پر می‌شود و مکان‌نما به رمز می‌رود. در نسخه‌ی سازمانی هر
+  //: سرور ایمیلِ خودش را دارد.
+  const rememberScope = enterprise?.serverUrl ?? null
+  const [email, setEmail] = useState(() => loadRememberedEmail(rememberScope) ?? '')
+  const [remember, setRemember] = useState(() => loadRememberedEmail(rememberScope) !== null)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +55,8 @@ export function LoginScreen({
     try {
       const { access_token: t, refresh_token } = await login(email, password)
       const meRes = await fetchMe(t)
+      //: فقط بعد از ورودِ موفق — ایمیلِ اشتباه به خاطر سپرده نمی‌شود. بی‌تیک، ایمیلِ قبلی هم پاک می‌شود.
+      rememberEmail(rememberScope, email, remember)
       // دسکتاپ: نشستِ کامل (توکن‌ها + me) روی دیسک — بارِ اولِ یوزر/پسورد کافی
       // است تا اپ از این پس خودش وارد بماند، آنلاین یا آفلاین. رفرش همیشه از
       // سرور می‌آید (login آن را صادر می‌کند)؛ نال‌بودنش فقط نوعاً ممکن است.
@@ -342,7 +349,8 @@ export function LoginScreen({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                autoFocus
+                autoComplete="username"
+                autoFocus={!remember}
                 required
               />
             </div>
@@ -357,6 +365,8 @@ export function LoginScreen({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                autoComplete="current-password"
+                autoFocus={remember}
                 required
               />
               <button
@@ -369,6 +379,12 @@ export function LoginScreen({
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
+          </label>
+
+          {/* فقط ایمیل ذخیره می‌شود، هرگز رمز — و فقط با تیکِ خودِ کاربر. */}
+          <label className="login-remember">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            نام کاربری را به خاطر بسپار
           </label>
 
           {error && <div className="error">{error}</div>}

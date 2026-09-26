@@ -7255,6 +7255,19 @@ tr.kardex-voided td { color: var(--text-muted); }
 .trial-lock-cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 12px 26px; text-decoration: none; }
 .trial-lock-logout { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; }
 
+/* «نام کاربری را به خاطر بسپار»: کادرِ تیک کنارِ متن، نه زیرش (قاعده‌ی ستونیِ `.login-card label` را می‌شکند). */
+.login-card label.login-remember {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-block-start: -4px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  user-select: none;
+}
+.login-card label.login-remember input { inline-size: 16px; block-size: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
 /* لینکِ ثبت‌نام روی صفحه‌ی ورود */
 .login-signup-cta {
   margin-top: 14px;
