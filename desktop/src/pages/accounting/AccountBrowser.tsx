@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type RefObject,
 } from 'react'
@@ -37,6 +38,7 @@ import { JournalEntryDrawer } from '../../components/JournalEntryDrawer'
 import { ReportFilterBar } from '../../components/ReportFilterBar'
 import { SavedViewBar } from '../../components/SavedViewBar'
 import { SearchSelect } from '../../components/SearchSelect'
+import { ColResizer, SelectionBar } from '../../components/XlGrid'
 import { formatJalali, todayIso } from '../../lib/jalali'
 import {
   NATURE_LABEL,
@@ -56,6 +58,8 @@ import {
   type VisibleRow,
 } from '../../lib/accountTree'
 import type { PageKey } from '../../lib/navModel'
+import { modsOf, useRowSelection } from '../../lib/rowSelection'
+import { useColumnWidths } from '../../lib/useColumnWidths'
 import {
   OpsPage,
   RangeBar,
@@ -158,52 +162,65 @@ const TreeRowView = memo(function TreeRowView({
   onOpen: (id: string) => void
 }) {
   const n = row.node
+  //: ردیفِ گریدِ درخت (تمِ اکسلی): کد ستونِ خودش را دارد و تورفتگی فقط در ستونِ نام است، پس کدها
+  //: زیرِ هم می‌مانند. نقش‌ها (`treeitem`) و شناسه‌ها همان‌اند — کیبورد و فوکوس دست نخورده‌اند.
   return (
-    <div
+    <tr
       id={nodeDomId(n.account_id)}
       role="treeitem"
       aria-level={row.level + 1}
       aria-expanded={row.expandable ? expanded : undefined}
       aria-selected={selected}
       className={`ab-row${selected ? ' is-selected' : ''}${n.is_active ? '' : ' is-inactive'}${n.is_group ? ' is-group' : ''}`}
-      style={{ paddingInlineStart: 6 + row.level * 16 }}
       onClick={() => onSelect(n.account_id)}
       onDoubleClick={() => onOpen(n.account_id)}
     >
-      <span
-        className="ab-twisty"
-        onClick={(e) => {
-          if (!row.expandable) return
-          e.stopPropagation()
-          onSelect(n.account_id)
-          onToggle(n.account_id)
-        }}
-      >
-        {row.expandable ? expanded ? <ChevronDown size={14} /> : <ChevronLeft size={14} /> : null}
-      </span>
-      <span className="ab-code" dir="ltr">
-        {n.account_code}
-      </span>
-      <span className="ab-name">
-        <span className="ab-name-text">{n.account_name}</span>
-        {!n.is_active && <span className="ab-badge ab-badge--muted">غیرفعال</span>}
-        {n.nature_violation && (
-          <span className="ab-badge ab-badge--warn" title="مانده‌ی پایانِ دوره خلافِ ماهیتِ حساب است">
-            هشدار ماهیت
+      <td className="ab-code-cell ab-codecol" data-label="کد">
+        <span className="ab-code" dir="ltr">
+          {n.account_code}
+        </span>
+      </td>
+      <td className="ab-name-cell" data-label="نام حساب" style={{ '--ab-depth': row.level } as CSSProperties}>
+        <span className="ab-name">
+          <span
+            className="ab-twisty"
+            onClick={(e) => {
+              if (!row.expandable) return
+              e.stopPropagation()
+              onSelect(n.account_id)
+              onToggle(n.account_id)
+            }}
+          >
+            {row.expandable ? expanded ? <ChevronDown size={14} /> : <ChevronLeft size={14} /> : null}
           </span>
-        )}
-        {n.has_direct_lines && (
-          <span className="ab-badge ab-badge--warn" title="این سرفصل خودش ردیفِ سند دارد؛ بررسی یکپارچگی را ببینید">
-            ردیف روی سرفصل
+          {/* قابِ باریک (موبایل): ستونِ کد پنهان است و کد جلوی نام می‌آید. */}
+          <span className="ab-code ab-code-inline" dir="ltr">
+            {n.account_code}
           </span>
-        )}
-      </span>
-      <span className="ab-turn num">{faAmount(n.period_debit)}</span>
-      <span className="ab-turn num">{faAmount(n.period_credit)}</span>
-      <span className="ab-bal num">
+          <span className="ab-name-text">{n.account_name}</span>
+          {!n.is_active && <span className="ab-badge ab-badge--muted">غیرفعال</span>}
+          {n.nature_violation && (
+            <span className="ab-badge ab-badge--warn" title="مانده‌ی پایانِ دوره خلافِ ماهیتِ حساب است">
+              هشدار ماهیت
+            </span>
+          )}
+          {n.has_direct_lines && (
+            <span className="ab-badge ab-badge--warn" title="این سرفصل خودش ردیفِ سند دارد؛ بررسی یکپارچگی را ببینید">
+              ردیف روی سرفصل
+            </span>
+          )}
+        </span>
+      </td>
+      <td className="num ab-turn" data-label="گردش بدهکار">
+        {faAmount(n.period_debit)}
+      </td>
+      <td className="num ab-turn" data-label="گردش بستانکار">
+        {faAmount(n.period_credit)}
+      </td>
+      <td className="num ab-bal" data-label="مانده">
         <SideAmount raw={Number(n.closing)} />
-      </span>
-    </div>
+      </td>
+    </tr>
   )
 })
 
@@ -528,13 +545,6 @@ export function AccountBrowsePage({
             </p>
           )}
 
-          <div className="ab-tree-head" aria-hidden>
-            <span>کد / نام</span>
-            <span className="ab-turn">گردش بدهکار</span>
-            <span className="ab-turn">گردش بستانکار</span>
-            <span className="ab-bal">مانده</span>
-          </div>
-
           {query ? (
             <div id="ab-hits" role="listbox" className="ab-hits" aria-label="نتیجه‌ی جست‌وجو">
               {hits.length === 0 && <p className="muted ab-empty">حسابی با این کد یا نام پیدا نشد.</p>}
@@ -590,22 +600,45 @@ export function AccountBrowsePage({
               role="tree"
               aria-label="درختِ حساب‌ها"
               tabIndex={0}
-              className="ab-tree"
+              className="table-scroll ef-table-wrap ab-tree"
               aria-activedescendant={selectedId ? nodeDomId(selectedId) : undefined}
               onKeyDown={onTreeKey}
               onScroll={(e) => (treeScroll.current = e.currentTarget.scrollTop)}
             >
-              {rows.map((row) => (
-                <TreeRowView
-                  key={row.node.account_id}
-                  row={row}
-                  expanded={expanded.has(row.node.account_id)}
-                  selected={row.node.account_id === selectedId}
-                  onSelect={selectFromClick}
-                  onToggle={toggle}
-                  onOpen={openLedger}
-                />
-              ))}
+              {/* گریدِ اکسلی با نقشِ درخت: جدول فقط چیدمان است (`presentation`)؛ ردیف‌ها `treeitem`اند. */}
+              {/* عرضِ ستون‌ها از CSS است و کشیدنی نیست: دو ستونِ گردش در قابِ باریک پنهان می‌شوند
+                  (کوئریِ ظرف) و لبه‌ی کنارِ ستونِ پنهان کشیدنی نمی‌ماند. */}
+              <table role="presentation" className="ef-table xl-grid table-plain ab-treegrid">
+                <colgroup>
+                  <col className="ab-c-code ab-codecol" />
+                  <col className="ab-c-name" />
+                  <col className="ab-c-turn ab-turn" />
+                  <col className="ab-c-turn ab-turn" />
+                  <col className="ab-c-bal" />
+                </colgroup>
+                <thead aria-hidden="true">
+                  <tr>
+                    <th className="ab-codecol">کد</th>
+                    <th>نام حساب</th>
+                    <th className="num ab-turn">گردش بدهکار</th>
+                    <th className="num ab-turn">گردش بستانکار</th>
+                    <th className="num">مانده</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <TreeRowView
+                      key={row.node.account_id}
+                      row={row}
+                      expanded={expanded.has(row.node.account_id)}
+                      selected={row.node.account_id === selectedId}
+                      onSelect={selectFromClick}
+                      onToggle={toggle}
+                      onOpen={openLedger}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
           <p className="ab-keys">
@@ -742,28 +775,6 @@ function AccountSummary({
           برگ‌ها را می‌آورد) نیست. «بررسی یکپارچگی» جزئیاتش را دارد.
         </p>
       )}
-      <dl className="ab-metrics">
-        <div>
-          <dt>مانده‌ی اول دوره</dt>
-          <dd>
-            <SideAmount raw={Number(node.opening)} long />
-          </dd>
-        </div>
-        <div>
-          <dt>گردشِ بدهکار</dt>
-          <dd className="num">{fa(node.period_debit)}</dd>
-        </div>
-        <div>
-          <dt>گردشِ بستانکار</dt>
-          <dd className="num">{fa(node.period_credit)}</dd>
-        </div>
-        <div>
-          <dt>مانده‌ی پایان دوره</dt>
-          <dd>
-            <SideAmount raw={Number(node.closing)} long />
-          </dd>
-        </div>
-      </dl>
       <div className="ab-actions">
         <button type="button" className="ef-btn-secondary" onClick={onShowLedger}>
           <BookOpen size={14} /> مشاهده گردش
@@ -794,6 +805,16 @@ function AccountSummary({
 
 // ═══════════════════════════════ گردشِ حساب ═══════════════════════════════
 
+//: «شرح» کشسان است و باقیِ عرض را می‌گیرد. شماره‌ی ردیف و سه ستونِ مبلغ ثابت‌اند — مبلغ‌ها سمتِ چپِ قاب
+//: میخ شده‌اند (`ab-pin`) و جایشان باید پیکسلیِ پایدار بماند. تاریخ، سند و ستون‌های اختیاری (حساب، تفصیلی،
+//: مرکز) کشیدنی‌اند؛ اختیاری‌ها تا وقتی درصدی ندارند همان پیش‌فرضِ CSS.
+const LEDGER_LAYOUT = { fixed: ['rowhead', 'debit', 'credit', 'bal'], auto: 'desc' } as const
+
+/**
+ * گردشِ حساب — گریدِ اکسلیِ فقط‌خواندنی (الگوی «د»): شماره‌ی ردیف برای انتخاب و جمعِ انتخاب در نوارِ پایین
+ * (مثلِ نوارِ وضعیتِ اکسل)، ردیفِ «مانده‌ی اول دوره» بالا و «جمعِ بازه» چسبیده به پایین. گرید از لحظه‌ی
+ * انتخابِ حساب ساخته می‌شود — ارقامِ بالا و پایین از گره‌ی درخت (سرور) می‌آیند و منتظرِ دفتر نمی‌مانند.
+ */
 function LedgerPanel({
   token,
   node,
@@ -826,6 +847,8 @@ function LedgerPanel({
   const [data, setData] = useState<GeneralLedger | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const cw = useColumnWidths('cubita.grid.accountLedger.shares', LEDGER_LAYOUT)
+  const { selected, click, clear } = useRowSelection()
 
   //: مکثِ کوتاه: حرکت با ↓ در درخت نباید برای هر حسابی که از رویش رد می‌شویم
   //: یک درخواستِ دفتر بفرستد.
@@ -855,11 +878,17 @@ function LedgerPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, node.account_id, scopeKey, offset])
 
+  //: حساب، صفحه یا بازه‌ی دیگر یعنی ردیف‌های دیگر؛ انتخابِ قبلی معنا ندارد.
+  useEffect(() => clear(), [node.account_id, offset, scopeKey, clear])
+
   const current = data && data.account_id === node.account_id ? data : null
+  const lines = current?.lines ?? []
+  const total = current?.total_lines ?? 0
 
   //: درخواستِ فوکوس به *همان حسابی* بسته است که برایش داده شد: اگر گردشِ آن حساب
   //: خالی بود یا کاربر پیش از رسیدنِ داده جای دیگری رفت، درخواست دور ریخته می‌شود —
-  //: وگرنه حسابِ بعدی که با ↓ از رویش رد می‌شویم فوکوس را از درخت می‌دزدید.
+  //: وگرنه حسابِ بعدی که با ↓ از رویش رد می‌شویم فوکوس را از درخت می‌دزدید. گرید همیشه
+  //: ساخته شده است، پس «خالی» را خودمان می‌سنجیم نه نبودنِ عنصر.
   const pendingFocus = useRef<string | null>(null)
   useEffect(() => {
     if (focusRequest > 0) pendingFocus.current = node.account_id
@@ -874,18 +903,38 @@ function LedgerPanel({
     }
     if (!current) return // هنوز در راه است
     pendingFocus.current = null
-    tableRef.current?.focus({ preventScroll: true })
+    if (total > 0) tableRef.current?.focus({ preventScroll: true })
   })
-  const lines = current?.lines ?? []
-  const total = current?.total_lines ?? 0
   const showAccount = node.is_group
   const showAnalytic = lines.some((l) => l.analytic_name)
   const showCenter = lines.some((l) => l.cost_center_name)
   const active = Math.min(row, Math.max(0, lines.length - 1))
+  const order = lines.map((l) => l.line_id)
+  const picked = lines.filter((l) => selected.has(l.line_id))
+  const colIds = [
+    'rowhead',
+    'date',
+    'doc',
+    'desc',
+    ...(showAccount ? ['account'] : []),
+    ...(showAnalytic ? ['analytic'] : []),
+    ...(showCenter ? ['center'] : []),
+    'debit',
+    'credit',
+    'bal',
+  ]
+  //: ستون‌های متنی (بی شماره‌ی ردیف و سه ستونِ مبلغ) — برچسبِ ردیفِ بالا و پایین رویشان پهن می‌شود.
+  const labelSpan = colIds.length - 4
 
   useEffect(() => {
-    document.getElementById(`ab-line-${active}`)?.scrollIntoView({ block: 'nearest' })
+    document.getElementById(`ab-line-${active}`)?.scrollIntoView?.({ block: 'nearest' })
   }, [active])
+
+  /** Shift+↑↓: انتخاب از ردیفِ فعلی تا مقصد — اگر لنگری نیست، همین ردیف لنگر می‌شود. */
+  const extendTo = (to: number) => {
+    if (selected.size === 0) click(order, order[active], { shift: false, ctrl: true })
+    click(order, order[to], { shift: true, ctrl: false })
+  }
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     //: کشوی سند کیبوردِ خودش را دارد (Esc)؛ این‌جا نباید همان کلید را دوباره بخورد.
@@ -894,12 +943,21 @@ function LedgerPanel({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
-        if (active < last) onRow(active + 1)
-        else if (offset + LEDGER_PAGE < total) onOffset(offset + LEDGER_PAGE)
+        if (active < last) {
+          onRow(active + 1)
+          if (e.shiftKey) extendTo(active + 1)
+        } else if (!e.shiftKey && offset + LEDGER_PAGE < total) onOffset(offset + LEDGER_PAGE)
         break
       case 'ArrowUp':
         e.preventDefault()
-        if (active > 0) onRow(active - 1)
+        if (active > 0) {
+          onRow(active - 1)
+          if (e.shiftKey) extendTo(active - 1)
+        }
+        break
+      case ' ':
+        e.preventDefault()
+        if (lines[active]) click(order, order[active], { shift: false, ctrl: true })
         break
       case 'Home':
         e.preventDefault()
@@ -923,10 +981,29 @@ function LedgerPanel({
         break
       case 'Escape':
         e.preventDefault()
-        onBack()
+        if (selected.size > 0) clear()
+        else onBack()
         break
     }
   }
+
+  const head = (id: string, label: string, className?: string) => (
+    <th data-col={id} className={className}>
+      {label}
+      {cw.canResize(id, colIds[colIds.indexOf(id) + 1]) && (
+        <ColResizer onBegin={(ev) => cw.begin(ev, id)} onReset={cw.reset} />
+      )}
+    </th>
+  )
+  const status = (text: string, err = false) => (
+    <tr>
+      <td className={`card-full ab-ledger-status${err ? ' ab-ledger-status--err' : ''}`} colSpan={colIds.length}>
+        {text}
+      </td>
+    </tr>
+  )
+  const sumDebit = picked.reduce((s, l) => s + Number(l.debit || 0), 0)
+  const sumCredit = picked.reduce((s, l) => s + Number(l.credit || 0), 0)
 
   return (
     <div className="ab-ledger">
@@ -957,83 +1034,154 @@ function LedgerPanel({
           </span>
         )}
       </div>
-      {error && <div className="error">{error}</div>}
-      {!current && !error && <p className="muted">در حال بارگذاری…</p>}
-      {current && total === 0 && <p className="muted">این حساب در این دامنه گردشی ندارد.</p>}
-      {current && total > 0 && (
-        <div
-          ref={tableRef}
-          tabIndex={0}
-          className={`table-scroll ab-ledger-scroll${loading ? ' is-loading' : ''}`}
-          onKeyDown={onKey}
-          aria-label="گردشِ حساب — ↑↓ حرکت، Enter بازکردنِ سند، Esc برگشت به درخت"
+      <div
+        ref={tableRef}
+        tabIndex={total > 0 ? 0 : -1}
+        className={`table-scroll ef-table-wrap ab-ledger-scroll${loading && current ? ' is-loading' : ''}`}
+        onKeyDown={onKey}
+        aria-label="گردشِ حساب — ↑↓ حرکت، Shift+↑↓ یا Space انتخاب، Enter بازکردنِ سند، Esc برگشت به درخت"
+      >
+        {/* کفِ عرض با هر ستونِ اختیاری بزرگ می‌شود تا «شرح» له نشود؛ جا نشد، گرید درونِ قاب می‌لغزد. */}
+        <table
+          ref={cw.frame}
+          className="cards-on-mobile ef-table xl-grid ab-ledger-table"
+          style={{ '--ab-opt': colIds.length - 7 } as CSSProperties}
         >
-          <table className="cards-on-mobile ab-ledger-table">
-            <thead>
-              <tr>
-                <th>تاریخ</th>
-                <th>سند</th>
-                <th>شرح</th>
-                {showAccount && <th>حساب</th>}
-                {showAnalytic && <th>تفصیلی</th>}
-                {showCenter && <th>مرکز هزینه</th>}
-                <th>بدهکار</th>
-                <th>بستانکار</th>
-                <th>مانده</th>
+          <colgroup>
+            {colIds.map((id) => (
+              <col key={id} className={`ab-lc-${id}`} style={cw.col(id)} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr>
+              <th className="xl-rowhead" data-col="rowhead" aria-label="انتخاب" />
+              {head('date', 'تاریخ')}
+              {head('doc', 'سند')}
+              {head('desc', 'شرح')}
+              {showAccount && head('account', 'حساب')}
+              {showAnalytic && head('analytic', 'تفصیلی')}
+              {showCenter && head('center', 'مرکز هزینه')}
+              {head('debit', 'بدهکار', 'num ab-pin ab-pin--debit')}
+              {head('credit', 'بستانکار', 'num ab-pin ab-pin--credit')}
+              {head('bal', 'مانده', 'num ab-pin ab-pin--bal')}
+            </tr>
+          </thead>
+          <tbody>
+            {offset === 0 && (
+              <tr className="ab-carry">
+                <td className="xl-rowhead card-hide" />
+                <td className="card-title" colSpan={labelSpan}>
+                  مانده‌ی اول دوره
+                </td>
+                <td className="card-hide ab-pin ab-pin--debit" />
+                <td className="card-hide ab-pin ab-pin--credit" />
+                <td className="num ab-pin ab-pin--bal" data-label="مانده">
+                  <SideAmount
+                    raw={current ? ledgerRaw(Number(current.opening_balance), node.account_type) : Number(node.opening)}
+                    long
+                  />
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {offset === 0 && (
-                <tr className="ab-carry">
-                  <td className="card-full" colSpan={99}>
-                    مانده‌ی اول دوره: <SideAmount raw={ledgerRaw(Number(current.opening_balance), node.account_type)} long />
-                  </td>
-                </tr>
-              )}
-              {lines.map((l, i) => (
-                <tr
-                  key={l.line_id}
-                  id={`ab-line-${i}`}
-                  className={`acc-row--clickable${i === active ? ' is-active' : ''}`}
-                  onClick={() => {
-                    onRow(i)
-                    onOpenEntry(l.entry_id)
-                  }}
-                >
-                  <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
-                  <td className="card-title" data-label="سند">
-                    {l.entry_number != null ? faInt(l.entry_number) : '—'}
-                    {l.entry_status === 'temporary' && <span className="ab-badge ab-badge--muted">موقت</span>}
-                  </td>
-                  <td data-label="شرح" className="ab-desc">
-                    {l.description || '—'}
-                  </td>
-                  {showAccount && (
-                    <td data-label="حساب">
-                      <span dir="ltr">{l.account_code}</span> {l.account_name}
-                    </td>
-                  )}
-                  {showAnalytic && <td data-label="تفصیلی">{l.analytic_name ?? '—'}</td>}
-                  {showCenter && <td data-label="مرکز هزینه">{l.cost_center_name ?? '—'}</td>}
-                  <td data-label="بدهکار" className="num">
-                    {faAmount(l.debit)}
-                  </td>
-                  <td data-label="بستانکار" className="num">
-                    {faAmount(l.credit)}
-                  </td>
-                  <td data-label="مانده" className="num">
-                    <SideAmount raw={ledgerRaw(Number(l.balance), node.account_type)} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            )}
+            {error
+              ? status(error, true)
+              : !current
+                ? status('در حال بارگذاری…')
+                : total === 0
+                  ? status('این حساب در این دامنه گردشی ندارد.')
+                  : lines.map((l, i) => {
+                      const on = selected.has(l.line_id)
+                      return (
+                        <tr
+                          key={l.line_id}
+                          id={`ab-line-${i}`}
+                          className={`acc-row--clickable${i === active ? ' is-active' : ''}${on ? ' is-selected' : ''}`}
+                          onClick={() => {
+                            onRow(i)
+                            onOpenEntry(l.entry_id)
+                          }}
+                        >
+                          <td className="xl-rowhead card-hide">
+                            <button
+                              type="button"
+                              tabIndex={-1}
+                              className="xl-rowhead-btn"
+                              aria-pressed={on}
+                              aria-label={`انتخابِ ردیفِ ${faInt(offset + i + 1)}`}
+                              onClick={(ev) => {
+                                //: شماره‌ی ردیف فقط انتخاب می‌کند؛ کلیکِ بقیه‌ی ردیف سند را باز می‌کند.
+                                ev.stopPropagation()
+                                onRow(i)
+                                click(order, l.line_id, modsOf(ev))
+                              }}
+                            >
+                              {faInt(offset + i + 1)}
+                            </button>
+                          </td>
+                          <td data-label="تاریخ">{formatJalali(l.entry_date)}</td>
+                          <td className="card-title" data-label="سند">
+                            {l.entry_number != null ? faInt(l.entry_number) : '—'}
+                            {l.entry_status === 'temporary' && <span className="ab-badge ab-badge--muted">موقت</span>}
+                          </td>
+                          <td data-label="شرح" className="card-wide" title={l.description || undefined}>
+                            {l.description || '—'}
+                          </td>
+                          {showAccount && (
+                            <td data-label="حساب" title={`${l.account_code} ${l.account_name}`}>
+                              <span dir="ltr">{l.account_code}</span> {l.account_name}
+                            </td>
+                          )}
+                          {showAnalytic && <td data-label="تفصیلی">{l.analytic_name ?? '—'}</td>}
+                          {showCenter && <td data-label="مرکز هزینه">{l.cost_center_name ?? '—'}</td>}
+                          <td data-label="بدهکار" className="num ab-pin ab-pin--debit">
+                            {faAmount(l.debit)}
+                          </td>
+                          <td data-label="بستانکار" className="num ab-pin ab-pin--credit">
+                            {faAmount(l.credit)}
+                          </td>
+                          <td data-label="مانده" className="num ab-pin ab-pin--bal">
+                            <SideAmount raw={ledgerRaw(Number(l.balance), node.account_type)} />
+                          </td>
+                        </tr>
+                      )
+                    })}
+          </tbody>
+          <tfoot>
+            <tr className="ab-total">
+              <td className="xl-rowhead card-hide" />
+              <td className="card-title" colSpan={labelSpan} title="گردشِ کلِ بازه‌ی انتخاب‌شده — نه فقط همین صفحه">
+                جمعِ بازه {total > LEDGER_PAGE && <small>(همه‌ی {faInt(total)} ردیف)</small>}
+              </td>
+              <td className="num ab-pin ab-pin--debit" data-label="گردش بدهکار">
+                {faAmount(node.period_debit)}
+              </td>
+              <td className="num ab-pin ab-pin--credit" data-label="گردش بستانکار">
+                {faAmount(node.period_credit)}
+              </td>
+              <td className="num ab-pin ab-pin--bal" data-label="مانده‌ی پایان دوره">
+                <SideAmount raw={Number(node.closing)} long />
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {picked.length > 0 && (
+        <SelectionBar count={picked.length} unit="ردیف" onClear={clear}>
+          <span>
+            بدهکار <b className="num">{faAmount(sumDebit)}</b>
+          </span>
+          <span>
+            بستانکار <b className="num">{faAmount(sumCredit)}</b>
+          </span>
+          <span>
+            خالص <SideAmount raw={sumDebit - sumCredit} long />
+          </span>
+        </SelectionBar>
       )}
       {current && total > 0 && (
         <p className="ab-keys">
           <kbd>↑</kbd>
-          <kbd>↓</kbd> ردیف · <kbd>Enter</kbd> سند · <kbd>PgUp</kbd>
+          <kbd>↓</kbd> ردیف · <kbd>Shift+↑↓</kbd> یا <kbd>Space</kbd> انتخاب · <kbd>Enter</kbd> سند · <kbd>PgUp</kbd>
           <kbd>PgDn</kbd> صفحه · <kbd>Esc</kbd> برگشت به درخت
         </p>
       )}
