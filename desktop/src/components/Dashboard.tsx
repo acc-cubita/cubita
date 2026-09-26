@@ -727,7 +727,7 @@ export function Dashboard({
           {page === 'accountbrowse' && <AccountBrowsePage token={token} onNavigate={navigate} />}
           {page === 'balancereport' && <BalanceReportPage token={token} onNavigate={navigate} />}
           {page === 'ledgerreport' && <LedgerReportPage token={token} onNavigate={navigate} />}
-          {page === 'integrity' && <IntegrityPage token={token} />}
+          {page === 'integrity' && <IntegrityPage token={token} onNavigate={navigate} />}
           {page === 'entrylist' && <EntryListPage token={token} />}
           {page === 'recurringlist' && <RecurringListPage token={token} />}
           {page === 'budgetlist' && <BudgetListPage token={token} onNavigate={navigate} />}

@@ -14610,3 +14610,70 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .eb-more,
   .lr-keys { display: none !important; }
 }
+
+/* ── «بررسی یکپارچگی» (تمِ اکسلی): یک گرید برای همه‌ی بررسی‌ها ──
+ * هر بررسی ردیفِ سرگروه (وضعیت، عنوان، شمار و شدت) و یافته‌هایش زیرش؛ «جمعِ دفتر» با نتیجه‌ی کل در پانویسِ چسبنده.
+ * برچسب و توضیحِ یافته می‌شکنند نه بریده می‌شوند — این گزارشِ اشکال است و متنِ کامل همان چیزی است که باید خوانده شود. */
+.page .ef-table-wrap > table.ig-sheet { table-layout: fixed; min-inline-size: 760px; }
+.ig-sheet col.ig-c-num { width: 40px; }
+.ig-sheet col.ig-c-label { width: 22%; }
+.ig-sheet col.ig-c-amt { width: 104px; }
+.ig-sheet col.ig-c-go { width: 112px; }
+.page .ef-table-wrap > table.ig-sheet td { white-space: normal; overflow-wrap: anywhere; }
+.page .ef-table-wrap > table.ig-sheet td.num { white-space: nowrap; }
+.page .ef-table-wrap > table.ig-sheet td.xl-rowhead { color: var(--text-muted); font-size: var(--fs-xs); text-align: center; }
+/* سرگروهِ بررسی: ته‌رنگِ سرستون و خطِ پررنگ بالایش؛ بررسیِ سالم بی ته‌رنگ تا یافته‌ی واقعی چشم را بگیرد. */
+.page .ef-table-wrap > table.ig-sheet > tbody > tr.ig-check > td {
+  padding-block: 7px;
+  border-block-start: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--xl-head) 40%, var(--surface));
+}
+.page .ef-table-wrap > table.ig-sheet > tbody > tr.ig-check--ok > td { border-block-start-color: var(--xl-line); background: var(--surface); }
+.page .ef-table-wrap > table.ig-sheet > tbody > tr.ig-check:first-child > td { border-block-start-color: transparent; }
+.page .ef-table-wrap > table.ig-sheet > tbody > tr.ig-check.acc-row--clickable:hover > td { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.ig-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ig-toggle { display: inline-grid; flex: 0 0 16px; place-items: center; color: var(--text-muted); transition: transform 0.15s; }
+.ig-check[aria-expanded='false'] .ig-toggle { transform: rotate(90deg); }
+.ig-icon { flex: 0 0 auto; }
+.ig-check--ok .ig-icon { color: var(--success); }
+.ig-check--error .ig-icon { color: var(--danger); }
+.ig-check--warning .ig-icon { color: var(--warning); }
+.ig-title { color: var(--text-h); font-size: var(--fs-sm); }
+.ig-check--ok .ig-title { font-weight: 600; }
+.ig-desc { margin: 3px 0 0; padding-inline-start: 43px; color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.7; }
+/* کنش‌های یافته: دکمه‌های کوچکِ «سند / کاردکس / دفترِ حساب»، همان دکمه‌های «رفتن به»ِ سربرگ. */
+.ig-go { display: flex; flex-wrap: wrap; gap: 4px; }
+.ig-go button {
+  min-height: 24px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.ig-go button:hover { border-color: var(--accent); color: var(--text-h); }
+.page .lr-scroll:focus-within > table.ig-sheet > tbody > tr.is-active > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.lr-scroll:focus .ig-sheet > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.jg-head-actions .cc-presets.ig-view { flex-wrap: nowrap; }
+
+@media (max-width: 760px) {
+  /* کارت: سرگروهِ بررسی کارتِ تمام‌عرضِ ته‌رنگی، یافته کارتِ معمولی؛ زمینه و خط و قابِ فوکوسِ گرید برداشته. */
+  .page .ef-table-wrap > table.ig-sheet { min-inline-size: 0; }
+  .ig-desc { padding-inline-start: 0; }
+  .page .ef-table-wrap.lr-scroll:is(*, :focus-within) > table.ig-sheet > tbody > tr:is(.ig-check, .is-active, :hover) > td {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .ig-sheet > tbody > tr.ig-check { border-color: var(--border-strong); background: color-mix(in srgb, var(--xl-head) 40%, var(--surface)); }
+  .ig-sheet > tbody > tr.ig-check--ok { border-color: var(--border); background: var(--surface); }
+  .ig-sheet > tbody > tr.ig-finding .ig-go { justify-content: flex-start; }
+}
+
+@media print {
+  .ig-view,
+  .ig-go { display: none !important; }
+  .page .ef-table-wrap > table.ig-sheet { min-inline-size: 0; }
+}
