@@ -354,6 +354,57 @@ export function RangeBar({ range, extra }: { range: RangeState; extra?: ReactNod
   )
 }
 
+/**
+ * همان بازه به‌صورتِ خانه‌های سربرگِ اکسلی (`jh-field`، درونِ `.jh-bar`): پیش‌تنظیم‌ها یک خانه، و «از / تا»
+ * دو خانه‌ی **همیشه‌دیده** — تا حسابدار بازه‌ی واقعیِ «امسال» یا «این فصل» را هم ببیند، نه فقط نامش. ویرایشِ هر
+ * تاریخ بازه را «دلخواه» می‌کند و از همان دو تاریخِ فعلی شروع می‌شود؛ پاک‌کردن یعنی بی‌کران (از ابتدا / تا امروز).
+ * پیش‌تنظیم‌ها کلاسِ `cc-presets`ِ نوارِ قدیمی را نگه می‌دارند (آزمون‌ها و نمای ذخیره‌شده همان را می‌شناسند).
+ */
+export function RangeCells({ range }: { range: RangeState }) {
+  const edit = (patch: Partial<{ from: string; to: string }>) => {
+    range.setCustom({ from: range.from ?? '', to: range.to ?? '', ...patch })
+    range.setPreset('custom')
+  }
+  return (
+    <>
+      <div className="jh-field rh-range">
+        <span className="jh-label">بازه</span>
+        <div className="cc-presets rh-seg" role="group" aria-label="بازه‌ی تاریخ">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              aria-pressed={range.preset === p.key}
+              className={range.preset === p.key ? 'is-active' : ''}
+              onClick={() => range.setPreset(p.key)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="jh-field">
+        <span className="jh-label">از تاریخ</span>
+        <JalaliDatePicker
+          value={range.from ?? ''}
+          onChange={(iso) => edit({ from: iso })}
+          placeholder="از ابتدا"
+          clearLabel="از ابتدا"
+        />
+      </div>
+      <div className="jh-field">
+        <span className="jh-label">تا تاریخ</span>
+        <JalaliDatePicker
+          value={range.to ?? ''}
+          onChange={(iso) => edit({ to: iso })}
+          placeholder="تا امروز"
+          clearLabel="تا امروز"
+        />
+      </div>
+    </>
+  )
+}
+
 /** جمعِ بدهکار/بستانکارِ یک پیش‌نمایش، با نشانِ توازن. سندی که جمعش نمی‌خواند
  *  هرگز نباید صادر شود، پس عدم‌توازن باید *پیش* از دکمه دیده شود. */
 export function BalanceFooter({ debit, credit }: { debit: number; credit: number }) {
