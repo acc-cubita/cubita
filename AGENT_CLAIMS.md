@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `pages/accounting/{LedgerReportPage,ReportPages}.tsx` (+تست‌ها، `Daybook.test.tsx`)، `lib/ledgerReport.ts` (+تست)، `Dashboard.tsx`، `App.css` (`lr-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «گزارش دفتر» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `components/{ReportCatalog,Reports,ReportViews,Dashboard}.tsx`، `pages/accounting/{VatPage,ReportPages}.tsx` (+تست)، `lib/vatSheet.ts` (+تست)، `App.css` (`rc-*`، `vat-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «همه‌ی گزارش‌ها» فهرستِ اکسلی + «مالیات بر ارزش افزوده» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `components/{Reports,ReportViews,KardexTable}.tsx` (+تست‌ها)، `lib/{reportSheets,reportCatalog}.ts` (+تست‌ها)، `BalanceReportPage.tsx` (`xl-check`)، `App.css` (`rp-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | صفحه‌ی «گزارش‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `BalanceReportPage.tsx` (+test)، `lib/balanceReport.ts` (+test)، `ReportPages.tsx`، `kit.tsx` (`RangeCells` با `years`)، `AccountBrowser.tsx`، `Dashboard.tsx`، `App.css` (`br-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «گزارش ترازها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |

@@ -14363,3 +14363,107 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .rp-inv :is(th, td).rp-pin { position: static; box-shadow: none; }
   .page .ef-table-wrap > table.rp-inv { min-inline-size: 0; }
 }
+
+/* ── «گزارش دفتر» (تمِ اکسلی) ──
+ * سطرِ اولِ سربرگ: دفتر (روزنامه/کل/معین/تفصیلی) و پارامترِ همان دفتر. روزنامه یک گرید با سرگروهِ هر سند است؛
+ * کل/معین/تفصیلی گریدِ گردشِ «مرور حساب‌ها» با ستون‌های مبلغِ میخ‌شده. */
+.jh-bar--report > .lr-row--book { --rh-cols: minmax(0, 1.3fr) minmax(0, 2fr); }
+/* دفترِ تفصیلی: خانه‌ی «تفصیلی» به سطرِ اول رفته و نوارِ فیلتر پنج خانه دارد. */
+.jh-bar--report > .rh-row--filters.lr-filters5 { --rh-cols: repeat(3, minmax(0, 1fr)) minmax(0, 1.2fr) minmax(0, 0.9fr); }
+@container (max-width: 900px) {
+  .jh-bar.jh-bar--report > .lr-row--book > .jh-field:nth-child(2) { border-inline-start: 1px solid var(--xl-line); }
+}
+@container (max-width: 560px) {
+  .jh-bar--report > .lr-row--book { --rh-cols: minmax(0, 1fr); }
+  .jh-bar.jh-bar--report > .lr-row--book > .jh-field.jh-field { border-inline-start: 0; }
+  .jh-bar.jh-bar--report > .lr-row--book > .jh-field:nth-child(2) { border-block-start: 1px solid var(--xl-line); }
+}
+
+/* روزنامه */
+.page .ef-table-wrap > table.lr-daybook { table-layout: fixed; }
+.lr-daybook col.lr-c-acct { width: 32%; }
+.lr-daybook col.lr-c-fx { width: 130px; }
+.lr-daybook col.lr-c-track { width: 150px; }
+.lr-daybook col.lr-c-amt { width: 128px; }
+.page .ef-table-wrap > table.lr-daybook td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* سرگروهِ سند: ته‌رنگِ سرستون، شماره پررنگ، تاریخ و منشأ و شرح کم‌رنگ؛ ردیف‌های سند زیرش تورفته. */
+.page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-entry > td {
+  padding-block: 6px;
+  border-block-start: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--xl-head) 40%, var(--surface));
+  white-space: normal;
+}
+.page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-entry:first-child > td { border-block-start-color: transparent; }
+.page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-entry:hover > td { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+/* هر تکه جدا می‌ماند (`isolate`): بی‌این، شماره‌ی سند و تاریخ دو عددِ پشتِ‌هم‌اند و الگوریتمِ دوجهته یکی‌شان می‌کرد
+ * («۱۵۹۱۴۰۵/۰۷/۰۳»). */
+.lr-entry td > * { unicode-bidi: isolate; }
+.lr-entry td > * + * { margin-inline-start: 10px; }
+.lr-entry-no { color: var(--text-h); }
+.lr-entry-date { font-variant-numeric: tabular-nums; }
+.lr-entry-date,
+.lr-entry-src,
+.lr-entry-desc { color: var(--text-muted); font-size: var(--fs-xs); }
+.lr-entry-desc::before { content: '— '; }
+.page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-line > td:first-child { padding-inline-start: 22px; }
+.page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-void > td { color: var(--text-muted); }
+.page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-line.lr-void > td.num { text-decoration: line-through; }
+.rp-table > tbody > tr.lr-entry[tabindex]:focus-visible > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.lr-foot-note { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; }
+.page .ef-table-wrap > table.rp-table > tfoot td .xl-check { margin-inline-start: 8px; }
+
+/* دفترِ حساب: کفِ عرض با هر ستونِ اختیاری بزرگ می‌شود؛ سه ستونِ مبلغ سمتِ چپِ قاب میخ‌اند. */
+.lr-scroll { outline: none; }
+.lr-scroll:focus-visible { box-shadow: 0 0 0 2px var(--accent-bg); }
+.page .ef-table-wrap > table.lr-ledger {
+  table-layout: fixed;
+  min-inline-size: calc(40px + 100px + 88px + 200px + var(--lr-opt, 0) * 150px + 2 * 112px + 128px);
+}
+.lr-ledger col.lr-c-rowhead { width: 40px; }
+/* شماره‌ی سند و نشانِ «موقت» کنارِ هم جا شوند. */
+.lr-ledger col.lr-c-doc { width: 100px; }
+.lr-ledger col.lr-c-date { width: 88px; }
+.lr-ledger col.lr-c-account { width: 180px; }
+.lr-ledger col.lr-c-fx { width: 130px; }
+.lr-ledger col.lr-c-track { width: 150px; }
+.lr-ledger col.lr-c-dc { width: 112px; }
+.lr-ledger col.lr-c-bal { width: 128px; }
+.page .ef-table-wrap > table.lr-ledger td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page .ef-table-wrap > table.lr-ledger td.xl-rowhead { padding: 0; }
+.lr-ledger > tbody > tr { scroll-margin-block: 40px 40px; }
+.lr-badge { margin-inline-start: 4px; padding: 0 6px; border-radius: 999px; background: var(--warning-bg); color: var(--text-h); font-size: 0.68rem; }
+.page .ef-table-wrap > table.lr-ledger > tbody > tr.lr-carry > td { background: color-mix(in srgb, var(--xl-head) 45%, var(--surface)); color: var(--text-muted); font-size: var(--fs-xs); }
+.page .lr-scroll:focus-within > table.lr-ledger > tbody > tr.is-active > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+.page .ef-table-wrap.lr-scroll > table.lr-ledger > tbody > tr.is-selected > td:not(.xl-rowhead) { background: var(--accent-bg); }
+.lr-scroll:focus .lr-ledger > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.lr-ledger :is(th, td).lr-pin { position: sticky; z-index: 1; }
+.lr-ledger .lr-pin--bal { inset-inline-end: 0; }
+.lr-ledger .lr-pin--credit { inset-inline-end: 128px; }
+.lr-ledger .lr-pin--debit { inset-inline-end: 240px; box-shadow: 4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent); }
+/* زمینه‌ی مات برای خانه‌ی میخ‌شده در هر حالِ ردیف — `--accent-bg` نیمه‌شفاف است و ستونِ زیرش پیدا می‌شد. */
+.page .ef-table-wrap > table.lr-ledger > tbody > tr > td.lr-pin { background: var(--surface); }
+.page .ef-table-wrap > table.lr-ledger > tbody > tr:hover > td.lr-pin { background: linear-gradient(color-mix(in srgb, var(--accent) 5%, transparent), color-mix(in srgb, var(--accent) 5%, transparent)), var(--surface); }
+.page .lr-scroll:focus-within > table.lr-ledger > tbody > tr.is-active > td.lr-pin { background: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)), var(--surface); }
+.page .ef-table-wrap.lr-scroll > table.lr-ledger > tbody > tr.is-selected > td.lr-pin { background: linear-gradient(var(--accent-bg), var(--accent-bg)), var(--surface); }
+.page .ef-table-wrap > table.lr-ledger > tbody > tr.lr-carry > td.lr-pin { background: linear-gradient(color-mix(in srgb, var(--xl-head) 45%, transparent), color-mix(in srgb, var(--xl-head) 45%, transparent)), var(--surface); }
+.lr-scroll:focus .lr-ledger > tbody > tr.is-active > td.lr-pin--debit {
+  box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent), 4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+@media (max-width: 760px) {
+  /* روزنامه و دفترِ حساب کارت می‌شوند؛ سرگروهِ سند کارتِ تمام‌عرض، میخ و قابِ فوکوس برداشته. */
+  .page .ef-table-wrap > table.lr-ledger { min-inline-size: 0; }
+  .lr-ledger :is(th, td).lr-pin { position: static; box-shadow: none; }
+  .page .ef-table-wrap.lr-scroll:is(*, :focus-within) > table.lr-ledger > tbody > tr:is(:hover, .is-active, .is-selected, .lr-carry) > td:not(.lr-none),
+  .page .ef-table-wrap.lr-scroll:is(*, :focus-within) > table.lr-ledger > tbody > tr > td.lr-pin {
+    padding: 1px 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .lr-ledger > tbody > tr.is-selected { background: var(--accent-bg); }
+  .page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-line > td:first-child { padding-inline-start: 0; }
+  .page .ef-table-wrap > table.lr-daybook > tbody > tr.lr-entry > td { border: 0; background: transparent; }
+  .lr-daybook > tbody > tr.lr-entry { border-color: var(--border-strong); background: color-mix(in srgb, var(--xl-head) 40%, var(--surface)); }
+  .lr-keys { display: none; }
+}
