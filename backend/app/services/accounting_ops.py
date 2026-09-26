@@ -1009,6 +1009,40 @@ def _permanent_balances(
     return sorted(out, key=lambda r: (r[0].code, str(r[1] or ""), str(r[2] or "")))
 
 
+def _closing_line_description(row: dict) -> str:
+    """شرحِ ردیفِ اختتامیه — پیش‌نمایش و صدور هر دو از همین."""
+    return f"بستنِ {row['account_name']}" + (f" / {row['analytic_name']}" if row["analytic_name"] else "")
+
+
+def _opening_line_description(row: dict) -> str:
+    """شرحِ ردیفِ افتتاحیه — پیش‌نمایش و صدور هر دو از همین."""
+    return f"افتتاحِ {row['account_name']}" + (f" / {row['analytic_name']}" if row["analytic_name"] else "")
+
+
+def _balancing_line(db: Session, role: str, default_name: str, rows: list[dict]) -> dict:
+    """خطِ توازنِ اختتامیه/افتتاحیه برای **پیش‌نمایش**.
+
+    حساب از نقشِ سیستمی، و اگر هنوز ساخته نشده همان کد و نامی که صدور می‌سازد — پیش‌نمایش حسابی نمی‌سازد. مبلغ خالصِ
+    ردیف‌هاست، مثلِ صدور (قیدِ «ردیفِ یک‌طرفه»).
+    """
+    account = db.query(Account).filter(Account.system_role == role).first()
+    total_debit = sum((Decimal(r["debit"]) for r in rows), Decimal(0))
+    total_credit = sum((Decimal(r["credit"]) for r in rows), Decimal(0))
+    net = total_debit - total_credit
+    debit = Decimal(0) if net > 0 else -net
+    credit = net if net > 0 else Decimal(0)
+    return {
+        "balance_account_code": account.code if account else cc.DEFAULT_CODE_BY_ROLE[role],
+        "balance_account_name": account.name if account else default_name,
+        "balance_description": default_name,
+        "balance_debit": debit,
+        "balance_credit": credit,
+        #: جمعِ سند با خطِ توازن — همان عددی که نوارِ پایینِ سند نشان می‌دهد.
+        "total_debit": total_debit + debit,
+        "total_credit": total_credit + credit,
+    }
+
+
 def closing_entry_preview(db: Session, as_of: date_) -> dict:
     """سندِ اختتامیه: بستنِ همه‌ی حساب‌های دائمی در پایانِ سال."""
     balances = _permanent_balances(db, as_of)
@@ -1037,12 +1071,14 @@ def closing_entry_preview(db: Session, as_of: date_) -> dict:
                 "balance": raw,
             }
         )
+        rows[-1]["description"] = _closing_line_description(rows[-1])
     total = sum((r["debit"] + r["credit"] for r in rows), Decimal(0))
     open_pnl = _open_pnl_total(db, as_of)
     return {
         "as_of": as_of,
         "rows": rows,
         "total": total,
+        **_balancing_line(db, cc.CLOSING_ACCOUNT, "حساب اختتامیه", rows),
         # اگر درآمد/هزینه هنوز باز است، اختتامیه زودهنگام است.
         "open_pnl_total": open_pnl,
         "temporary_count": _temporary_count(db, None, as_of),
@@ -1085,10 +1121,7 @@ def issue_closing_entry(db: Session, user: User, as_of: date_, description: str)
             cost_center_id=r["cost_center_id"],
             debit=r["debit"],
             credit=r["credit"],
-            description=(
-                f"بستنِ {r['account_name']}"
-                + (f" / {r['analytic_name']}" if r["analytic_name"] else "")
-            ),
+            description=r["description"],
         )
         for r in preview["rows"]
     ]
@@ -1177,7 +1210,9 @@ def opening_entry_preview(db: Session, as_of: date_, source_date: date_) -> dict
                 "balance": debit - credit,
             }
         )
+        rows[-1]["description"] = _opening_line_description(rows[-1])
     rows.sort(key=lambda r: (r["account_code"], r["analytic_code"] or "", r["cost_center_name"] or ""))
+    existing = _opening_from(db, closing.id)
     return {
         "as_of": as_of,
         "source_date": source_date,
@@ -1185,7 +1220,23 @@ def opening_entry_preview(db: Session, as_of: date_, source_date: date_) -> dict
         "closing_entry_id": closing.id,
         "closing_entry_number": closing.number,
         "total": sum((r["debit"] + r["credit"] for r in rows), Decimal(0)),
+        **_balancing_line(db, cc.OPENING_ACCOUNT, "حساب افتتاحیه", rows),
+        #: افتتاحیه‌ای که از همین اختتامیه صادر شده — صدورِ دوباره ۴۰۹ می‌گیرد؛ پیش‌نمایش از قبل می‌گوید.
+        "existing_opening_number": existing.number if existing else None,
     }
+
+
+def _opening_from(db: Session, closing_entry_id: UUID) -> JournalEntry | None:
+    """افتتاحیه‌ی ابطال‌نشده‌ای که از روی این اختتامیه صادر شده — گاردِ «افتتاحیه‌ی تکراری» و پیش‌نمایش هر دو از همین."""
+    return (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.source_type == "opening_entry",
+            JournalEntry.reverses_entry_id == closing_entry_id,
+            JournalEntry.voided_at.is_(None),
+        )
+        .first()
+    )
 
 
 def issue_opening_entry(
@@ -1208,15 +1259,7 @@ def issue_opening_entry(
     #:
     #: مسدودکننده است نه هشدار: دوبرابرشدنِ خاموشِ ترازنامه همان‌قدر بنیادی است که
     #: گاردِ «سود و زیان هنوز باز است» چند خط بالاتر.
-    existing = (
-        db.query(JournalEntry)
-        .filter(
-            JournalEntry.source_type == "opening_entry",
-            JournalEntry.reverses_entry_id == preview["closing_entry_id"],
-            JournalEntry.voided_at.is_(None),
-        )
-        .first()
-    )
+    existing = _opening_from(db, preview["closing_entry_id"])
     if existing is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -1235,10 +1278,7 @@ def issue_opening_entry(
             cost_center_id=r["cost_center_id"],
             debit=r["debit"],
             credit=r["credit"],
-            description=(
-                f"افتتاحِ {r['account_name']}"
-                + (f" / {r['analytic_name']}" if r["analytic_name"] else "")
-            ),
+            description=r["description"],
         )
         for r in preview["rows"]
     ]

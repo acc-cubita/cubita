@@ -212,3 +212,49 @@ def test_voiding_the_opening_frees_the_way(db, user):
 
     again = ops.issue_opening_entry(db, user, OPEN, CLOSE, "")
     assert again["entry_id"] != first["entry_id"]
+
+
+# ── پیش‌نمایش عیناً سند ───────────────────────────────────────────────────────
+
+
+def _entry_lines(db, entry_id) -> list[tuple[str, Decimal, Decimal]]:
+    entry = db.get(JournalEntry, entry_id)
+    return sorted((line.description, Decimal(line.debit), Decimal(line.credit)) for line in entry.lines)
+
+
+def _preview_lines(preview: dict) -> list[tuple[str, Decimal, Decimal]]:
+    rows = [(r["description"], Decimal(r["debit"]), Decimal(r["credit"])) for r in preview["rows"]]
+    rows.append((preview["balance_description"], Decimal(preview["balance_debit"]), Decimal(preview["balance_credit"])))
+    return sorted(rows)
+
+
+def test_the_closing_preview_is_the_issued_entry(db, user):
+    """رابط ردیف‌ها، شرحشان و خطِ «حساب اختتامیه» را از پیش‌نمایش نشان می‌دهد؛ صدور باید همان را بنویسد."""
+    account = _receivable(db)
+    alpha = _analytic(db, user, "A1", "شرکت آلفا")
+    _books(db, user, [JournalLine(account_id=account.id, debit=Decimal(20), credit=0, analytic_id=alpha.id)], 20)
+
+    preview = ops.closing_entry_preview(db, CLOSE)
+    assert preview["total_debit"] == preview["total_credit"]
+
+    out = ops.issue_closing_entry(db, user, CLOSE, "")
+    assert _entry_lines(db, out["entry_id"]) == _preview_lines(preview)
+    #: خطِ توازنِ پیش‌نمایش همان حسابی است که صدور به آن می‌زند.
+    closing = db.query(Account).filter(Account.system_role == cc.CLOSING_ACCOUNT).one()
+    assert preview["balance_account_code"] == closing.code
+    assert any("شرکت آلفا" in r["description"] for r in preview["rows"])
+
+
+def test_the_opening_preview_is_the_issued_entry_and_knows_a_repeat(db, user):
+    """افتتاحیه هم عیناً پیش‌نمایشش است؛ و بعد از صدور، پیش‌نمایش شماره‌ی افتتاحیه‌ی موجود را می‌گوید (صدورِ دوباره ۴۰۹)."""
+    cash = get_account(db, cc.CASH)
+    _books(db, user, [JournalLine(account_id=cash.id, debit=Decimal(9_000), credit=0)], 9_000)
+    ops.issue_closing_entry(db, user, CLOSE, "")
+
+    preview = ops.opening_entry_preview(db, OPEN, CLOSE)
+    assert preview["existing_opening_number"] is None
+    out = ops.issue_opening_entry(db, user, OPEN, CLOSE, "")
+    assert _entry_lines(db, out["entry_id"]) == _preview_lines(preview)
+
+    again = ops.opening_entry_preview(db, OPEN, CLOSE)
+    assert again["existing_opening_number"] == out["number"]
