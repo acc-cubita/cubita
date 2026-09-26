@@ -1,8 +1,7 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { LayoutList } from 'lucide-react'
+import { ArrowUpLeft, LayoutList, Search } from 'lucide-react'
 
 import { SectionCard } from './SectionCard'
-import { LaunchIcon } from './LaunchIcon'
 import { useNavSection } from './navContext'
 import { buildLaunchers } from '../lib/launchers'
 import { useExperienceMode } from '../lib/experienceMode'
@@ -12,6 +11,10 @@ import type { MeResponse } from '../api'
 
 /**
  * «همه‌ی گزارش‌ها» — سرِ صفحه‌ی «گزارش‌ها». داده و ترتیب از `lib/reportCatalog.ts`.
+ *
+ * **فهرستِ اکسلی:** هر دسته یک ستون با سرستونِ خاکستری و هر گزارش یک خانه، با خطوطِ ظریفِ جدول — نه فهرستِ آزادِ
+ * آیکون‌دار. گزارشی که صفحه‌ی دیگری باز می‌کند پیکانِ کوچک دارد؛ بقیه همین‌جا زیرِ فهرست باز می‌شوند. روی همین صفحه
+ * این فهرست **تنها** انتخاب‌گرِ دوازده گزارش است (`Reports` با `picker={false}`)، تا دو انتخاب‌گرِ هم‌معنا زیرِ هم نمانند.
  *
  * **صفحه‌کلید:** تایپ صافی می‌کند؛ Enter در کادر اولین نتیجه را باز می‌کند؛ پیکانِ
  * پایین به فهرست می‌رود و پیکان‌ها بینِ ردیف‌ها حرکت می‌کنند؛ Escape به کادر برمی‌گردد.
@@ -89,18 +92,26 @@ export function ReportCatalog({
     <SectionCard
       icon={LayoutList}
       title="همه‌ی گزارش‌ها"
-      description="هر گزارشی که در کوبیتا هست، یک‌جا — از هر ماژولی که باشد."
+      description="هر گزارشی که در کوبیتا هست، یک‌جا — از هر ماژولی که باشد. گزارشِ پیکان‌دار صفحه‌ی خودش را باز می‌کند."
+      actions={
+        <div className="jg-head-actions">
+        <div className={`jg-find rc-find${query ? ' has-query' : ''}`} role="search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            ref={inputRef}
+            type="search"
+            className="rc-filter"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onFilterKey}
+            placeholder="جست‌وجوی گزارش…"
+            aria-label="جست‌وجوی گزارش"
+          />
+        </div>
+        </div>
+      }
     >
-      <input
-        ref={inputRef}
-        type="search"
-        className="rc-filter"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={onFilterKey}
-        placeholder="جست‌وجوی گزارش…"
-        aria-label="جست‌وجوی گزارش"
-      />
+      <div className="rc-wrap">
       <div className="rc-groups" ref={listRef} onKeyDown={onListKey}>
         {shown.map((g) => (
           //: `div` و نه `section`: پوسته‌ی «مرحله‌ای» هر `section`ِ داخلِ `.page` را کارتِ
@@ -110,16 +121,18 @@ export function ReportCatalog({
             <ul className="rc-list">
               {g.entries.map((e) => {
                 const on = e.id === current
+                const away = e.page !== 'reports'
                 return (
                   <li key={e.id}>
                     <button
                       type="button"
                       className={`rc-item${on ? ' active' : ''}`}
                       aria-current={on ? 'page' : undefined}
+                      title={away ? 'صفحه‌ی خودش باز می‌شود' : undefined}
                       onClick={() => open(e)}
                     >
-                      <LaunchIcon icon={e.icon} size={15} />
                       <span>{e.label}</span>
+                      {away && <ArrowUpLeft size={12} className="rc-away" aria-hidden="true" />}
                     </button>
                   </li>
                 )
@@ -130,6 +143,7 @@ export function ReportCatalog({
         {shown.length === 0 && (
           <p className="muted rc-empty">گزارشی با «{query.trim()}» پیدا نشد. واژه‌ی کوتاه‌تری امتحان کنید.</p>
         )}
+      </div>
       </div>
     </SectionCard>
   )

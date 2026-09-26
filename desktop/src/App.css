@@ -13051,76 +13051,79 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .exp-choice-desc { color: var(--text-muted); font-size: var(--fs-sm); padding-inline-start: 22px; }
 .exp-note { margin-block-start: 10px; font-size: var(--fs-sm); }
 
-/* ── «همه‌ی گزارش‌ها» (ReportCatalog) — سرِ صفحه‌ی «گزارش‌ها» ─────────────────────
-   دسته‌ها در شبکه‌ی خودچین می‌نشینند تا روی ۱۴۴۰ دو ردیف شوند نه هفت. زیرِ ۷۶۰px
-   ردیف‌ها چیپ می‌شوند: سی‌وچند ردیفِ تمام‌عرض گزارشِ زیرِ فهرست را از دید بیرون می‌برد. */
-.rc-filter {
-  width: 100%;
-  max-width: 420px;
-  margin-block-end: 12px;
-}
+/* ── «همه‌ی گزارش‌ها» (ReportCatalog) — سرِ صفحه‌ی «گزارش‌ها»، به‌شکلِ فهرستِ اکسلی ─────────────
+   هر دسته یک ستون با سرستونِ خاکستری (`jh-label`)، هر گزارش یک خانه با خطِ جدول میانِ خانه‌ها؛ بی آیکون، تا سی‌وچند
+   گزارش یک جدولِ مرتب خوانده شوند نه فهرستِ شلوغ. هفت دسته هفت ستون‌اند تا قابِ ۷۰۰px (یک سطر، بی خانه‌ی خالی)؛ باریک‌تر
+   دوستونه، و دسته‌ی تکِ آخر تمام‌عرض با گزارش‌های دوستونه.
+   خطِ میانِ ستون‌ها `outline`ِ خودِ ستون است (پس از زمینه‌ها کشیده می‌شود و در فاصله‌ی ۱پیکسلی یک خط می‌شود)؛ خانه‌ی
+   خالیِ ته شبکه، برخلافِ ترفندِ «زمینه‌ی رنگِ خط»، لکه‌ی خاکستری نمی‌شود. */
+.rc-find { inline-size: min(320px, 100%); }
+.rc-wrap { container-type: inline-size; }
 .rc-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px 18px;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--xl-line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  --xl-line: var(--border);
+  --xl-head: color-mix(in srgb, var(--surface-2) 55%, var(--border) 45%);
 }
-.rc-group { min-width: 0; }
+.rc-group { display: grid; grid-template-rows: auto 1fr; min-width: 0; outline: 1px solid var(--xl-line); }
 .rc-heading {
-  margin: 0 0 6px;
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  color: var(--text-muted);
-}
-.rc-list {
-  list-style: none;
   margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 2px;
+  padding: 5px 10px;
+  border-block-end: 1px solid var(--border-strong);
+  background: var(--xl-head);
+  color: var(--text-h);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.rc-list { display: block; margin: 0; padding: 0; list-style: none; }
+.rc-list > li + li { border-block-start: 1px solid var(--xl-line); }
 .rc-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  padding: 5px 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  justify-content: space-between;
+  gap: 6px;
+  inline-size: 100%;
+  min-block-size: 34px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
   font-size: var(--fs-sm);
+  line-height: 1.35;
   text-align: start;
   cursor: pointer;
 }
-.rc-item > svg { flex: 0 0 15px; color: var(--text-muted); }
-.rc-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rc-item:hover,
-.rc-item:focus-visible {
-  background: var(--surface-hover);
-  color: var(--text-h);
-  border-color: transparent;
-}
-.rc-item.active {
-  background: var(--accent-bg);
-  color: var(--accent);
-  font-weight: 600;
-}
-.rc-item.active > svg { color: var(--accent); }
-.rc-empty { grid-column: 1 / -1; margin: 0; }
+.rc-item > span { min-width: 0; text-wrap: balance; }
+.rc-away { flex: 0 0 12px; color: var(--text-muted); opacity: 0.7; }
+.rc-item:hover { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); color: var(--text-h); }
+.rc-item:focus-visible { position: relative; outline: 2px solid var(--accent); outline-offset: -2px; }
+.rc-item.active,
+.rc-item.active:hover { background: linear-gradient(var(--accent-bg), var(--accent-bg)), var(--surface); color: var(--accent-on-tint); font-weight: 700; }
+.rc-empty { grid-column: 1 / -1; margin: 0; padding: 12px; }
+/* بی سطرِ انتخاب‌گر («گزارش‌ها»)، سطرِ بازه اولین سطرِ سربرگ است و خطِ بالایش با قابِ نوار دوتا می‌شد. */
+.jh-bar > .jh-row--sub:first-child { border-block-start: 0; }
 
+@container (max-width: 700px) {
+  .rc-groups { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rc-group:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .rc-group:last-child:nth-child(odd) .rc-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rc-group:last-child:nth-child(odd) .rc-list > li:nth-child(2) { border-block-start: 0; }
+  .rc-group:last-child:nth-child(odd) .rc-list > li:nth-child(even) { border-inline-start: 1px solid var(--xl-line); }
+}
 @media (max-width: 760px) {
-  .rc-filter { max-width: none; }
-  .rc-groups { grid-template-columns: 1fr; gap: 10px; }
-  .rc-list { display: flex; flex-wrap: wrap; gap: 6px; }
-  .rc-item {
-    width: auto;
-    max-width: 100%;
-    padding: 5px 10px;
-    border-color: var(--border);
-    border-radius: 999px;
-  }
+  .rc-find { inline-size: 100%; }
+  .rc-item { min-block-size: 30px; }
 }
 
 /* ── عنوانِ بخش در منوی کاربر («حالت کاربری») ── */

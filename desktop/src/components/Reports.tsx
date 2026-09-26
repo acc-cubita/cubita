@@ -111,7 +111,15 @@ const TIPS: Record<ReportKind, string> = {
  *   (`lib/reportSheets.ts`) و هر قلمِ حساب دفترش را باز می‌کند.
  * - انتخابِ کالا، شخص، سال یا فصل خودش گزارش را می‌آورد؛ دکمه‌ی «نمایش» لازم نیست.
  */
-export function Reports({ token }: { token: string }) {
+export function Reports({
+  token,
+  picker = true,
+}: {
+  token: string
+  /** خانه‌های انتخابِ دوازده گزارش در سربرگ. صفحه‌ی «گزارش‌ها» خاموشش می‌کند: «همه‌ی گزارش‌ها»ی بالای همان صفحه
+   *  انتخاب‌گر است و دو انتخاب‌گرِ هم‌معنا زیرِ هم فقط شلوغی بود. */
+  picker?: boolean
+}) {
   //: `reports/balance-sheet` گزارش را مستقیم باز می‌کند — از «همه‌ی گزارش‌ها» یا هر
   //: پیوندِ دیگری. بی‌بخش یعنی پیش‌فرض، سود و زیان.
   const nav = useNavSection()
@@ -410,10 +418,13 @@ export function Reports({ token }: { token: string }) {
       <section className="ef-head">
         <div className="jh-bar jh-bar--report rp-head" role="group" aria-label="گزارش، بازه و پارامترها">
           {/* دوازده گزارش به دسته‌های کاتالوگ: صورت‌های مالی یک سطر، بقیه کنارِ هم. */}
-          {[
-            REPORT_TAB_GROUPS.filter((g) => g.key === 'statements'),
-            REPORT_TAB_GROUPS.filter((g) => g.key !== 'statements'),
-          ].map((groups, row) => (
+          {(picker
+            ? [
+                REPORT_TAB_GROUPS.filter((g) => g.key === 'statements'),
+                REPORT_TAB_GROUPS.filter((g) => g.key !== 'statements'),
+              ]
+            : []
+          ).map((groups, row) => (
             <div key={row} className={`jh-row${row ? ' jh-row--sub' : ''} rp-row--pick rp-row--pick${row + 1}`}>
               {groups.map((g) => (
                 <div key={g.key} className="jh-field rp-group">
