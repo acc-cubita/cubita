@@ -14467,3 +14467,114 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .lr-daybook > tbody > tr.lr-entry { border-color: var(--border-strong); background: color-mix(in srgb, var(--xl-head) 40%, var(--surface)); }
   .lr-keys { display: none; }
 }
+
+/* ── «درختواره حساب‌ها» (تمِ اکسلی): برگه‌ی ویرایشِ درجا روی درخت ──
+ * سربرگ: نوع، نما (درختی/تخت)، باز و بستنِ سرفصل‌ها، و نمایشِ غیرفعال‌ها. برگه: کد و نام و عنوانِ دوم و ماهیت و وضعیت
+ * همان‌جا ویرایش می‌شوند؛ نام با تورفتگیِ عمق و دکمه‌ی بازوبسته. */
+.jh-bar--report > .ca-row--view { --rh-cols: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.8fr); }
+@container (max-width: 900px) {
+  .jh-bar.jh-bar--report > .ca-row--view > .jh-field:nth-child(n + 2) { border-inline-start: 1px solid var(--xl-line); }
+}
+@container (max-width: 560px) {
+  .jh-bar--report > .ca-row--view { --rh-cols: repeat(2, minmax(0, 1fr)); }
+  .jh-bar.jh-bar--report > .ca-row--view > .jh-field.jh-field { border-inline-start: 0; }
+  .jh-bar.jh-bar--report > .ca-row--view > .jh-field:first-child { grid-column: 1 / -1; }
+  .jh-bar.jh-bar--report > .ca-row--view > .jh-field:nth-child(3) { border-inline-start: 1px solid var(--xl-line); }
+  .jh-bar.jh-bar--report > .ca-row--view > .jh-field:nth-child(n + 2) { border-block-start: 1px solid var(--xl-line); }
+}
+.rh-links button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ستون‌ها: نام باقیِ عرض را می‌گیرد؛ کف ۹۸۰px، باریک‌تر برگه در قابِ خودش می‌لغزد (کد و نام سمتِ راست، اولِ لغزش). */
+.page .ef-table-wrap > table.ca-sheet { min-inline-size: 980px; }
+.ca-sheet col.ca-c-code { width: 7%; }
+.ca-sheet col.ca-c-name2 { width: 8%; }
+.ca-sheet col.ca-c-nature { width: 9%; }
+.ca-sheet col.ca-c-kind { width: 10%; }
+.ca-sheet col.ca-c-traits { width: 9%; }
+.ca-sheet col.ca-c-bal { width: 10%; }
+.ca-sheet col.ca-c-state { width: 7%; }
+.ca-sheet col.ca-c-act { width: 96px; }
+/* نام: تورفتگیِ عمق، دکمه‌ی بازوبسته، نشانِ سرفصل؛ کادر باقیِ خانه را می‌گیرد. */
+/* هر سطح ۲۰px؛ دکمه‌ی بازوبسته‌ی سرفصل و جای‌خالیِ برگ هم‌عرض‌اند، پس متنِ فرزند همیشه یک پله جلوتر از مادر است. */
+.page .ef-table-wrap > table.ca-sheet td.ca-name { padding-inline-start: calc(4px + var(--ca-depth, 0) * 20px); }
+.ca-name-in { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.ca-name-in > input { flex: 1; min-width: 0; }
+.ca-toggle {
+  display: grid;
+  flex: 0 0 20px;
+  place-items: center;
+  inline-size: 20px;
+  block-size: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ca-toggle:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--text-h); }
+.ca-toggle--leaf { cursor: default; }
+.ca-toggle--leaf:hover { background: transparent; }
+.ca-sheet tr.ca-group td.ca-name input { font-weight: 700; }
+.ca-name-in .chart-sys-tag { flex: 0 0 auto; }
+.ca-muted { color: var(--text-muted); }
+.page .ef-table-wrap > table.jg-table.xl-grid td.ca-kind { padding-inline: 8px; }
+.ca-kind-in { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.ca-kind-in > select { flex: 1; min-width: 0; }
+.ca-kind .tree-level { font-size: var(--fs-xs); }
+.page .ef-table-wrap > table.jg-table.xl-grid td.ca-empty { padding: 18px 12px; color: var(--text-muted); text-align: center; }
+/* ویژگی‌ها: کلِ خانه یک دکمه است — کشوی ویرایش برای حسابِ ثبت‌شده، گزینه‌های درجا برای حسابِ تازه. */
+.page .ef-table-wrap > table.jg-table.xl-grid td.ca-traits { position: relative; padding: 0; }
+.ca-traits-btn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  inline-size: 100%;
+  min-block-size: 34px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.ca-traits-btn:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.ca-traits-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ca-traits-btn .chart-trait-tag { margin: 0; }
+.ca-traits-edit { margin-inline-start: auto; color: var(--text-muted); opacity: 0; }
+.ca-traits-btn:hover .ca-traits-edit,
+.ca-traits-btn:focus-visible .ca-traits-edit { opacity: 1; }
+.ca-traits-pop {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-start: 0;
+  z-index: 30;
+  display: grid;
+  gap: 6px;
+  min-inline-size: 230px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--text) 18%, transparent);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  /* موبایل: عنوانِ دوم، نوع و ویژگی‌ها جمع می‌شوند تا کد، نام، ماهیت، مانده و وضعیت بمانند. ستون **جمع** می‌شود نه
+   * `display: none`: خانه‌ی پنهان از شبکه‌ی جدول بیرون می‌رود و بقیه یک ستون جابه‌جا می‌نشینند. */
+  .page .ef-table-wrap > table.ca-sheet { min-inline-size: 600px; }
+  .ca-sheet col.ca-mhide { width: 0; }
+  .page .ef-table-wrap > table.ca-sheet :is(th, td).ca-mhide { padding: 0; border: 0; font-size: 0; overflow: hidden; }
+  .ca-sheet :is(th, td).ca-mhide > * { display: none; }
+  .ca-sheet col.jg-c-num { width: 36px; }
+  .ca-sheet col.ca-c-code { width: 13%; }
+  .ca-sheet col.ca-c-nature { width: 15%; }
+  .ca-sheet col.ca-c-bal { width: 15%; }
+  .ca-sheet col.ca-c-state { width: 11%; }
+  .ca-sheet col.ca-c-act { width: 64px; }
+  .page .ef-table-wrap > table.ca-sheet td.ca-name { padding-inline-start: calc(2px + var(--ca-depth, 0) * 8px); }
+}

@@ -1,8 +1,3 @@
-import { ListTree } from 'lucide-react'
-import { AccountTreePanel } from '../../components/AccountTreePanel'
-import { useNavSection } from '../../components/navContext'
-import { OpsPage } from './kit'
-
 /**
  * چهار عملیاتِ *ساختار*: درختواره، انتقالِ حساب به سرفصلِ دیگر، تفصیلیِ سایر، و مرورِ حساب‌ها.
  *
@@ -15,26 +10,8 @@ import { OpsPage } from './kit'
  */
 
 // ═════════════════════ ۱) درختواره حساب‌ها ═════════════════════
-
-export function ChartOfAccountsPage({ token, onChanged }: { token: string; onChanged?: () => void }) {
-  const nav = useNavSection()
-  return (
-    <OpsPage
-      canvas
-      icon={ListTree}
-      title="درختواره حساب‌ها"
-      description="ساختارِ کاملِ چارت با مانده‌ی هر حساب: افزودن، ویرایش، غیرفعال‌کردن و جست‌وجو — درختی یا تخت. قالب‌های صنفی و حذفِ حساب در تنظیمات ← کدینگ است."
-    >
-      {/* «سرفصل جدید» و «فهرست حساب‌ها»ی قدیمی با بخشِ `new`/`flat` به همین‌جا می‌رسند. */}
-      <AccountTreePanel
-        token={token}
-        onChanged={onChanged}
-        startAdding={nav?.activePage === 'acctchart' && nav.section === 'new'}
-        startFlat={nav?.activePage === 'acctchart' && nav.section === 'flat'}
-      />
-    </OpsPage>
-  )
-}
+//: برگه‌ی اکسلیِ ویرایشِ درجا روی درخت فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ ورودِ صفحه عوض نشود.
+export { ChartOfAccountsPage } from './ChartOfAccountsPage'
 
 // ═════════════════ ۲) انتقال حساب به سرفصل دیگر ═════════════════
 //: برگه‌ی اکسلیِ جابه‌جایی فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ ورودِ صفحه عوض نشود.
