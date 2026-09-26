@@ -62,7 +62,7 @@ import { modsOf, useRowSelection } from '../../lib/rowSelection'
 import { useColumnWidths } from '../../lib/useColumnWidths'
 import {
   OpsPage,
-  RangeBar,
+  RangeCells,
   fa,
   faAmount,
   faInt,
@@ -452,51 +452,62 @@ export function AccountBrowsePage({
       title="مرور حساب‌ها"
       description="از سرفصل تا سند: درختِ کدینگ با مانده‌ی هر سطح، گردشِ حساب و خودِ سند — بی‌ترکِ صفحه."
       head={
-        <div className="cc-head">
-          <RangeBar
-            range={range}
-            extra={
-              <>
-                {(fiscalYears.data ?? []).length > 0 && (
-                  <label className="acc-inline-field">
-                    سال مالی
-                    <SearchSelect value={activeFy?.id ?? ''} onChange={(e) => setFiscalYear(e.target.value)}>
-                      <option value="">—</option>
-                      {(fiscalYears.data ?? []).map((y) => (
-                        <option key={y.id} value={y.id}>
-                          {y.title}
-                        </option>
-                      ))}
-                    </SearchSelect>
-                  </label>
-                )}
-                <ReportFilterBar token={token} filters={filters} onChange={setFilters} />
-              </>
-            }
-          />
-          <SavedViewBar
-            token={token}
-            viewKey="accounting.account_browse"
-            filters={filters}
-            range={range}
-            setFilters={setFilters}
-          />
-          {onNavigate && (
-            <div className="ab-quick" aria-label="دسترسی سریع">
-              <button type="button" className="ef-btn-secondary" onClick={() => onNavigate('journalentry')}>
-                <FilePlus2 size={14} /> ثبت سند جدید
-              </button>
-              <button type="button" className="ef-btn-secondary" onClick={() => onNavigate('ledgerreport')}>
-                <BookOpenCheck size={14} /> دفتر کل
-              </button>
-              <button type="button" className="ef-btn-secondary" onClick={() => onNavigate('balancereport')}>
-                <Scale size={14} /> تراز آزمایشی
-              </button>
-              <button type="button" className="ef-btn-secondary" onClick={() => onNavigate('acctchart')}>
-                <ListTree size={14} /> کدینگ حساب‌ها
-              </button>
+        //: سربرگِ اکسلی (همان زبانِ سربرگِ سند): هر فیلتر یک خانه با سرستونِ خاکستری و کادرِ بی‌قاب. سطرِ اول
+        //: بازه (پیش‌تنظیم + از/تا همیشه‌دیده) و سالِ مالی، سطرِ دوم فیلترهای دفتر، سطرِ سوم نماها و میان‌برها.
+        <div className="jh-bar jh-bar--report" role="group" aria-label="بازه و فیلترهای مرور حساب‌ها">
+          <div className="jh-row rh-row--range">
+            <RangeCells range={range} />
+            <label className="jh-field">
+              <span className="jh-label">سال مالی</span>
+              <SearchSelect
+                aria-label="سال مالی"
+                value={activeFy?.id ?? ''}
+                onChange={(e) => setFiscalYear(e.target.value)}
+                disabled={(fiscalYears.data ?? []).length === 0}
+              >
+                <option value="">—</option>
+                {(fiscalYears.data ?? []).map((y) => (
+                  <option key={y.id} value={y.id}>
+                    {y.title}
+                  </option>
+                ))}
+              </SearchSelect>
+            </label>
+          </div>
+          <div className="jh-row jh-row--sub rh-row--filters">
+            <ReportFilterBar token={token} filters={filters} onChange={setFilters} variant="cells" />
+          </div>
+          <div className="jh-row jh-row--sub rh-row--tools">
+            <div className="jh-field rh-views">
+              <span className="jh-label">نماهای ذخیره‌شده</span>
+              <SavedViewBar
+                token={token}
+                viewKey="accounting.account_browse"
+                filters={filters}
+                range={range}
+                setFilters={setFilters}
+              />
             </div>
-          )}
+            {onNavigate && (
+              <div className="jh-field rh-go">
+                <span className="jh-label">رفتن به</span>
+                <div className="rh-links">
+                  <button type="button" onClick={() => onNavigate('journalentry')}>
+                    <FilePlus2 size={14} aria-hidden="true" /> ثبت سند جدید
+                  </button>
+                  <button type="button" onClick={() => onNavigate('ledgerreport')}>
+                    <BookOpenCheck size={14} aria-hidden="true" /> دفتر کل
+                  </button>
+                  <button type="button" onClick={() => onNavigate('balancereport')}>
+                    <Scale size={14} aria-hidden="true" /> تراز آزمایشی
+                  </button>
+                  <button type="button" onClick={() => onNavigate('acctchart')}>
+                    <ListTree size={14} aria-hidden="true" /> کدینگ حساب‌ها
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       }
     >

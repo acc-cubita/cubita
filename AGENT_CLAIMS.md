@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/src/pages/accounting/{AccountBrowser,kit}.tsx`، `desktop/src/components/ReportFilterBar.tsx`، `App.css` | سربرگِ فیلترِ «مرور حساب‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |
 | Claude Code (آرش) | `desktop/src/pages/accounting/AccountBrowser{,.test}.tsx`، `HelpPage.tsx`، `App.css` (بلوکِ `ab-*`) | «مرور حساب‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۴ |
 | Claude Code (آرش) | `desktop/src/pages/accounting/{ChartPages,ReclassifyPage}.tsx`، `desktop/src/lib/reclassifySheet.ts` (تازه)، `SheetFooter.tsx`، `HelpPage.tsx`، `App.css`، `backend/app/services/accounting_ops.py` (`reclassify_accounts`) | «انتقال حساب به سرفصل دیگر» با تمِ اکسلی + اصلاحِ دسته‌ی جابه‌جایی در سرور | ۱۴۰۵/۰۷/۰۳ |
 | Claude Code (آرش) | `website/src/*` (حذفِ پلن‌ها و `/classic`، `concept/ContactSection.tsx` تازه)، `backend/app/{models/sales_inquiry,routers/sales_inquiries,routers/admin_sales}.py` (تازه)، مهاجرتِ `0186`، `rate_limit.py`، `staff_roles.py`، `staff_audit.py`، `tenancy.py`، `routing.py`، `admin/src/pages/SalesInquiriesPage.tsx` (تازه)، `admin/src/{api,nav,App}.tsx` | سایتِ بی‌پلن + فرمِ «خرید و مشاوره» + دانلودِ کوبیتا سازمانی | ۱۴۰۵/۰۷/۰۳ |
