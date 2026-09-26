@@ -266,9 +266,23 @@ class ClosingRowOut(BaseModel):
     debit: Decimal
     credit: Decimal
     balance: Decimal
+    #: شرحِ همین ردیف در سند — همان متنی که صدور می‌نویسد.
+    description: str = ""
 
 
-class ClosingPreviewOut(BaseModel):
+class BalancingLineOut(BaseModel):
+    """خطِ توازنِ اختتامیه/افتتاحیه و جمعِ سند با آن — پیش‌نمایش عیناً سند."""
+
+    balance_account_code: str = ""
+    balance_account_name: str = ""
+    balance_description: str = ""
+    balance_debit: Decimal = Decimal(0)
+    balance_credit: Decimal = Decimal(0)
+    total_debit: Decimal = Decimal(0)
+    total_credit: Decimal = Decimal(0)
+
+
+class ClosingPreviewOut(BalancingLineOut):
     as_of: date
     rows: list[ClosingRowOut]
     total: Decimal
@@ -276,7 +290,7 @@ class ClosingPreviewOut(BaseModel):
     temporary_count: int
 
 
-class OpeningPreviewOut(BaseModel):
+class OpeningPreviewOut(BalancingLineOut):
     as_of: date
     source_date: date
     rows: list[ClosingRowOut]
@@ -286,6 +300,8 @@ class OpeningPreviewOut(BaseModel):
     closing_entry_id: UUID
     closing_entry_number: int | None
     total: Decimal
+    #: شماره‌ی افتتاحیه‌ای که از همین اختتامیه صادر شده (صدورِ دوباره ۴۰۹ می‌گیرد)؛ None یعنی هنوز صادر نشده.
+    existing_opening_number: int | None = None
 
 
 class OpeningIssueIn(BaseModel):

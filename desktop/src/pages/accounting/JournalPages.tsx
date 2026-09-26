@@ -1,31 +1,24 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   BookOpen,
-  CalendarCheck,
   CheckCircle2,
-  ClipboardCheck,
   Combine,
   FileStack,
   Hash,
   Inbox,
   Layers,
-  ListChecks,
-  Lock,
   Printer,
   RefreshCw,
   Trash2,
 } from 'lucide-react'
 import {
-  fetchCartable,
   fetchJournalEntriesFiltered,
   fetchRenumberPreview,
-  finalizeEntries,
   mergeEntries,
   printJournalEntry,
   renumberEntries,
   setEntrySubNumber,
   voidJournalEntry,
-  type EntrySummary,
   type JournalEntryRecord,
 } from '../../api'
 import type { AccountCache, OutboxEntry } from '../../electron.d'
@@ -44,7 +37,7 @@ import {
 import { OutboxList } from '../../components/OutboxList'
 import { Pager, usePagination } from '../../components/Pager'
 import { isElectron } from '../../platform'
-import { formatJalali, todayIso } from '../../lib/jalali'
+import { formatJalali } from '../../lib/jalali'
 import { normalizeFa } from '../../lib/faText'
 import { modsOf, useRowSelection } from '../../lib/rowSelection'
 import { useColumnWidths } from '../../lib/useColumnWidths'
@@ -354,220 +347,8 @@ function EntryTable({
 }
 
 // ═══════════════════ ۲) کارتابل اسناد موقت ═══════════════════
-
-export function EntryCartablePage({ token }: { token: string }) {
-  const range = useRange('all')
-  const [msg, setMsg] = useState<Msg>(null)
-  const [picked, setPicked] = useState<Set<string>>(new Set())
-  const cartable = useAsync(
-    () => fetchCartable(token, range.from, range.to),
-    [token, range.from, range.to],
-  )
-
-  const toggle = (id: string) =>
-    setPicked((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-
-  async function finalize(payload: Parameters<typeof finalizeEntries>[1], label: string) {
-    if ('entry_ids' in payload && (payload.entry_ids?.length ?? 0) === 0) {
-      setMsg({ text: 'اول از جدولِ «اسنادِ در انتظار» سندی را علامت بزنید.', kind: 'err' })
-      return
-    }
-    if (!window.confirm(`${label}\nسندِ دائم دیگر ادغام یا بازشماره‌گذاری نمی‌شود. ادامه؟`)) return
-    try {
-      const out = await finalizeEntries(token, payload)
-      setMsg({ text: `${faInt(out.count)} سند دائم شد.`, kind: 'ok' })
-      setPicked(new Set())
-      cartable.reload()
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    }
-  }
-
-  const data = cartable.data
-  return (
-    <OpsPage
-      canvas
-      icon={ClipboardCheck}
-      title="کارتابل اسناد موقت"
-      description="هرچه ثبت شده ولی هنوز بازبینی نشده. سند را ببینید، بعد دائمش کنید — تکی، یک منشأ با هم، یا کلِ بازه در پایانِ ماه. دائم‌کردن اثرِ مالی ندارد ولی برگشت ندارد."
-      head={
-        <div className="cc-head">
-          <RangeBar range={range} />
-          <div className="cc-summary">
-            <Metric
-              icon={<Inbox size={14} />}
-              label="سندِ در انتظار"
-              value={data ? faInt(data.total_count) : '—'}
-              tone={data && data.total_count > 0 ? 'out' : 'in'}
-            />
-            <Metric
-              icon={<Layers size={14} />}
-              label="منشأهای مختلف"
-              value={data ? faInt(data.groups.length) : '—'}
-            />
-            <Metric
-              icon={<CheckCircle2 size={14} />}
-              label="مبلغِ در انتظار"
-              value={data ? fa(data.groups.reduce((s, g) => s + Number(g.total), 0)) : '—'}
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Layers}
-        title="دسته‌ها"
-        tip="معمولاً تصمیم دسته‌ای است: «همه‌ی سندهای فاکتورِ فروشِ این بازه درست‌اند»."
-        badge={data ? <CountBadge accent>{faInt(data.groups.length)} منشأ</CountBadge> : undefined}
-      >
-        <AsyncBlock
-          loading={cartable.loading}
-          error={cartable.error}
-          empty={(data?.groups.length ?? 0) === 0}
-          emptyText="هیچ سندِ موقتی در این بازه نیست — کارتابل خالی است."
-        >
-          <ul className="acc-groups">
-            {(data?.groups ?? []).map((g) => (
-              <li key={g.source_type}>
-                <span className="acc-group-name">{sourceLabel(g.source_type)}</span>
-                <span className="acc-group-count">{faInt(g.count)} سند</span>
-                <span className="acc-group-total">{fa(g.total)}</span>
-                <button
-                  type="button"
-                  className="ef-btn-secondary"
-                  onClick={() =>
-                    finalize(
-                      { date_from: range.from, date_to: range.to, source_type: g.source_type },
-                      `دائم‌کردنِ ${g.count} سندِ «${sourceLabel(g.source_type)}».`,
-                    )
-                  }
-                >
-                  <Lock size={13} /> دائم کن
-                </button>
-              </li>
-            ))}
-          </ul>
-        </AsyncBlock>
-      </SectionCard>
-
-      <SectionCard
-        icon={ListChecks}
-        title="اسنادِ در انتظار"
-        badge={data ? <CountBadge accent>{faInt(data.entries.length)} سند</CountBadge> : undefined}
-        description="سندهایی را که بازبینی کرده‌اید علامت بزنید و از نوارِ پایین دائم کنید."
-      >
-        <AsyncBlock
-          loading={cartable.loading}
-          error={cartable.error}
-          empty={(data?.entries.length ?? 0) === 0}
-          emptyText="سندی در انتظار نیست."
-        >
-          <CartableTable entries={data?.entries ?? []} picked={picked} onToggle={toggle} />
-        </AsyncBlock>
-      </SectionCard>
-      <ActionBar
-        status={
-          <FormStatus
-            msg={msg}
-            idle={picked.size > 0 ? `${faInt(picked.size)} سند انتخاب شده است.` : 'سندی انتخاب نشده است.'}
-          />
-        }
-      >
-        {/* «تبدیل اسناد موقت به دائم»ِ قدیمی: همه‌ی موقت‌های بازه، برای بستنِ ماه. */}
-        <button
-          type="button"
-          className="ef-btn-secondary"
-          disabled={!data || data.total_count === 0}
-          onClick={() =>
-            finalize(
-              { date_from: range.from, date_to: range.to },
-              `دائم‌کردنِ همه‌ی ${faInt(data?.total_count ?? 0)} سندِ موقتِ ${
-                range.from ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? todayIso())}` : 'دفتر'
-              }.`,
-            )
-          }
-        >
-          <CalendarCheck size={15} /> دائم‌کردنِ کلِ این بازه
-        </button>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={() => finalize({ entry_ids: [...picked] }, `دائم‌کردنِ ${picked.size} سندِ انتخابی.`)}
-        >
-          <Lock size={15} /> دائم‌کردنِ {picked.size > 0 ? `${faInt(picked.size)} سند` : 'انتخاب‌شده‌ها'}
-        </button>
-      </ActionBar>
-    </OpsPage>
-  )
-}
-
-function CartableTable({
-  entries,
-  picked,
-  onToggle,
-}: {
-  entries: EntrySummary[]
-  picked: Set<string>
-  onToggle: (id: string) => void
-}) {
-  const pg = usePagination(entries, 15)
-  return (
-    <div className="table-scroll ef-table-wrap">
-      <table className="cards-on-mobile acc-table ef-table">
-        <thead>
-          <tr>
-            <th className="ef-col-min" aria-label="انتخاب" />
-            <th>شماره</th>
-            <th>عطف</th>
-            <th>فرعی</th>
-            <th>تاریخ</th>
-            <th>شرح</th>
-            <th>منشأ</th>
-            <th>حساب‌ها</th>
-            <th>مبلغ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pg.pageItems.map((e) => (
-            <tr key={e.id}>
-              <td className="ef-col-min" data-label="انتخاب">
-                <input
-                  type="checkbox"
-                  aria-label={`انتخابِ سندِ ${fa(e.number ?? 0)}`}
-                  checked={picked.has(e.id)}
-                  onChange={() => onToggle(e.id)}
-                />
-              </td>
-              <td className="card-title" data-label="شماره">
-                {fa(e.number ?? 0)}
-              </td>
-              <td data-label="عطف" className="num">
-                {e.atf_number === null ? '—' : faInt(e.atf_number)}
-              </td>
-              <td data-label="فرعی">{e.sub_number || '—'}</td>
-              <td data-label="تاریخ">{formatJalali(e.entry_date)}</td>
-              <td data-label="شرح">{e.description || '—'}</td>
-              <td data-label="منشأ">{sourceText(e)}</td>
-              <td data-label="حساب‌ها" className="acc-accounts">
-                {e.accounts.slice(0, 3).join('، ')}
-                {e.accounts.length > 3 ? ' …' : ''}
-              </td>
-              <td data-label="مبلغ" className="num">
-                {fa(e.total)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-    </div>
-  )
-}
+//: برگه‌ی اکسلیِ کارتابل فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ ورودِ صفحه عوض نشود.
+export { EntryCartablePage } from './EntryCartablePage'
 
 // ═══════════════ ۳) شماره‌گذاری مجدد اسناد ═══════════════
 

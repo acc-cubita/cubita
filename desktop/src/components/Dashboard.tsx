@@ -711,7 +711,7 @@ export function Dashboard({
               onQueued={() => void refreshFromLocalCache()}
             />
           )}
-          {page === 'entrycartable' && <EntryCartablePage token={token} />}
+          {page === 'entrycartable' && <EntryCartablePage token={token} onNavigate={navigate} />}
           {page === 'renumber' && <RenumberEntriesPage token={token} />}
           {page === 'mergeentries' && <MergeEntriesPage token={token} />}
           {page === 'reclassify' && (
@@ -721,7 +721,7 @@ export function Dashboard({
           {page === 'fxrevaluation' && <FxRevaluationPage token={token} />}
           {page === 'balancereclass' && <BalanceReclassPage token={token} onNavigate={navigate} />}
           {page === 'closepnl' && <ClosePnlPage token={token} />}
-          {page === 'closingopening' && <ClosingOpeningPage token={token} />}
+          {page === 'closingopening' && <ClosingOpeningPage token={token} onNavigate={navigate} />}
           {page === 'vat' && <VatPage token={token} />}
           {page === 'ebooks' && <LegalBooksPage token={token} onNavigate={navigate} />}
           {page === 'accountbrowse' && <AccountBrowsePage token={token} onNavigate={navigate} />}

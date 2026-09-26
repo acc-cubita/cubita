@@ -14745,3 +14745,76 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 @media (prefers-reduced-motion: reduce) {
   .pc-sheet.is-loading tbody { transition: none; }
 }
+
+/* ── «صدور سند اختتامیه و افتتاحیه» (تمِ اکسلی، الگوی «ج») ──
+ * گرید همان سند است؛ نوع و شرحِ ردیف کم‌رنگ (متنِ خودکار) و خطِ توازن («حساب اختتامیه/افتتاحیه») ته آن با ته‌رنگِ سرستون. */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.ye-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 760px; }
+  .ye-sheet col.ye-c-rowhead { width: 44px; }
+  .ye-sheet col.ye-c-type { width: 84px; }
+  .ye-sheet col.ye-c-desc { width: 26%; }
+  .ye-sheet col.ye-c-money { width: 14%; }
+  .page .ef-table-wrap > table.ye-sheet td { overflow: hidden; text-overflow: ellipsis; }
+}
+.page .ef-table-wrap > table.ye-sheet td.ye-desc { color: var(--text-muted); }
+.page .ef-table-wrap > table.ye-sheet > tbody > tr.ye-bal > td {
+  border-block-start: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--xl-head) 45%, var(--surface));
+  color: var(--text-h);
+  font-weight: 700;
+}
+.page .ef-table-wrap > table.ye-sheet > tbody > tr.ye-bal > td.xl-rowhead { color: var(--text-muted); text-align: center; }
+.ye-sheet.is-loading tbody { opacity: 0.55; }
+.jg-head-actions .cc-presets.ye-kind { flex-wrap: nowrap; }
+.cc-presets.ye-kind button { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ── «کارتابل اسناد موقت» (تمِ اکسلی) ──
+ * منشأ خانه‌ی سربرگ است (شمار و مبلغ در هر گزینه)؛ برگه کلیک‌به‌انتخاب است و «نمایش» سند را باز می‌کند. */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.cb-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 900px; }
+  .cb-sheet col.cb-c-rowhead { width: 44px; }
+  .cb-sheet col.cb-c-num { width: 72px; }
+  .cb-sheet col.cb-c-sub { width: 72px; }
+  .cb-sheet col.cb-c-date { width: 92px; }
+  .cb-sheet col.cb-c-src { width: 12%; }
+  .cb-sheet col.cb-c-acc { width: 20%; }
+  .cb-sheet col.cb-c-amt { width: 12%; }
+  .cb-sheet col.cb-c-go { width: 84px; }
+  .page .ef-table-wrap > table.cb-sheet td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+.cb-sheet > tbody > tr.acc-row--clickable { cursor: pointer; user-select: none; }
+.page .ef-table-wrap > table.cb-sheet :is(th, td).xl-rowhead { padding: 0; }
+.page .ef-table-wrap > table.cb-sheet td.cb-status { padding: 18px 12px; color: var(--text-muted); text-align: center; }
+.page .lr-scroll:focus-within > table.cb-sheet > tbody > tr.is-active:not(.is-selected) > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.lr-scroll:focus .cb-sheet > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.cb-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.cb-open:hover { border-color: var(--accent); color: var(--text-h); }
+.cb-sheet.is-loading tbody { opacity: 0.55; }
+
+@media (max-width: 760px) {
+  .page .ef-table-wrap > table.ye-sheet > tbody > tr.ye-bal > td { border: 0; background: transparent; }
+  .ye-sheet > tbody > tr.ye-bal { border-color: var(--border-strong); background: color-mix(in srgb, var(--xl-head) 45%, var(--surface)); }
+  .jg-head-actions .cc-presets.ye-kind { inline-size: 100%; }
+  .cc-presets.ye-kind button { flex: 1; justify-content: center; }
+  /* کارت: ردیفِ انتخاب‌شده کارتِ ته‌رنگی با لبه‌ی accent؛ قابِ فوکوس و ته‌رنگِ گرید برداشته. */
+  .page .ef-table-wrap.lr-scroll:is(*, :focus-within) > table.cb-sheet > tbody > tr:is(.is-active, .is-selected, :hover) > td {
+    background: transparent;
+    box-shadow: none;
+  }
+  .cb-sheet > tbody > tr.is-selected { border-color: var(--accent); background: var(--accent-bg); }
+}
+@media print {
+  .cb-open { display: none !important; }
+}

@@ -6596,16 +6596,42 @@ export interface ClosingRow {
   debit: string
   credit: string
   balance: string
+  /** شرحِ همین ردیف در سند — همان متنی که صدور می‌نویسد. */
+  description: string
+}
+
+/** خطِ توازنِ اختتامیه/افتتاحیه («حساب اختتامیه» / «حساب افتتاحیه») و جمعِ سند با آن. */
+export interface BalancingLine {
+  balance_account_code: string
+  balance_account_name: string
+  balance_description: string
+  balance_debit: string
+  balance_credit: string
+  total_debit: string
+  total_credit: string
+}
+
+export interface ClosingPreview extends BalancingLine {
+  as_of: string
+  rows: ClosingRow[]
+  total: string
+  open_pnl_total: string
+  temporary_count: number
+}
+
+export interface OpeningPreview extends BalancingLine {
+  as_of: string
+  source_date: string
+  rows: ClosingRow[]
+  closing_entry_id: string
+  closing_entry_number: number | null
+  total: string
+  /** افتتاحیه‌ای که از همین اختتامیه صادر شده (صدورِ دوباره ۴۰۹ می‌گیرد)؛ null یعنی هنوز نه. */
+  existing_opening_number: number | null
 }
 
 export const fetchClosingPreview = (token: string, asOf: string) =>
-  authedGet<{
-    as_of: string
-    rows: ClosingRow[]
-    total: string
-    open_pnl_total: string
-    temporary_count: number
-  }>(token, `/api/accounting/closing-entry/preview?as_of=${asOf}`)
+  authedGet<ClosingPreview>(token, `/api/accounting/closing-entry/preview?as_of=${asOf}`)
 
 export const issueClosingEntry = (token: string, asOf: string, description: string) =>
   authedSend<{ entry_id: string; number: number | null; line_count: number; total: string }>(
@@ -6613,14 +6639,7 @@ export const issueClosingEntry = (token: string, asOf: string, description: stri
   )
 
 export const fetchOpeningPreview = (token: string, asOf: string, sourceDate: string) =>
-  authedGet<{
-    as_of: string
-    source_date: string
-    rows: ClosingRow[]
-    closing_entry_id: string
-    closing_entry_number: number | null
-    total: string
-  }>(token, `/api/accounting/opening-entry/preview?as_of=${asOf}&source_date=${sourceDate}`)
+  authedGet<OpeningPreview>(token, `/api/accounting/opening-entry/preview?as_of=${asOf}&source_date=${sourceDate}`)
 
 export const issueOpeningEntry = (
   token: string, asOf: string, sourceDate: string, description: string,
