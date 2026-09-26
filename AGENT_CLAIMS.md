@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `pages/accounting/IntegrityPage.tsx` (+تست)، `lib/integritySheet.ts` (+تست)، `Dashboard.tsx`، `App.css` (`ig-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «بررسی یکپارچگی» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `pages/accounting/{LegalBooksPage,ReportPages}.tsx` (+تست)، `lib/legalBook.ts` (+تست)، `Dashboard.tsx`، `App.css` (`eb-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «دفاتر تجارت الکترونیک» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `pages/accounting/{ChartOfAccountsPage,ChartPages}.tsx` (+تست)، `lib/chartSheet.ts` (+تست)، حذفِ `components/AccountTreePanel{,.test}.tsx`، `App.css` (`ca-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «درختواره حساب‌ها» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `pages/accounting/{LedgerReportPage,ReportPages}.tsx` (+تست‌ها، `Daybook.test.tsx`)، `lib/ledgerReport.ts` (+تست)، `Dashboard.tsx`، `App.css` (`lr-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «گزارش دفتر» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
