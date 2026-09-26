@@ -48,7 +48,7 @@ function render(section: string | null) {
   })
 }
 
-const activeTab = () => container.querySelector('.report-tabs .btn-primary')?.textContent
+const activeTab = () => container.querySelector('.rp-tab[aria-pressed="true"]')?.textContent
 const requested = () => fetchMock.mock.calls.map((c) => String(c[0]))
 
 describe('صفحه‌ی «گزارش‌ها» و بخشِ ناوبری', () => {
@@ -81,7 +81,7 @@ describe('صفحه‌ی «گزارش‌ها» و بخشِ ناوبری', () => {
 
   it('کلیکِ تب بخشِ ناوبری را عوض می‌کند، تا «همه‌ی گزارش‌ها» هم بداند', () => {
     render(null)
-    const btn = [...container.querySelectorAll<HTMLButtonElement>('.report-tabs button')].find(
+    const btn = [...container.querySelectorAll<HTMLButtonElement>('.rp-tab')].find(
       (b) => b.textContent === 'ترازنامه',
     )!
     act(() => btn.click())

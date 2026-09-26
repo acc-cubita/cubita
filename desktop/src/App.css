@@ -13934,7 +13934,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 /* پیش‌تنظیم‌های بازه: نیمه‌های یک خانه با خطِ جدول میانشان — همان «موقت / دائم»ِ سند (`jh-seg`). */
 .ef-form .jh-bar--report .cc-presets.rh-seg {
   display: flex;
-  block-size: var(--ef-h);
+  /* `min-`: خانه‌ای که در قابِ باریک تنها در سطرش است (پیش‌تنظیم‌های بازه، فصل) کش نمی‌آید و بی‌این ۲۰پیکسلی می‌شد. */
+  min-block-size: var(--ef-h);
   height: auto;
   padding: 0;
   gap: 0;
@@ -14113,7 +14114,7 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 .page .ef-table-wrap > table.br-table > tfoot td small { color: var(--text-muted); font-weight: 400; }
 .page .ef-table-wrap > table.br-table > tfoot td.br-off { color: var(--danger); }
 .br-total-label { margin-inline-end: 8px; }
-.br-check {
+.xl-check {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -14123,8 +14124,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   font-weight: 600;
   vertical-align: middle;
 }
-.br-check--ok { background: var(--success-bg); color: var(--success); }
-.br-check--off { background: var(--danger-bg); color: var(--danger); }
+.xl-check--ok { background: var(--success-bg); color: var(--success); }
+.xl-check--off { background: var(--danger-bg); color: var(--danger); }
 /* دو کارتِ کنترلِ زیرِ تراز همان گریدِ اکسلی‌اند، فقط‌خواندنی و بی‌میخ. */
 .page .ef-table-wrap > table.br-check-table td { padding-block: 6px; font-size: var(--fs-sm); }
 
@@ -14166,4 +14167,177 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .page .ef-table-wrap > table.br-table { min-inline-size: 0; }
   .page .ef-table-wrap > table.br-table > :is(thead, tfoot),
   .br-table :is(th, td).br-pin { position: static; box-shadow: none; }
+}
+
+/* ── صفحه‌ی «گزارش‌ها» (تمِ اکسلی) ──
+ * سربرگ: دوازده گزارش به‌شکلِ خانه‌های یک جدول (دسته‌های کاتالوگ)، بعد بازه یا «به تاریخ» یا سال/فصل، و انتخابِ
+ * کالا/شخص. بدنه: هر گزارش یک گریدِ `xl-grid` با جمع‌ها در `tfoot`. */
+.jh-bar--report > .rp-row--pick1 { --rh-cols: minmax(0, 1fr); }
+.jh-bar--report > .rp-row--pick2 { --rh-cols: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 1.2fr); }
+.jh-bar--report > .rp-row--season { --rh-cols: minmax(0, 0.7fr) minmax(0, 2fr) minmax(0, 0.8fr); }
+.jh-bar--report > .rp-row--asof { --rh-cols: minmax(0, 1fr) minmax(0, 2fr); }
+.jh-bar--report > .rp-row--param { --rh-cols: minmax(0, 1fr); }
+/* گزارش‌های هر دسته: خانه‌های هم‌عرض با خطِ جدول میانشان (فاصله‌ی ۱پیکسلی روی زمینه‌ی رنگِ خط). */
+.rp-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 1px;
+  background: var(--xl-line);
+}
+.rp-tab {
+  min-block-size: var(--ef-h);
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.35;
+  text-wrap: balance;
+  cursor: pointer;
+}
+.rp-tab:hover { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); color: var(--text-h); }
+.rp-tab.is-active,
+.rp-tab.is-active:hover { background: linear-gradient(var(--accent-bg), var(--accent-bg)), var(--surface); color: var(--accent-on-tint); font-weight: 700; }
+.rp-tab:focus-visible { position: relative; outline: 2px solid var(--accent); outline-offset: -2px; }
+.rp-hint-cell p { margin: 0; padding: 8px 10px; color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.6; }
+@container (max-width: 900px) {
+  /* قاعده‌ی عمومیِ همین عرض خطِ میانِ خانه‌ها را برمی‌دارد؛ این سطرها هنوز کنارِ هم‌اند. */
+  .jh-bar.jh-bar--report > :is(.rp-row--pick2, .rp-row--season, .rp-row--asof) > .jh-field:nth-child(n + 2) { border-inline-start: 1px solid var(--xl-line); }
+}
+@container (max-width: 560px) {
+  /* موبایل: دکمه‌های هر دسته دوستونه (تکیِ آخر تمام‌عرض)؛ سطرهای پارامتر زیرِ هم. */
+  .rp-seg { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rp-seg > .rp-tab:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .jh-bar--report > :is(.rp-row--pick2, .rp-row--season, .rp-row--asof) { --rh-cols: minmax(0, 1fr); }
+  .jh-bar.jh-bar--report > :is(.rp-row--pick2, .rp-row--season, .rp-row--asof) > .jh-field.jh-field { border-inline-start: 0; }
+  .jh-bar.jh-bar--report > :is(.rp-row--pick2, .rp-row--season, .rp-row--asof) > .jh-field:nth-child(n + 2) { border-block-start: 1px solid var(--xl-line); }
+}
+
+/* بدنه: قابِ لغزشِ هر گرید با سرستون و جمعِ چسبنده. */
+.rp-body.is-loading { opacity: 0.6; }
+.rp-body > * + * { margin-block-start: var(--sp-3); }
+.rp-scroll { max-block-size: max(320px, calc(100vh - 170px)); overflow: auto; }
+.page .ef-table-wrap > table.rp-table { inline-size: 100%; }
+.page .ef-table-wrap > table.rp-table > thead { position: sticky; inset-block-start: 0; z-index: 3; }
+.page .ef-table-wrap > table.rp-table > thead th { padding: 6px 8px; }
+.page .ef-table-wrap > table.rp-table td { block-size: 32px; padding: 4px 8px; font-size: var(--fs-sm); }
+.page .ef-table-wrap > table.rp-table > tbody > tr:last-child > td { border-block-end: 0; }
+.page .ef-table-wrap > table.rp-table > tfoot { position: sticky; inset-block-end: 0; z-index: 3; }
+.page .ef-table-wrap > table.rp-table > tfoot td {
+  block-size: 36px;
+  padding: 4px 8px;
+  border-block-start: 1px solid var(--border-strong);
+  border-block-end: 0;
+  background: var(--xl-head);
+  color: var(--text-h);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.page .ef-table-wrap > table.rp-table > tfoot > tr + tr > td { border-block-start-color: var(--xl-line); }
+.rp-table > tbody > tr.acc-row--clickable { cursor: pointer; }
+.rp-table > tbody > tr[tabindex]:focus-visible { outline: none; }
+.rp-table > tbody > tr[tabindex]:focus-visible > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.rp-code { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.rp-code-inline { display: none; }
+.rp-note { display: block; color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; white-space: normal; }
+.rp-neg { color: var(--danger); direction: ltr; unicode-bidi: isolate; }
+.rp-side { color: var(--text-muted); font-size: var(--fs-xs); }
+.page .ef-table-wrap > table.rp-table td.rp-strong { font-weight: 700; }
+.page .ef-table-wrap > table.rp-table td.rp-late,
+.rp-late { color: var(--danger); }
+.page .ef-table-wrap > table.rp-table > tbody > tr.rp-row--muted > td { color: var(--text-muted); font-style: italic; }
+.page .ef-table-wrap > table.rp-table > tbody > tr.rp-row--warn > td:first-child { box-shadow: inset -3px 0 0 var(--warning); }
+.page .ef-table-wrap > table.rp-table > tbody > tr.rp-carry > td { background: color-mix(in srgb, var(--xl-head) 45%, var(--surface)); color: var(--text-muted); font-size: var(--fs-xs); }
+.page .ef-table-wrap > table.rp-table > tbody > tr > td.rp-status { padding: 18px 12px; color: var(--text-muted); text-align: center; }
+.page .ef-table-wrap > table.rp-table td.rp-tree { padding-inline-start: calc(8px + var(--rp-depth, 0) * 16px); }
+.rp-subhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-md); }
+.rp-subhead small { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; }
+.rp-before { margin-block-end: var(--sp-2); }
+.rp-after { margin-block-start: var(--sp-2); }
+
+/* صورتِ مالی: سه ستون، به عرضِ یک برگه تا مبلغ از شرح دور نیفتد؛ بخش، قلمِ تورفته، جمعِ بخش، جمعِ نهایی. */
+/* قابِ لغزش هم‌عرضِ خودِ برگه، وگرنه قابِ تمام‌عرض کنارِ برگه‌ی باریک خانه‌ای خالی نشان می‌داد. */
+.rp-scroll:has(> table.rp-statement) { max-inline-size: 780px; }
+.page .ef-table-wrap > table.rp-statement { table-layout: fixed; }
+/* نامِ بلندِ حساب می‌شکند نه اینکه زیرِ ستونِ مبلغ برود. */
+.page .ef-table-wrap > table.rp-statement td { white-space: normal; overflow-wrap: anywhere; }
+.rp-statement col.rp-c-code { width: 84px; }
+.rp-statement col.rp-c-amt { width: 160px; }
+.page .ef-table-wrap > table.rp-statement > tbody > tr.rp-sec > td {
+  padding-block: 8px 4px;
+  background: color-mix(in srgb, var(--xl-head) 40%, var(--surface));
+  color: var(--text-h);
+  font-weight: 700;
+}
+.page .ef-table-wrap > table.rp-statement td.rp-name { padding-inline-start: 22px; }
+.page .ef-table-wrap > table.rp-statement > tbody > tr.rp-sub > td {
+  border-block-start: 1px solid var(--border-strong);
+  color: var(--text-h);
+  font-weight: 700;
+}
+.page .ef-table-wrap > table.rp-statement > tbody > tr.rp-sub > td:nth-child(2) { padding-inline-start: 22px; }
+/* جمعِ نهایی خطِ دوتایی زیرِ عدد دارد — قراردادِ صورتِ مالیِ چاپی. */
+.page .ef-table-wrap > table.rp-statement > tfoot > tr:last-child > td.num { text-decoration: underline double; text-underline-offset: 4px; }
+.page .ef-table-wrap > table.rp-table > tfoot td .xl-check { margin-inline-start: 8px; }
+
+/* ارزشِ موجودی: سرستونِ دوطبقه (مثلِ تراز) و کد/نامِ میخ‌شده سمتِ راست؛ فقط ستون‌های عددی می‌لغزند. */
+.page .ef-table-wrap > table.rp-inv { table-layout: fixed; min-inline-size: calc(80px + 180px + 60px + 9 * 112px); }
+.rp-inv col.rp-c-sku { width: 80px; }
+.rp-inv col.rp-c-unit { width: 60px; }
+.rp-inv col.rp-c-amt { width: 112px; }
+.page .ef-table-wrap > table.rp-inv td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page .ef-table-wrap > table.rp-inv > thead th.rp-group { border-block-end-color: var(--xl-line); text-align: center; }
+.page .ef-table-wrap > table.rp-inv :is(th, td).rp-gs { border-inline-start: 1px solid var(--border-strong); }
+.rp-inv :is(th, td).rp-pin { position: sticky; z-index: 1; }
+.rp-inv .rp-pin--sku { inset-inline-start: 0; }
+.rp-inv .rp-pin--name { inset-inline-start: 80px; box-shadow: -4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent); }
+.page .ef-table-wrap > table.rp-inv > tbody > tr > td.rp-pin { background: var(--surface); }
+.page .ef-table-wrap > table.rp-inv > tbody > tr:hover > td.rp-pin { background: linear-gradient(color-mix(in srgb, var(--accent) 5%, transparent), color-mix(in srgb, var(--accent) 5%, transparent)), var(--surface); }
+.rp-inv .status-badge { margin-inline-start: 6px; }
+
+@media (max-width: 760px) {
+  .rp-scroll { max-block-size: none; overflow: visible; }
+  .page .ef-table-wrap > table.rp-table > :is(thead, tfoot) { position: static; }
+  /* صورتِ مالی کارت نمی‌شود: سه ستون جا می‌شوند، فقط کد می‌رود. */
+  /* ستونِ کد جمع می‌شود، نه `display: none`: خانه‌ی پنهان از شبکه‌ی جدول بیرون می‌رود و بقیه‌ی خانه‌ها یک ستون جابه‌جا
+   * می‌نشینند، و `col`ِ پنهان در چیدمانِ ثابت عرضش را نگه می‌دارد. */
+  .rp-statement col.rp-c-code { width: 0; }
+  .page .ef-table-wrap > table.rp-statement :is(th, td).rp-code { padding: 0; border: 0; font-size: 0; overflow: hidden; }
+  .rp-statement col.rp-c-amt { width: 128px; }
+  .page .ef-table-wrap > table.rp-statement td.rp-name,
+  .page .ef-table-wrap > table.rp-statement > tbody > tr.rp-sub > td:nth-child(2) { padding-inline-start: 14px; }
+  /* بقیه کارت می‌شوند و «جمع» کارتِ آخر است؛ خط، زمینه و میخِ گرید در کارت برداشته می‌شوند. */
+  .page .ef-table-wrap > table.rp-table.cards-on-mobile { min-inline-size: 0; table-layout: auto; }
+  .rp-table.cards-on-mobile tfoot { display: block; }
+  .rp-table.cards-on-mobile > tfoot > tr { background: var(--xl-head); }
+  .rp-inv :is(th, td).rp-pin { position: static; box-shadow: none; }
+  .page .ef-table-wrap > table.rp-table.cards-on-mobile > :is(tbody, tfoot) > tr > td,
+  .page .ef-table-wrap > table.rp-table.cards-on-mobile > tbody > tr:hover > td,
+  .page .ef-table-wrap > table.rp-inv.cards-on-mobile > :is(tbody, tfoot) > tr > td.rp-pin {
+    block-size: auto;
+    padding: 1px 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    white-space: normal;
+  }
+  .rp-code-inline { display: inline; margin-inline-end: 6px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .page .ef-table-wrap > table.rp-table.cards-on-mobile td.rp-tree { padding-inline-start: 0; }
+  /* ردیفِ ناقصِ معاملاتِ فصلی: لبه‌ی کارت رنگِ هشدار می‌گیرد، نه خطی کنارِ عنوان. */
+  .rp-table.cards-on-mobile > tbody > tr.rp-row--warn { border-inline-start: 3px solid var(--warning); }
+  .page .ef-table-wrap > table.rp-table > tbody > tr.rp-row--warn > td:first-child { box-shadow: none; }
+}
+
+@media print {
+  .page section:has(.rc-groups),
+  .ef-head:has(.rp-head),
+  .jg-head-actions { display: none !important; }
+  .rp-scroll { max-block-size: none; overflow: visible; }
+  .page .ef-table-wrap > table.rp-table > :is(thead, tfoot),
+  .rp-inv :is(th, td).rp-pin { position: static; box-shadow: none; }
+  .page .ef-table-wrap > table.rp-inv { min-inline-size: 0; }
 }

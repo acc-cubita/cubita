@@ -126,6 +126,17 @@ export const REPORT_GROUPS: { key: ReportGroupKey; heading: string; entries: Ent
 ]
 
 /**
+ * دوازده تب، دسته‌بندی‌شده به **همان** دسته‌های کاتالوگ — سربرگِ صفحه‌ی «گزارش‌ها». از `REPORT_GROUPS`
+ * ساخته می‌شود نه فهرستِ دوم، تا تبی که به دسته‌ی دیگری برود در هر دو جا با هم جابه‌جا شود.
+ */
+export const REPORT_TAB_GROUPS: { key: ReportGroupKey; heading: string; tabs: (typeof REPORT_TABS)[number][] }[] =
+  REPORT_GROUPS.map((g) => ({
+    key: g.key,
+    heading: g.heading,
+    tabs: g.entries.flatMap((e) => REPORT_TABS.filter((t) => e.id === `reports/${t.key}`)),
+  })).filter((g) => g.tabs.length > 0)
+
+/**
  * ترتیبِ دسته‌ها در هر حالت. حسابدار با دفتر و تراز شروع می‌کند؛ صاحبِ کسب‌وکار با
  * سود و بدهکار — همان دو کارتی که داشبوردِ ساده‌اش هم دارد (§۵۳).
  */
