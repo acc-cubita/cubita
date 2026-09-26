@@ -14818,3 +14818,72 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 @media print {
   .cb-open { display: none !important; }
 }
+
+/* ── «شماره‌گذاری مجدد اسناد» (تمِ اکسلی): نقشه‌ی شماره‌ها ──
+ * عطف (ثابت) کم‌رنگ؛ شماره‌ی تازه‌ای که عوض می‌شود پررنگِ accent، بی‌تغییر کم‌رنگ؛ با انتخابِ دستی، ردیف‌های بیرونِ انتخاب کم‌رنگ. */
+.jh-bar--report > .rh-row--tools > .rn-start input { text-align: start; }
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.rn-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 760px; }
+  .rn-sheet col.rn-c-rowhead { width: 44px; }
+  .rn-sheet col.rn-c-date { width: 96px; }
+  .rn-sheet col.rn-c-src { width: 14%; }
+  .rn-sheet col.rn-c-num { width: 12%; }
+  .page .ef-table-wrap > table.rn-sheet td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+.rn-sheet > tbody > tr.acc-row--clickable { cursor: pointer; user-select: none; }
+.page .ef-table-wrap > table.rn-sheet td.xl-rowhead { padding: 0; }
+.page .ef-table-wrap > table.rn-sheet td.rn-fixed { color: var(--text-muted); }
+.page .ef-table-wrap > table.rn-sheet td.rn-changed { color: var(--accent-on-tint, var(--text-h)); font-weight: 700; }
+.page .ef-table-wrap > table.rn-sheet td.rn-same { color: var(--text-muted); }
+.page .ef-table-wrap > table.rn-sheet > tbody > tr.rn-out > td:not(.xl-rowhead) { opacity: 0.6; }
+.rn-sheet.is-loading tbody td.num:last-child { opacity: 0.55; }
+.page .lr-scroll:focus-within > table.rn-sheet > tbody > tr.is-active:not(.is-selected) > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.lr-scroll:focus .rn-sheet > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+
+/* ── «ادغام اسناد» (تمِ اکسلی): برگه‌ی اسناد با سرگروهِ روز، و سندِ ادغامی با نوارِ هم‌خط ── */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.mg-list { table-layout: fixed; inline-size: 100%; min-inline-size: 700px; }
+  .mg-list col.mg-c-rowhead,
+  .mg-doc col.mg-c-rowhead { width: 44px; }
+  .mg-list col.mg-c-num { width: 96px; }
+  .mg-list col.mg-c-acc { width: 30%; }
+  .mg-list col.mg-c-lines { width: 64px; }
+  .mg-list col.mg-c-amt { width: 14%; }
+  .page .ef-table-wrap > table.mg-list td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .page .ef-table-wrap > table.mg-doc { table-layout: fixed; inline-size: 100%; min-inline-size: 700px; }
+  .mg-doc col.mg-c-src { width: 72px; }
+  .mg-doc col.mg-c-desc { width: 28%; }
+  .mg-doc col.mg-c-money { width: 14%; }
+  .page .ef-table-wrap > table.mg-doc td { overflow: hidden; text-overflow: ellipsis; }
+}
+.mg-list > tbody > tr.acc-row--clickable { cursor: pointer; user-select: none; }
+.page .ef-table-wrap > table.mg-list td.xl-rowhead { padding: 0; }
+.page .ef-table-wrap > table.mg-list > tbody > tr.mg-day > td {
+  padding-block: 6px;
+  border-block-start: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--xl-head) 40%, var(--surface));
+  white-space: normal;
+}
+.page .ef-table-wrap > table.mg-list > tbody > tr.mg-day:first-child > td { border-block-start-color: transparent; }
+.page .ef-table-wrap > table.mg-list > tbody > tr.mg-day:hover > td { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.mg-day td > * { unicode-bidi: isolate; }
+.mg-day-count { margin-inline-start: 8px; color: var(--text-muted); font-size: var(--fs-xs); }
+.page .ef-table-wrap > table.mg-list > tbody > tr.is-blocked > td { color: var(--text-muted); opacity: 0.55; cursor: not-allowed; }
+.page .lr-scroll:focus-within > table.mg-list > tbody > tr.is-active:not(.is-selected) > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.lr-scroll:focus .mg-list > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.page .ef-table-wrap > table.mg-doc td.mg-desc { color: var(--text-muted); }
+.page .ef-table-wrap > table.mg-doc td.xl-rowhead { color: var(--text-muted); font-size: var(--fs-xs); text-align: center; }
+/* مرزِ سندِ اصلی در سندِ ادغامی — تا روشن باشد کدام ردیف‌ها از کدام سند آمده‌اند. */
+.page .ef-table-wrap > table.mg-doc > tbody > tr.mg-next > td { border-block-start: 1px solid var(--border-strong); }
+.mg-empty { margin: 0; padding: var(--sp-3) 0; }
+
+@media (max-width: 760px) {
+  .page .ef-table-wrap.lr-scroll:is(*, :focus-within) > table:is(.rn-sheet, .mg-list) > tbody > tr:is(.is-active, .is-selected, :hover) > td {
+    background: transparent;
+    box-shadow: none;
+  }
+  :is(.rn-sheet, .mg-list) > tbody > tr.is-selected { border-color: var(--accent); background: var(--accent-bg); }
+  .page .ef-table-wrap > table.mg-list > tbody > tr.mg-day > td { border: 0; background: transparent; }
+  .mg-list > tbody > tr.mg-day { border-color: var(--border-strong); background: color-mix(in srgb, var(--xl-head) 40%, var(--surface)); }
+  .page .ef-table-wrap > table.mg-doc > tbody > tr.mg-next > td { border: 0; }
+}

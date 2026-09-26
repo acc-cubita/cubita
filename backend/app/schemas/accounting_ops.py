@@ -122,6 +122,8 @@ class RenumberPreviewOut(BaseModel):
     skipped_permanent: int
     rows: list[RenumberRowOut]
     truncated: bool
+    #: اولین شماره‌ی نقشه که سندی بیرونِ نقشه دارد (اجرا ردش می‌کند)؛ None یعنی اجراشدنی.
+    first_clash: int | None = None
 
 
 class RenumberResultOut(BaseModel):

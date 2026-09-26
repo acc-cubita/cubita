@@ -102,10 +102,12 @@ def renumber_preview(
     date_from: date | None = None,
     date_to: date | None = None,
     start_number: int = Query(1, ge=1),
+    #: انتخابِ دستی، مثلِ اجرا: **جای** بازه می‌نشیند. بی‌این، پیش‌نمایشِ انتخابِ دستی نقشه‌ی کلِ بازه را نشان می‌داد.
+    entry_ids: list[UUID] | None = Query(None),
     db: Session = Depends(get_db),
     _=Depends(require_permission("accounting", "view")),
 ):
-    return ops.preview_renumber(db, date_from, date_to, start_number)
+    return ops.preview_renumber(db, date_from, date_to, start_number, entry_ids)
 
 
 @router.post("/entries/renumber", response_model=RenumberResultOut)

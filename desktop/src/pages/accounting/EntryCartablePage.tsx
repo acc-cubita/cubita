@@ -14,6 +14,7 @@ import { formatJalali, todayIso } from '../../lib/jalali'
 import type { PageKey } from '../../lib/navModel'
 import { useRowSelection } from '../../lib/rowSelection'
 import { useColumnWidths } from '../../lib/useColumnWidths'
+import { useCtrlS } from '../../lib/useCtrlS'
 import { AsyncBlock, OpsPage, RangeCells, fa, faAmount, faInt, sourceLabel, useAsync, useRange, type Msg } from './kit'
 
 const LAYOUT = { fixed: ['rowhead', 'go'], auto: 'desc' } as const
@@ -174,6 +175,9 @@ export function EntryCartablePage({ token, onNavigate }: { token: string; onNavi
     </th>
   )
 
+  //: Ctrl+S از هر جای صفحه — سربرگِ بازه بیرونِ فرم است.
+  useCtrlS(() => void finalizePicked())
+
   return (
     <OpsPage
       canvas
@@ -224,12 +228,6 @@ export function EntryCartablePage({ token, onNavigate }: { token: string; onNavi
         onSubmit={(e) => {
           e.preventDefault()
           finalizePicked()
-        }}
-        onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
-            e.preventDefault()
-            finalizePicked()
-          }
         }}
       >
         <SectionCard

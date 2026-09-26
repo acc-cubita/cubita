@@ -1,35 +1,24 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   BookOpen,
-  CheckCircle2,
-  Combine,
   FileStack,
-  Hash,
   Inbox,
-  Layers,
   Printer,
   RefreshCw,
   Trash2,
 } from 'lucide-react'
 import {
   fetchJournalEntriesFiltered,
-  fetchRenumberPreview,
-  mergeEntries,
   printJournalEntry,
-  renumberEntries,
   setEntrySubNumber,
   voidJournalEntry,
   type JournalEntryRecord,
 } from '../../api'
 import type { AccountCache, OutboxEntry } from '../../electron.d'
 import { SectionCard } from '../../components/SectionCard'
-import { NumberInput } from '../../components/NumberInput'
 import { JournalEntryForm } from '../../components/JournalEntryForm'
 import {
-  ActionBar,
   CountBadge,
-  FormField,
-  FormStatus,
   ListToolbar,
   RowAction,
   SearchField,
@@ -45,7 +34,6 @@ import { useDebounced } from '../../lib/useDebounced'
 import { ColResizer, SelectionBar } from '../../components/XlGrid'
 import {
   AsyncBlock,
-  Metric,
   Note,
   OpsPage,
   RangeBar,
@@ -54,7 +42,6 @@ import {
   fa,
   faAmount,
   faInt,
-  sourceLabel,
   sourceText,
   useAsync,
   useRange,
@@ -351,364 +338,12 @@ function EntryTable({
 export { EntryCartablePage } from './EntryCartablePage'
 
 // ═══════════════ ۳) شماره‌گذاری مجدد اسناد ═══════════════
-
-export function RenumberEntriesPage({ token }: { token: string }) {
-  const range = useRange('year')
-  const [start, setStart] = useState('1')
-  const [msg, setMsg] = useState<Msg>(null)
-  const startNumber = Math.max(1, Number(start) || 1)
-
-  //: انتخابِ دستی. خالی یعنی «کلِ بازه» — همان رفتارِ قبلی، دست‌نخورده.
-  const [picked, setPicked] = useState<Set<string>>(new Set())
-  const togglePick = (id: string) =>
-    setPicked((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-
-  const preview = useAsync(
-    () => fetchRenumberPreview(token, range.from, range.to, startNumber),
-    [token, range.from, range.to, startNumber],
-  )
-
-  //: با عوض‌شدنِ بازه انتخاب پاک می‌شود. وگرنه شناسه‌هایی که دیگر در پیش‌نمایش
-  //: نیستند در انتخاب می‌ماندند و کاربر روی چیزی اعمال می‌کرد که نمی‌دید.
-  useEffect(() => setPicked(new Set()), [range.from, range.to])
-
-  async function run() {
-    const manual = picked.size > 0
-    if (!manual && (preview.data?.changed_count ?? 0) === 0) {
-      setMsg({ text: 'شماره‌ی هیچ سندی عوض نمی‌شود؛ بازه یا شماره‌ی شروع را عوض کنید.', kind: 'err' })
-      return
-    }
-    if (
-      !window.confirm(
-        `شماره‌ی ${manual ? picked.size : (preview.data?.count ?? 0)} سند به‌ترتیبِ تاریخ از ${startNumber} بازنویسی می‌شود.\nادامه می‌دهید؟`,
-      )
-    )
-      return
-    try {
-      //: انتخابِ دستی **جای** بازه می‌نشیند نه کنارش — سرور هم همین‌طور رفتار
-      //: می‌کند، پس فرستادنِ هر دو یعنی کاربر باید حدس بزند کدام برنده است.
-      const out = await renumberEntries(token, {
-        date_from: manual ? null : range.from,
-        date_to: manual ? null : range.to,
-        entry_ids: manual ? [...picked] : null,
-        start_number: startNumber,
-      })
-      setPicked(new Set())
-      setMsg({
-        text: `${faInt(out.changed_count)} سند شماره‌ی تازه گرفت (${fa(out.first_number)} تا ${fa(out.last_number)}).`,
-        kind: 'ok',
-      })
-      preview.reload()
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    }
-  }
-
-  const data = preview.data
-  return (
-    <OpsPage
-      canvas
-      icon={Hash}
-      title="شماره‌گذاری مجدد اسناد"
-      description="شماره‌ی اسناد را به‌ترتیبِ تاریخ از نو می‌دهد. فقط روی اسنادِ موقت — سندِ دائم شماره‌ی امضاشده دارد و جابه‌جا نمی‌شود."
-      head={
-        <div className="cc-head">
-          <RangeBar
-            range={range}
-            extra={
-              <label className="acc-inline-field">
-                شروع از شماره
-                <NumberInput value={start} onChange={setStart} group={false} />
-              </label>
-            }
-          />
-          <div className="cc-summary">
-            <Metric
-              icon={<FileStack size={14} />}
-              label="سندِ موقتِ بازه"
-              value={data ? faInt(data.count) : '—'}
-              hint={
-                data && data.skipped_permanent > 0
-                  ? `${faInt(data.skipped_permanent)} سندِ دائم دست نمی‌خورد`
-                  : undefined
-              }
-            />
-            <Metric
-              icon={<Hash size={14} />}
-              label="شماره عوض می‌شود"
-              value={data ? faInt(data.changed_count) : '—'}
-              tone={data && data.changed_count > 0 ? 'out' : 'in'}
-            />
-            <Metric
-              icon={<CheckCircle2 size={14} />}
-              label="بازه‌ی شماره"
-              value={data && data.count > 0 ? `${fa(startNumber)} — ${fa(startNumber + data.count - 1)}` : '—'}
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Hash}
-        title="پیش‌نمایشِ شماره‌ها"
-        tip="فقط اسنادِ موقت در نقشه می‌آیند؛ سندِ دائم شماره‌ی امضاشده دارد و جابه‌جا نمی‌شود. اگر ردیفی را علامت بزنید، فقط همان‌ها بازشماره می‌شوند."
-      >
-        <AsyncBlock
-          loading={preview.loading}
-          error={preview.error}
-          empty={(data?.count ?? 0) === 0}
-          emptyText="در این بازه سندِ موقتی نیست."
-        >
-          {data?.truncated && (
-            <p className="hint">فقط {faInt(data.rows.length)} ردیفِ نخست نمایش داده می‌شود؛ اعمال روی همه انجام می‌شود.</p>
-          )}
-          <div className="table-scroll ef-table-wrap">
-            <table className="cards-on-mobile acc-table ef-table">
-              <thead>
-                <tr>
-                  <th className="ef-col-min" aria-label="انتخاب" />
-                  <th>تاریخ</th>
-                  <th>شرح</th>
-                  <th>وضعیت</th>
-                  {/* عطف اینجاست تا کاربر پیش از زدنِ دکمه ببیند چه چیزی *تغییر
-                      نمی‌کند* — تضمینی که کلِ دلیلِ وجودِ این ستون است. */}
-                  <th>عطف (ثابت)</th>
-                  <th>شماره‌ی فعلی</th>
-                  <th>شماره‌ی تازه</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.rows ?? []).map((r) => (
-                  <tr key={r.id} className={r.changed ? 'acc-row--changed' : ''}>
-                    <td className="ef-col-min" data-label="انتخاب">
-                      <input
-                        type="checkbox"
-                        aria-label="انتخابِ سند"
-                        checked={picked.has(r.id)}
-                        onChange={() => togglePick(r.id)}
-                      />
-                    </td>
-                    <td className="card-title" data-label="تاریخ">
-                      {formatJalali(r.entry_date)}
-                    </td>
-                    <td data-label="شرح">{r.description || sourceLabel(r.source_type)}</td>
-                    <td data-label="وضعیت">
-                      <StatusChip status={r.status} />
-                    </td>
-                    <td data-label="عطف (ثابت)" className="num">
-                      {r.atf_number == null ? '—' : fa(r.atf_number)}
-                    </td>
-                    <td data-label="شماره‌ی فعلی" className="num">
-                      {r.old_number == null ? '—' : fa(r.old_number)}
-                    </td>
-                    <td data-label="شماره‌ی تازه" className="num">
-                      {fa(r.new_number)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-      <ActionBar
-        status={
-          <FormStatus
-            msg={msg}
-            idle={
-              picked.size > 0
-                ? `فقط ${faInt(picked.size)} سندِ علامت‌خورده بازشماره می‌شوند.`
-                : 'همه‌ی اسنادِ موقتِ این بازه بازشماره می‌شوند.'
-            }
-          />
-        }
-      >
-        <button type="button" className="btn-primary" disabled={preview.loading} onClick={() => void run()}>
-          <Hash size={15} /> اعمالِ شماره‌گذاری
-        </button>
-      </ActionBar>
-    </OpsPage>
-  )
-}
+//: برگه‌ی اکسلیِ نقشه‌ی شماره‌ها فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ ورودِ صفحه عوض نشود.
+export { RenumberEntriesPage } from './RenumberEntriesPage'
 
 // ═══════════════════════ ۴) ادغام اسناد ═══════════════════════
-
-export function MergeEntriesPage({ token }: { token: string }) {
-  const range = useRange('month')
-  const [picked, setPicked] = useState<Set<string>>(new Set())
-  const [description, setDescription] = useState('')
-  const [msg, setMsg] = useState<Msg>(null)
-
-  const list = useAsync(
-    () =>
-      fetchJournalEntriesFiltered(token, {
-        dateFrom: range.from,
-        dateTo: range.to,
-        status: 'temporary',
-        sourceType: 'manual',
-        limit: 200,
-      }),
-    [token, range.from, range.to],
-  )
-
-  const entries = useMemo(
-    () => (list.data ?? []).filter((e) => !e.voided_at),
-    [list.data],
-  )
-
-  // ادغام فقط بینِ هم‌تاریخ‌هاست، پس گروه‌بندیِ صفحه هم بر اساسِ تاریخ است — وگرنه
-  // کاربر انتخاب می‌کرد و سرور رد می‌کرد، که بدترین ترتیبِ فهمیدنِ یک قاعده است.
-  const byDate = useMemo(() => {
-    const map = new Map<string, JournalEntryRecord[]>()
-    for (const e of entries) {
-      const bucket = map.get(e.entry_date) ?? []
-      bucket.push(e)
-      map.set(e.entry_date, bucket)
-    }
-    return [...map.entries()]
-      .filter(([, rows]) => rows.length > 1)
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-  }, [entries])
-
-  const pickedDate = useMemo(() => {
-    const first = entries.find((e) => picked.has(e.id))
-    return first?.entry_date ?? null
-  }, [entries, picked])
-
-  function toggle(entry: JournalEntryRecord) {
-    setPicked((prev) => {
-      const next = new Set(prev)
-      if (next.has(entry.id)) next.delete(entry.id)
-      else next.add(entry.id)
-      return next
-    })
-  }
-
-  async function run() {
-    if (picked.size < 2) {
-      setMsg({ text: 'دست‌کم دو سندِ هم‌تاریخ را برای ادغام علامت بزنید.', kind: 'err' })
-      return
-    }
-    if (!window.confirm(`${picked.size} سند در یک سند ادغام می‌شوند و اصل‌ها حذف خواهند شد. ادامه؟`))
-      return
-    try {
-      const out = await mergeEntries(token, [...picked], description)
-      setMsg({
-        text: `سندِ ادغامی با شماره ${fa(out.number ?? 0)} و ${faInt(out.line_count)} ردیف ساخته شد.`,
-        kind: 'ok',
-      })
-      setPicked(new Set())
-      setDescription('')
-      list.reload()
-    } catch (err) {
-      setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
-    }
-  }
-
-  return (
-    <OpsPage
-      canvas
-      icon={Combine}
-      title="ادغام اسناد"
-      description="چند سندِ موقتِ دستیِ هم‌تاریخ را در یک سند جمع می‌کند. مانده‌ی هیچ حسابی تکان نمی‌خورد — فقط تعدادِ اسناد کم می‌شود."
-      head={
-        <div className="cc-head">
-          <RangeBar range={range} />
-          <div className="cc-summary">
-            <Metric
-              icon={<FileStack size={14} />}
-              label="سندِ قابلِ ادغام"
-              value={list.data ? faInt(entries.length) : '—'}
-            />
-            <Metric icon={<Layers size={14} />} label="روزهای دارای چند سند" value={faInt(byDate.length)} />
-            <Metric
-              icon={<Combine size={14} />}
-              label="انتخاب‌شده"
-              value={faInt(picked.size)}
-              tone={picked.size > 1 ? 'in' : 'plain'}
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Combine}
-        title="اسنادِ موقتِ دستی"
-        tip="فقط روزهایی که بیش از یک سند دارند نشان داده می‌شوند؛ ادغام بینِ دو تاریخ معنا ندارد."
-      >
-        <div className="ef-block-top">
-          <FormField label="شرحِ سندِ ادغامی" optional tip="خالی بگذارید تا شماره‌ی اسنادِ اصلی نوشته شود.">
-            {(id) => (
-              <input
-                id={id}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="مثلاً: هزینه‌های تنخواهِ هفته‌ی اول"
-              />
-            )}
-          </FormField>
-        </div>
-
-        <AsyncBlock
-          loading={list.loading}
-          error={list.error}
-          empty={byDate.length === 0}
-          emptyText="هیچ روزی در این بازه بیش از یک سندِ موقتِ دستی ندارد."
-        >
-          {byDate.map(([day, rows]) => (
-            <div className="acc-day" key={day}>
-              <h4 className="acc-day-head">
-                {formatJalali(day)} <span>{faInt(rows.length)} سند</span>
-              </h4>
-              <ul className="acc-picklist">
-                {rows.map((e) => {
-                  const total = e.lines.reduce((s, l) => s + Number(l.debit || 0), 0)
-                  const blocked = pickedDate !== null && pickedDate !== e.entry_date
-                  return (
-                    <li key={e.id} className={blocked ? 'is-blocked' : ''}>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={picked.has(e.id)}
-                          disabled={blocked}
-                          onChange={() => toggle(e)}
-                        />
-                        <span className="acc-pick-title">سند {fa(e.number ?? 0)}</span>
-                        <span className="acc-pick-sub">{e.description || '—'}</span>
-                        <span className="acc-pick-meta">{fa(total)}</span>
-                      </label>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          ))}
-        </AsyncBlock>
-      </SectionCard>
-      <ActionBar
-        status={
-          <FormStatus
-            msg={msg}
-            idle={
-              pickedDate
-                ? `${faInt(picked.size)} سندِ ${formatJalali(pickedDate)} علامت خورده؛ برای تاریخِ دیگر اول انتخاب را پاک کنید.`
-                : 'دست‌کم دو سندِ هم‌تاریخ را علامت بزنید.'
-            }
-          />
-        }
-      >
-        <button type="button" className="btn-primary" onClick={() => void run()}>
-          <Combine size={15} /> {picked.size > 1 ? `ادغامِ ${faInt(picked.size)} سند` : 'ادغامِ اسناد'}
-        </button>
-      </ActionBar>
-    </OpsPage>
-  )
-}
+//: برگه‌ی اکسلیِ ادغام فایلِ خودش را دارد؛ از این‌جا صادر می‌شود تا مسیرِ ورودِ صفحه عوض نشود.
+export { MergeEntriesPage } from './MergeEntriesPage'
 
 /** فهرستِ اسنادِ حسابداری — صفحه‌ی «فهرست» ماژول. */
 /**

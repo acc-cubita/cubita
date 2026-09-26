@@ -309,6 +309,24 @@ def _permanent_in_range(
     )
 
 
+def _first_clash(db: Session, entries: list[JournalEntry], start_number: int) -> int | None:
+    """اولین شماره‌ی نقشه که سندی **بیرونِ** نقشه دارد — اجرا با آن رد می‌شود.
+
+    پیش‌نمایش و اجرا هر دو از همین می‌خوانند، تا رابط پیش از زدنِ دکمه بگوید «شماره‌ی شروعِ دیگری انتخاب کنید»، نه بعد.
+    """
+    if not entries:
+        return None
+    target_ids = {e.id for e in entries}
+    taken = {
+        int(n)
+        for (n,) in db.query(JournalEntry.number)
+        .filter(JournalEntry.number.isnot(None), JournalEntry.id.notin_(target_ids))
+        .all()
+        if n is not None
+    }
+    return next((start_number + i for i in range(len(entries)) if start_number + i in taken), None)
+
+
 def preview_renumber(
     db: Session,
     date_from: date_ | None,
@@ -342,6 +360,8 @@ def preview_renumber(
         "skipped_permanent": _permanent_in_range(db, date_from, date_to, entry_ids),
         "rows": rows[:PREVIEW_LIMIT],
         "truncated": len(rows) > PREVIEW_LIMIT,
+        #: شماره‌ای که اجرا را رد می‌کند — None یعنی نقشه اجراشدنی است.
+        "first_clash": _first_clash(db, entries, start_number),
     }
 
 
@@ -375,19 +395,11 @@ def renumber_entries(
     assert_period_open(db, min(e.entry_date for e in entries))
 
     # بیرونِ محدوده‌ی هدف چه شماره‌هایی گرفته‌اند — تا شماره‌ی تازه رویشان نیفتد.
-    target_ids = {e.id for e in entries}
-    taken = {
-        int(n)
-        for (n,) in db.query(JournalEntry.number)
-        .filter(JournalEntry.number.isnot(None), JournalEntry.id.notin_(target_ids))
-        .all()
-        if n is not None
-    }
-    clash = [start_number + i for i in range(len(entries)) if start_number + i in taken]
-    if clash:
+    clash = _first_clash(db, entries, start_number)
+    if clash is not None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"شماره‌ی {clash[0]} پیش‌تر به سندی بیرونِ این بازه داده شده؛ شماره‌ی شروعِ دیگری انتخاب کنید",
+            f"شماره‌ی {clash} پیش‌تر به سندی بیرونِ این بازه داده شده؛ شماره‌ی شروعِ دیگری انتخاب کنید",
         )
 
     #: شماره‌های اصلی پیش از دست‌زدن نگه داشته می‌شوند — بعد از پاسِ منفی دیگر
