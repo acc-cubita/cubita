@@ -831,7 +831,7 @@ export function Dashboard({
               />
               <ReportCatalog me={me} onNavigate={navigate} />
               <div className="ef-form" id="report-view">
-                <Reports token={token} />
+                <Reports token={token} picker={false} />
               </div>
             </div>
           )}

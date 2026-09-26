@@ -1,4 +1,4 @@
-import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
+import { Fragment, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 
 import {
@@ -30,7 +30,7 @@ export interface OpenAccount {
 const fa = (v: string | number) => Number(v || 0).toLocaleString('fa-IR')
 
 /** مبلغِ گزارش: صفر «—»، منفی در پرانتز و قرمز — قراردادِ صورت‌های مالی. */
-function Amount({ value }: { value: string | number }) {
+export function Amount({ value }: { value: string | number }) {
   const v = Number(value || 0)
   if (v === 0) return <>—</>
   if (v < 0) return <span className="rp-neg">({fa(-v)})</span>
@@ -97,6 +97,8 @@ export function StatementGrid({
 }) {
   const body = rows.filter((r) => r.kind !== 'total')
   const totals = rows.filter((r) => r.kind === 'total')
+  //: بخشی که قلمی ندارد (دفترِ تازه، فعالیتی که در بازه نبود) ردیفِ «موردی نیست» می‌گیرد، نه عنوانی بی‌زیرمجموعه.
+  const emptyAfter = (i: number) => body[i].kind === 'section' && body[i + 1]?.kind !== 'line'
   return (
     <div className="table-scroll ef-table-wrap rp-scroll">
       <table className="ef-table xl-grid table-plain rp-table rp-statement">
@@ -115,9 +117,16 @@ export function StatementGrid({
         <tbody>
           {body.map((r, i) =>
             r.kind === 'section' ? (
-              <tr key={i} className="rp-sec">
-                <td colSpan={3}>{r.label}</td>
-              </tr>
+              <Fragment key={i}>
+                <tr className="rp-sec">
+                  <td colSpan={3}>{r.label}</td>
+                </tr>
+                {emptyAfter(i) && (
+                  <tr className="rp-none">
+                    <td colSpan={3}>موردی نیست</td>
+                  </tr>
+                )}
+              </Fragment>
             ) : r.kind === 'subtotal' ? (
               <tr key={i} className="rp-sub">
                 <td className="rp-code" />
@@ -153,7 +162,9 @@ export function StatementGrid({
                 {r.label}
                 {i === totals.length - 1 && check}
               </td>
-              <td className="num">{'amount' in r && <Amount value={r.amount} />}</td>
+              <td className={`num${'amount' in r && r.amount !== 0 ? '' : ' rp-zero'}`}>
+                {'amount' in r && <Amount value={r.amount} />}
+              </td>
             </tr>
           ))}
         </tfoot>
