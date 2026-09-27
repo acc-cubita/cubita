@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Codex | `DEPLOY_NOTES.md`، `PROJECT_OVERVIEW.md`، تختهٔ ادعا | ثبت استقرار موفق production: 0186→0187، وب و API زنده، FORCE RLS و پشتیبان پیش/پس؛ هشدار انتشار انجام‌شده برداشته شد | ۱۴۰۵/۰۷/۰۵ |
 | Codex | اتوماسیون backend/desktop، مهاجرت `0187` پشت `0186`، رجیستری‌ها، ناوبری و راهنما، تست‌ها و مستندات؛ آزادسازی pytest و probe | فاز اول نامه/کارتابل/ارجاع/پیوست/بایگانی؛ ۴۰۳۳ تست بک‌اند پاس و یک skip، ۸۴۵ فرانت پاس، مهاجرت ایزوله و مرورگر ۱۴۴۰/۳۹۰ تأیید؛ بدون استقرار | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `desktop/scripts/gen-brand-assets.mjs`، `desktop/build/{icon.ico,*.bmp}`، `{desktop,admin,website}/public/favicon.svg`، `desktop/src/components/{BrandMark,TopNav,Sidebar,LoginScreen,SignupScreen,SetPasswordScreen,ServerConnectScreen,EnterpriseSetupScreen}.tsx`، `App.css`، `website/src/{concept/{concept.css,SiteChrome.tsx,brand.ts},pages/ConceptLanding.tsx}`، `mobile/{assets/*,src/ui/BrandMark.tsx}`، `mobile/scripts/gen-assets.mjs` (حذف)، `PROJECT_OVERVIEW.md` | لوگوی تازه‌ی «خانه‌ها» + پالت و نوسازیِ سایت | ۱۴۰۵/۰۷/۰۵ |
 | Claude Code (آرش) | `pages/accounting/{EntryListPage,PeriodCloseListPage,JournalPages,AccountingListPages}.tsx` (+تست‌ها)، `lib/{useCursorList,periodCloses}.ts` (+تست)، `api.ts`، `Dashboard.tsx`، `App.css` (`el-*`، `pcl-*`)، `HelpPage.tsx`، `PROJECT_OVERVIEW.md`، مهارتِ `cubita-excel-theme` | «اسناد حسابداری» و «دوره‌های بسته‌شده» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۵ |
