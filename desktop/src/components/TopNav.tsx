@@ -22,6 +22,7 @@ import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
 import { fitBar } from '../lib/topnavFit'
 import { useNavSection } from './navContext'
 import { isElectron, PRODUCT_NAME } from '../platform'
+import { BrandMark } from './BrandMark'
 
 /** نامِ گروهِ آیتم‌های حسابِ کاربری در کشوی موبایل. */
 const ACCOUNT_GROUP = 'حساب کاربری'
@@ -272,7 +273,7 @@ export function TopNav({
         </button>
 
         <button type="button" className="topnav-brand" onClick={() => go('overview')}>
-          <span className="topnav-mark">C</span>
+          <BrandMark size={26} className="topnav-mark" />
           <span className="topnav-brand-name">{PRODUCT_NAME}</span>
         </button>
 

@@ -3,6 +3,7 @@ import { ArrowLeft, Building2, Eye, EyeOff, Factory, Lock, Mail, Server, User, U
 import { enterpriseSetup, fetchMe, type MeResponse } from '../api'
 import { SearchSelect } from './SearchSelect'
 import { INDUSTRIES } from '../lib/industries'
+import { BrandMark } from './BrandMark'
 
 const MIN_PASSWORD_LENGTH = 10
 
@@ -59,7 +60,7 @@ export function EnterpriseSetupScreen({ onDone }: { onDone: (token: string, me: 
           <span className="blob blob-3" />
         </div>
         <div className="login-brand-content">
-          <div className="login-brand-mark">C</div>
+          <BrandMark size={52} className="login-brand-mark" />
           <h2 className="login-brand-title">کوبیتا سازمانی</h2>
           <p className="login-brand-tagline">سرور آماده است؛ فقط یک قدم مانده</p>
           <ul className="login-brand-features">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Menu, X } from 'lucide-react'
+import { BRAND_CELLS } from './brand'
 
 /**
  * سرصفحه و پاصفحه‌ی مشترکِ سایت — صفحه‌ی اصلی، شرایطِ استفاده، حریمِ خصوصی و نتیجه‌ی
@@ -29,21 +30,20 @@ const NAV = [
   { href: '/#cc-contact', label: 'خرید و مشاوره' },
 ]
 
-export function BrandMark({ id = 'm' }: { id?: string }) {
-  const g = `cc-brandgrad-${id}`
+export function BrandMark({ onDark = false }: { onDark?: boolean }) {
   return (
-    <svg className="cc-brand-svg" width="34" height="34" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <rect width="32" height="32" rx="8" fill={`url(#${g})`} />
-      <rect x="7.5" y="17" width="4" height="7.5" rx="2" fill="#fff" fillOpacity="0.8" />
-      <rect x="14" y="13" width="4" height="11.5" rx="2" fill="#fff" fillOpacity="0.9" />
-      <rect x="20.5" y="9.5" width="4" height="15" rx="2" fill="#fff" />
-      <circle cx="22.5" cy="6.4" r="2.4" fill="#fff" fillOpacity="0.9" />
-      <defs>
-        <linearGradient id={g} x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6366F1" />
-          <stop offset="1" stopColor="#4338CA" />
-        </linearGradient>
-      </defs>
+    <svg
+      className={`cc-brand-svg${onDark ? ' cc-brand-svg-ring' : ''}`}
+      width="34"
+      height="34"
+      viewBox="0 0 120 120"
+      aria-hidden="true"
+    >
+      <rect width="120" height="120" rx="28" fill="#17130C" />
+      {BRAND_CELLS.map(([x, y]) => (
+        <rect key={`${x}-${y}`} x={x} y={y} width="20" height="20" rx="5" fill="#FFC72C" />
+      ))}
+      <rect x="76" y="24" width="20" height="20" rx="5" fill="#A592E9" />
     </svg>
   )
 }
@@ -63,7 +63,7 @@ export function SiteHeader() {
     <header className={`cc-header${scrolled ? ' cc-header-raised' : ''}`}>
       <div className="cc-header-in">
         <a href="/" className="cc-brand">
-          <BrandMark id="hdr" /> کوبیتا
+          <BrandMark /> کوبیتا
         </a>
         <nav className="cc-nav" aria-label="منوی اصلی">
           {NAV.map((l) => (
@@ -117,7 +117,7 @@ export function SiteFooter() {
       <div className="cc-footer-grid">
         <div className="cc-footer-brand">
           <a href="/" className="cc-brand">
-            <BrandMark id="ftr" /> کوبیتا
+            <BrandMark onDark /> کوبیتا
           </a>
           <p>نرم‌افزارِ حسابداریِ ابری و آفلاین برای کسب‌وکارهای ایرانی؛ روی وب، ویندوز و اندروید، و نسخه‌ی سازمانی روی سرورِ خودِ شرکت.</p>
           <a

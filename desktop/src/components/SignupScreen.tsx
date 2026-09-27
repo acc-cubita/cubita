@@ -4,6 +4,7 @@ import { requestSignupCode, signup, fetchMe, type MeResponse } from '../api'
 import { SearchSelect } from '../components/SearchSelect'
 import { useTrades } from '../lib/useTrades'
 import { INDUSTRIES } from '../lib/industries'
+import { BrandMark } from './BrandMark'
 
 const MIN_PASSWORD_LENGTH = 10
 const CODE_LENGTH = 6
@@ -123,7 +124,7 @@ export function SignupScreen({
           <span className="blob blob-3" />
         </div>
         <div className="login-brand-content">
-          <div className="login-brand-mark">C</div>
+          <BrandMark size={52} className="login-brand-mark" />
           <h2 className="login-brand-title">کوبیتا</h2>
           <p className="login-brand-tagline">۱۴ روز رایگان امتحان کنید — بدون کارت بانکی</p>
           <ul className="login-brand-features">

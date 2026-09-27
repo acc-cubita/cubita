@@ -4,6 +4,7 @@ import { MODULE_SECTIONS } from './moduleSections'
 import { buildNav, navSections, orderNavGroups, type NavGroup, type NavItem, type PageKey } from '../lib/navModel'
 import { useExperienceMode } from '../lib/experienceMode'
 import { PRODUCT_NAME } from '../platform'
+import { BrandMark } from './BrandMark'
 
 // PageKey از navModel می‌آید؛ برای سازگاریِ importهای موجود (Dashboard/Tabs/…) از این‌جا هم صادر می‌شود.
 export type { PageKey } from '../lib/navModel'
@@ -185,7 +186,7 @@ export function Sidebar({
       {open && <div className="sidebar-overlay" onClick={onClose} aria-hidden="true" />}
       <aside className={`sidebar${open ? ' sidebar--open' : ''}`}>
       <div className="sidebar-brand">
-        <span className="sidebar-brand-mark">C</span>
+        <BrandMark size={32} className="sidebar-brand-mark" />
         <span className="sidebar-brand-name">{PRODUCT_NAME}</span>
       </div>
 

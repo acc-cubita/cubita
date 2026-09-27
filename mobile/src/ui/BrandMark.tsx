@@ -1,23 +1,24 @@
-import Svg, { Defs, LinearGradient, Rect, Stop, Circle } from 'react-native-svg'
-import { colors } from '../theme'
+import Svg, { Rect } from 'react-native-svg'
 
-// نشانِ برندِ کوبیتا — مربعِ گِردِ طلایی با میله‌ها و نقطه‌ی بنفش. نیتیو با SVG رسم
-// می‌شود (نه کپیِ CSSِ وب). همان هویتِ رنگیِ برند، اجرای مستقلِ اپ.
+// نشانِ برندِ کوبیتا («خانه‌ها»): هشت خانه‌ی جدول که حرفِ C را می‌سازند و خانه‌ی بنفشِ فعال، روی کاشیِ
+// تیره. نیتیو با SVG رسم می‌شود؛ هندسه همان desktop/scripts/gen-brand-assets.mjs است که آیکون‌های اپ را هم می‌سازد.
+const CELLS = [
+  [24, 24],
+  [50, 24],
+  [24, 50],
+  [24, 76],
+  [50, 76],
+  [76, 76],
+] as const
+
 export function BrandMark({ size = 48 }: { size?: number }) {
-  const r = size * 0.22
   return (
-    <Svg width={size} height={size} viewBox="0 0 48 48">
-      <Defs>
-        <LinearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#ffe6a6" />
-          <Stop offset="1" stopColor="#ef9f10" />
-        </LinearGradient>
-      </Defs>
-      <Rect x="1.5" y="1.5" width="45" height="45" rx={r} fill="url(#g)" />
-      <Rect x="12" y="26" width="6.5" height="10" rx="2" fill="#1a1400" />
-      <Rect x="20.75" y="20" width="6.5" height="16" rx="2" fill="#1a1400" />
-      <Rect x="29.5" y="14" width="6.5" height="22" rx="2" fill="#1a1400" />
-      <Circle cx="33" cy="13" r="4.5" fill={colors.violet} />
+    <Svg width={size} height={size} viewBox="0 0 120 120">
+      <Rect width="120" height="120" rx="28" fill="#17130C" />
+      {CELLS.map(([x, y]) => (
+        <Rect key={`${x}-${y}`} x={x} y={y} width="20" height="20" rx="5" fill="#FFC72C" />
+      ))}
+      <Rect x="76" y="24" width="20" height="20" rx="5" fill="#A592E9" />
     </Svg>
   )
 }

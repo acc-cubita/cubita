@@ -9,6 +9,7 @@ import {
   type MeResponse,
 } from '../api'
 import { loadRememberedEmail, rememberEmail } from '../lib/rememberedLogin'
+import { BrandMark } from './BrandMark'
 
 const FEATURES = [
   { icon: ShoppingCart, text: 'فروش، خرید و انبارداری یکپارچه' },
@@ -142,7 +143,7 @@ export function LoginScreen({
             <span className="blob blob-3" />
           </div>
           <div className="login-brand-content">
-            <div className="login-brand-mark">C</div>
+            <BrandMark size={52} className="login-brand-mark" />
             <h2 className="login-brand-title">کوبیتا</h2>
             <p className="login-brand-tagline">
               {forgotMethod === 'email'
@@ -315,7 +316,7 @@ export function LoginScreen({
           <span className="blob blob-3" />
         </div>
         <div className="login-brand-content">
-          <div className="login-brand-mark">C</div>
+          <BrandMark size={52} className="login-brand-mark" />
           <h2 className="login-brand-title">{enterprise ? 'کوبیتا سازمانی' : 'کوبیتا'}</h2>
           <p className="login-brand-tagline">
             {enterprise
