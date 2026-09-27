@@ -29,6 +29,7 @@ from app.routers import (
     assurance,
     audit,
     auth,
+    automation,
     backup,
     banking,
     benefits,
@@ -129,6 +130,7 @@ ENTERPRISE_ONLY: tuple[APIRouter, ...] = (
 #: همه‌ی روترها به ترتیبِ سوارشدن.
 ALL_ROUTERS: tuple[APIRouter, ...] = (
     auth.router,
+    automation.router,
     fiscal_year.router,
     cashbox.router,
     numbering.router,

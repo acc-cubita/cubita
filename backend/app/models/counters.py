@@ -82,6 +82,7 @@ DOC_CONTRACT_SETTLEMENT = "contract_settlement"
 DOC_ASSURANCE_RUN = "assurance_run"
 
 DOC_TYPES = (
+    "office_incoming", "office_outgoing", "office_internal",
     DOC_JOURNAL_ENTRY,
     DOC_JOURNAL_ATF,
     DOC_SALES_INVOICE,

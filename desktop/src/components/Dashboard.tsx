@@ -34,6 +34,7 @@ import { OverviewPage } from '../pages/OverviewPage'
 import { GuidedDashboard } from './GuidedDashboard'
 import { CommandPalette } from './CommandPalette'
 import { CalendarPage } from '../pages/CalendarPage'
+import { AutomationPage } from '../pages/automation/AutomationPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
@@ -224,6 +225,9 @@ import {
 } from '../pages/accounting/AccountingListPages'
 
 const PAGE_TITLES: Record<PageKey, string> = {
+  automation: 'کارتابل من',
+  letternew: 'نامه جدید',
+  letterlist: 'دبیرخانه و بایگانی',
   overview: 'داشبورد',
   salesflow: 'فرآیند فروش',
   salesinvoice: 'فاکتور فروش',
@@ -855,6 +859,9 @@ export function Dashboard({
           {page === 'moadian' && <MoadianModulePage token={token} me={me} onNavigate={navigate} />}
           {page === 'moadianhistory' && <MoadianHistoryPage token={token} me={me} />}
           {page === 'calendar' && <CalendarPage token={token} />}
+          {page === 'automation' && <AutomationPage token={token} me={me} mode="inbox" onNavigate={navigate} />}
+          {page === 'letternew' && <AutomationPage token={token} me={me} mode="new" onNavigate={navigate} />}
+          {page === 'letterlist' && <AutomationPage token={token} me={me} mode="registry" onNavigate={navigate} />}
           {page === 'team' && <TeamPage token={token} />}
           {page === 'modules' && <ModulesPage token={token} me={me} onMeUpdated={onMeUpdated} />}
           {page === 'profile' && <ProfilePage token={token} me={me} onMeUpdated={onMeUpdated} />}
