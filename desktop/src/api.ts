@@ -6873,30 +6873,43 @@ export interface JournalListSummary {
   total_credit: string
 }
 
-/** همان `reportFiltersQs`ِ دفتر و تراز، به‌علاوه‌ی جست‌وجوی شماره و شرحِ سند. */
-function journalListQs(filters: ReportFilters, q?: string): string {
+/** فیلترهای **ستونیِ** فهرستِ اسناد (سرستونِ جدول): هرکدام فقط ستونِ خودش، «و» با بقیه. */
+export interface JournalColumnFilters {
+  atf?: number
+  sub?: string
+  desc?: string
+}
+
+/** همان `reportFiltersQs`ِ دفتر و تراز، به‌علاوه‌ی جست‌وجوی شماره و شرحِ سند و فیلترهای ستونی. */
+function journalListQs(filters: ReportFilters, q?: string, cols: JournalColumnFilters = {}): string {
   const base = reportFiltersQs(filters)
-  if (!q) return base
-  return `${base}${base ? '&' : '?'}q=${encodeURIComponent(q)}`
+  const extra = new URLSearchParams()
+  if (q) extra.set('q', q)
+  if (cols.atf !== undefined) extra.set('atf', String(cols.atf))
+  if (cols.sub) extra.set('sub', cols.sub)
+  if (cols.desc) extra.set('desc', cols.desc)
+  const tail = extra.toString()
+  if (!tail) return base
+  return `${base}${base ? '&' : '?'}${tail}`
 }
 
 /** یک صفحه از فهرستِ اسناد با همان فیلترهای دفتر و تراز. `cursor` از `next_cursor`ِ صفحه‌ی قبل. */
 export const fetchJournalEntriesPage = (
   token: string,
   filters: ReportFilters,
-  opts: { q?: string; cursor?: string | null; limit?: number } = {},
+  opts: { q?: string; cursor?: string | null; limit?: number; cols?: JournalColumnFilters } = {},
 ) =>
-  authedGetPage<JournalEntryRecord>(token, `/api/journal-entries${journalListQs(filters, opts.q)}`, {
+  authedGetPage<JournalEntryRecord>(token, `/api/journal-entries${journalListQs(filters, opts.q, opts.cols)}`, {
     limit: opts.limit,
     cursor: opts.cursor,
   })
 
-export const fetchJournalEntriesSummary = (token: string, filters: ReportFilters, q?: string) =>
-  authedGet<JournalListSummary>(token, `/api/journal-entries/summary${journalListQs(filters, q)}`)
+export const fetchJournalEntriesSummary = (token: string, filters: ReportFilters, q?: string, cols?: JournalColumnFilters) =>
+  authedGet<JournalListSummary>(token, `/api/journal-entries/summary${journalListQs(filters, q, cols)}`)
 
 /** همه‌ی اسنادِ دامنه، صفحه‌به‌صفحه. فقط برای خروجیِ CSV که کاربر صریحاً می‌خواهد، نه برای نمایش. */
-export const fetchAllJournalEntries = (token: string, filters: ReportFilters, q?: string) =>
-  authedGetAll<JournalEntryRecord>(token, `/api/journal-entries${journalListQs(filters, q)}`)
+export const fetchAllJournalEntries = (token: string, filters: ReportFilters, q?: string, cols?: JournalColumnFilters) =>
+  authedGetAll<JournalEntryRecord>(token, `/api/journal-entries${journalListQs(filters, q, cols)}`)
 
 /** فیلتر سمتِ سرور انجام می‌شود، نه در مرورگر: کشیدنِ کلِ دفترِ یک کسب‌وکارِ چندساله
  *  برای فیلترکردنش این‌جا، همان چیزی است که صفحه‌بندیِ keyset برای جلوگیری‌اش ساخته شد. */

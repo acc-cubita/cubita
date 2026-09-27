@@ -728,11 +728,11 @@ export function Dashboard({
           {page === 'balancereport' && <BalanceReportPage token={token} onNavigate={navigate} />}
           {page === 'ledgerreport' && <LedgerReportPage token={token} onNavigate={navigate} />}
           {page === 'integrity' && <IntegrityPage token={token} onNavigate={navigate} />}
-          {page === 'entrylist' && <EntryListPage token={token} />}
+          {page === 'entrylist' && <EntryListPage token={token} onNavigate={navigate} />}
           {page === 'recurringlist' && <RecurringListPage token={token} />}
           {page === 'budgetlist' && <BudgetListPage token={token} onNavigate={navigate} />}
           {page === 'currencylist' && <CurrencyListPage token={token} />}
-          {page === 'periodcloselist' && <PeriodCloseListPage token={token} />}
+          {page === 'periodcloselist' && <PeriodCloseListPage token={token} onNavigate={navigate} />}
           {/* ── ماژولِ «دریافت و پرداخت» — هجده عملیات و یک فهرست ── */}
           {page === 'payflow' && <PayFlowPage token={token} onNavigate={navigate} />}
           {page === 'receiptvoucher' && <ReceiptVoucherPage token={token} />}
