@@ -161,17 +161,11 @@
   gap: 14px;
 }
 
+/* نشانِ «خانه‌ها» (BrandMark) — کاشیِ خودش گردی دارد؛ این‌جا فقط سایه و جا. */
 .login-brand-mark {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 60%, var(--accent-3));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: var(--fs-2xl);
+  display: block;
+  flex-shrink: 0;
+  border-radius: 23%;
   box-shadow: var(--shadow-md);
   margin-bottom: 6px;
 }
@@ -468,16 +462,7 @@
 }
 
 .sidebar-brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2) 60%, var(--accent-3));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 15px;
+  display: block;
   flex-shrink: 0;
 }
 
@@ -3718,16 +3703,8 @@ button:disabled {
   flex-shrink: 0;
 }
 .topnav-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--accent);
-  color: var(--accent-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: var(--fs-md);
+  display: block;
+  flex-shrink: 0;
 }
 .topnav-brand-name {
   font-size: var(--fs-md);

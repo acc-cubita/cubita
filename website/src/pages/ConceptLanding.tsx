@@ -44,6 +44,7 @@ import {
   SiteHeader,
   TRIAL_URL,
 } from '../concept/SiteChrome'
+import { BRAND_CELLS } from '../concept/brand'
 import '../concept/concept.css'
 
 //: چهار واقعیتِ پایه‌ای که کنارِ متنِ هیرو می‌نشینند — جایگزینِ خوشه‌ی کارت‌های شناور، به
@@ -164,14 +165,13 @@ function HomeBanner() {
             </a>
           </div>
         </div>
+        {/* خانه‌های نشان در اندازه‌ی بزرگ، یکی‌یکی می‌نشینند (CSS: cc-cell-in)؛ آخرین، خانه‌ی فعالِ بنفش. */}
         <div className="cc-banner-art" aria-hidden="true">
-          <svg viewBox="0 0 240 240" fill="none">
-            <circle cx="120" cy="120" r="118" stroke="#fff" strokeOpacity="0.16" strokeWidth="2" />
-            <circle cx="120" cy="120" r="86" stroke="#fff" strokeOpacity="0.12" strokeWidth="2" />
-            <rect x="62" y="124" width="26" height="54" rx="13" fill="#fff" fillOpacity="0.55" />
-            <rect x="107" y="96" width="26" height="82" rx="13" fill="#fff" fillOpacity="0.75" />
-            <rect x="152" y="70" width="26" height="108" rx="13" fill="#fff" />
-            <circle cx="165" cy="44" r="12" fill="#06B6D4" />
+          <svg viewBox="20 20 80 80">
+            {BRAND_CELLS.map(([x, y], i) => (
+              <rect key={`${x}-${y}`} className="cc-cell" x={x} y={y} width="20" height="20" rx="5" style={{ animationDelay: `${i * 70}ms` }} />
+            ))}
+            <rect className="cc-cell cc-cell-active" x="76" y="24" width="20" height="20" rx="5" style={{ animationDelay: '480ms' }} />
           </svg>
         </div>
       </div>

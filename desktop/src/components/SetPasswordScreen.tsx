@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Lock, Eye, EyeOff, ArrowLeft, KeyRound, User } from 'lucide-react'
 import { acceptInvite, fetchMe, redeemCode, resetPassword, type MeResponse } from '../api'
 import { PRODUCT_NAME } from '../platform'
+import { BrandMark } from './BrandMark'
 
 const MIN_PASSWORD_LENGTH = 10
 
@@ -76,7 +77,7 @@ export function SetPasswordScreen({
           <span className="blob blob-3" />
         </div>
         <div className="login-brand-content">
-          <div className="login-brand-mark">C</div>
+          <BrandMark size={52} className="login-brand-mark" />
           <h2 className="login-brand-title">{PRODUCT_NAME}</h2>
           <p className="login-brand-tagline">
             {isCode

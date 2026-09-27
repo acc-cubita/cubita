@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeft, CheckCircle2, Network, Radar, Server, ShieldCheck, Users } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 
 /**
  * «کوبیتا سازمانی» — اتصالِ این رایانه به سرورِ شرکت.
@@ -76,7 +77,7 @@ export function ServerConnectScreen({
           <span className="blob blob-3" />
         </div>
         <div className="login-brand-content">
-          <div className="login-brand-mark">C</div>
+          <BrandMark size={52} className="login-brand-mark" />
           <h2 className="login-brand-title">کوبیتا سازمانی</h2>
           <p className="login-brand-tagline">حسابداریِ شرکت، روی سرورِ خودِ شرکت</p>
           <ul className="login-brand-features">
