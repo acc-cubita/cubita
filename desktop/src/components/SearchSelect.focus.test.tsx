@@ -148,3 +148,12 @@ describe('برچسبِ گزینه‌ها', () => {
     expect(trigger().textContent).not.toContain(',')
   })
 })
+
+describe('جست‌وجوی اجباری برای فهرست کوتاه', () => {
+  it('گیرندهٔ دو نفره هم کادر جست‌وجو دارد', async () => {
+    render(plainOptions.slice(0, 2), { forceSearch: true, onChange: vi.fn() })
+    expect(trigger()).not.toBeNull()
+    await openAndFocus()
+    expect(search()).not.toBeNull()
+  })
+})

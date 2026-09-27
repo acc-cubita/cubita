@@ -35,6 +35,13 @@ class ReferralIn(BaseModel):
     due_date: date | None = None
 
 
+class SendIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    version: int = Field(ge=1)
+    recipient_id: UUID
+    instruction: str = Field(default="جهت بررسی و اقدام", min_length=1, max_length=4000)
+
+
 class CompletionIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     response: str = Field(min_length=1, max_length=10000)

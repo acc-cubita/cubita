@@ -10509,7 +10509,7 @@ export const fetchOfficeLetters = (token: string, filters: OfficeFilters, cursor
   return officeGet<{ items: OfficeLetterSummary[]; next_cursor: string | null }>(token, `/api/automation/letters?${qs}`)
 }
 export const fetchOfficeRecipients = (token: string) =>
-  officeGet<{ id: string; name: string }[]>(token, '/api/automation/recipients')
+  officeGet<{ id: string; name: string; role_name?: string }[]>(token, '/api/automation/recipients')
 export const fetchOfficeLetter = (token: string, id: string) =>
   officeGet<OfficeLetter>(token, `/api/automation/letters/${id}`)
 export const createOfficeLetter = (token: string, data: OfficeLetterInput) =>
@@ -10565,3 +10565,6 @@ export async function printOfficeLetter(token: string, id: string): Promise<void
     throw error
   }
 }
+
+export const sendOfficeLetter = (token: string, id: string, version: number, recipientId: string, instruction: string) =>
+  authedSend<OfficeLetter>(token, 'POST', `/api/automation/letters/${id}/send`, { version, recipient_id: recipientId, instruction })

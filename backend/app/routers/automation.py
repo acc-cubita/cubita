@@ -13,14 +13,22 @@ from app.database import get_db
 from app.deps import Principal, get_principal, require_module, require_permission
 from app.models.automation import OfficeLetter, OfficeReferral
 from app.pagination import PageParams, paginate
-from app.schemas.automation import CompletionIn, LetterIn, LetterUpdate, ReferralIn, VersionIn
+from app.schemas.automation import CompletionIn, LetterIn, LetterUpdate, ReferralIn, SendIn, VersionIn
 from app.services import automation as svc
+from app.services import entitlements
+
+
+def office_access(db: Session = Depends(get_db), p: Principal = Depends(get_principal)):
+    # ارجاع به عضوِ فاقد مجوزِ عمومی هم خواندنی است؛ محدوده را visible_query
+    # می‌بندد، ولی گیتِ اشتراک/مجوز (از جمله آزمایشیِ منقضی) همچنان لازم است.
+    entitlements.enforce(db, p.membership.tenant, ("view",))
+
 
 router = APIRouter(prefix="/api/automation", tags=["automation"],
-                   dependencies=[Depends(require_module("automation")), Depends(require_permission("automation", "view"))])
+                   dependencies=[Depends(require_module("automation")), Depends(office_access)])
 
 
-@router.get("/recipients")
+@router.get("/recipients", dependencies=[Depends(require_permission("automation", ("create", "update")))])
 def recipients(db: Session = Depends(get_db), p: Principal = Depends(get_principal)):
     return svc.recipients(db, p)
 
@@ -100,13 +108,19 @@ def refer(letter_id: UUID, data: ReferralIn, db: Session = Depends(get_db), p: P
     return svc.detail(db, p, svc.refer(db, p, letter_id, data))
 
 
+@router.post("/letters/{letter_id}/send", dependencies=[Depends(require_permission("automation", "update"))])
+def send(letter_id: UUID, data: SendIn, db: Session = Depends(get_db), p: Principal = Depends(get_principal)):
+    return svc.detail(db, p, svc.send(db, p, letter_id, data))
+
+
 @router.post("/letters/{letter_id}/read")
 def read(letter_id: UUID, db: Session = Depends(get_db), p: Principal = Depends(get_principal)):
     return svc.detail(db, p, svc.mark_read(db, p, letter_id))
 
 
-@router.post("/referrals/{referral_id}/complete", dependencies=[Depends(require_permission("automation", "update"))])
+@router.post("/referrals/{referral_id}/complete")
 def complete(referral_id: UUID, data: CompletionIn, db: Session = Depends(get_db), p: Principal = Depends(get_principal)):
+    entitlements.enforce(db, p.membership.tenant, ("update",))
     return svc.detail(db, p, svc.complete(db, p, referral_id, data))
 
 
