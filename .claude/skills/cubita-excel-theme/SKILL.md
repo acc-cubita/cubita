@@ -22,7 +22,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | تفصیلی سایر | #207 | ب: برگه‌ی ویرایشِ درجا | [AnalyticsPage.tsx](../../../desktop/src/pages/accounting/AnalyticsPage.tsx) |
 | صدور سند تسعیر ارز | #208 | ج: پیش‌نمایشِ سندِ خودکار | [FxRevaluationPage.tsx](../../../desktop/src/pages/accounting/FxRevaluationPage.tsx) |
 | ارزها و نرخ برابری | #209 | ب: دو برگه در یک فرم | [CurrenciesPanel.tsx](../../../desktop/src/components/CurrenciesPanel.tsx) |
-| اسناد حسابداری (فهرست) | پیش از #205، بازسازی در (این PR) | د: دفتر — فیلترِ سرستون، کلیک‌به‌سند، صفحه‌بندیِ کرسریِ سرور («سندِ بعدی») با «جمعِ بازه» از `/summary` | [EntryListPage.tsx](../../../desktop/src/pages/accounting/EntryListPage.tsx) |
+| اسناد حسابداری (فهرست) | پیش از #205، بازسازی در #231 | د: دفتر — فیلترِ سرستون، کلیک‌به‌سند، صفحه‌بندیِ کرسریِ سرور («سندِ بعدی») با «جمعِ بازه» از `/summary` | [EntryListPage.tsx](../../../desktop/src/pages/accounting/EntryListPage.tsx) |
 | اسناد تکرارشونده | #212 | الف برای فرمِ قالب + د برای فهرستِ قالب‌ها | [RecurringPage.tsx](../../../desktop/src/pages/accounting/RecurringPage.tsx) |
 | بودجه‌بندی | #213 | ب: ماتریسِ حساب × ماه (ستون‌های ثابت، لغزشِ افقی) | [BudgetPage.tsx](../../../desktop/src/pages/accounting/BudgetPage.tsx) |
 | انتقال حساب به سرفصل دیگر | #216 | ب: یک ستونِ ویرایشی روی ردیف‌های ثبت‌شده، بی ردیفِ تازه؛ ذخیره‌ی اتمیِ یک‌درخواسته | [ReclassifyPage.tsx](../../../desktop/src/pages/accounting/ReclassifyPage.tsx) |
@@ -40,7 +40,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | کارتابل اسناد موقت | #227 | د با کنش: برگه‌ی کلیک‌به‌انتخاب، «نمایش» در کشو، «منشأ» فهرستِ سربرگ (نه خانه‌های جدا)، نوارِ «دائم‌کردنِ n سند» و دکمه‌ی دسته‌ایِ منشأ/بازه | [EntryCartablePage.tsx](../../../desktop/src/pages/accounting/EntryCartablePage.tsx) |
 | شماره‌گذاری مجدد اسناد | #228 | ج با انتخاب: نقشه‌ی شماره‌ها (عطفِ ثابت، شماره‌ی تازه‌ی پررنگ)؛ انتخابِ دستی نقشه‌ی خودش را از سرور می‌گیرد؛ «شماره‌ی تکراری» پیش از اعمال | [RenumberEntriesPage.tsx](../../../desktop/src/pages/accounting/RenumberEntriesPage.tsx) |
 | ادغام اسناد | #228 | ج با انتخاب: برگه‌ی اسناد با سرگروهِ روز (روزِ دیگر قفل) و پیش‌نمایشِ سندِ ادغامی با نوارِ هم‌خط | [MergeEntriesPage.tsx](../../../desktop/src/pages/accounting/MergeEntriesPage.tsx) |
-| دوره‌های بسته‌شده | (این PR) | د: قفل‌ها تازه‌ترین اول با بازه‌ی هر قفل، «مرزِ ثبتِ سند» روی آخرین، کلیک ← سندِ بستن | [PeriodCloseListPage.tsx](../../../desktop/src/pages/accounting/PeriodCloseListPage.tsx) |
+| دوره‌های بسته‌شده | #231 | د: قفل‌ها تازه‌ترین اول با بازه‌ی هر قفل، «مرزِ ثبتِ سند» روی آخرین، کلیک ← سندِ بستن | [PeriodCloseListPage.tsx](../../../desktop/src/pages/accounting/PeriodCloseListPage.tsx) |
 
 **بعدی:** وقتی صفحه‌ای تمام شد، ردیفش را این‌جا اضافه کن. صفحه‌ی بعدی را آرش انتخاب می‌کند.
 منوهای حسابداری پیش از این در #211 بازچینی شدند (شش دسته، تکراری‌ها ادغام) — صفحه‌ای را که ادغام شده
