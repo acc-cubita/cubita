@@ -51,6 +51,20 @@ const keys = (allowed: string[], enabled?: string[]) => {
 //: مجموعه‌ای که «کسب‌وکارِ عادی» می‌بیند — بدونِ قراردادِ حسابرسی.
 const BASE = ['overview', 'contacts', 'reports', 'accounting', 'assurance']
 
+describe('گیت و دفتر اتوماسیون', () => {
+  it('هر سه مسیر زیر مجوز همان ماژول‌اند', () => {
+    for (const key of ['automation', 'letternew', 'letterlist'] as const) expect(PAGE_MODULE_KEY[key]).toBe('automation')
+    expect(keys(BASE).has('automation')).toBe(false)
+    expect(keys([...BASE, 'automation']).has('automation')).toBe(true)
+    expect(keys([...BASE, 'automation'], BASE).has('letternew')).toBe(false)
+  })
+  it('ساخت نامه دفتر نظیر دارد و کارتابل نمای اقدام است', () => {
+    expect(OPS_LIST_MAP.letternew).toBe('letterlist')
+    expect(OPS_LIST_MAP.automation).toBe('view')
+    expect(LIST_MENUS['اتوماسیون اداری'].map(i => i.key)).toEqual(['letterlist'])
+  })
+})
+
 describe('گیتِ ماژولِ حسابرسی', () => {
   it('**هسته‌ی این تست** — هر چهار کلید ثبت شده‌اند، پس هیچ‌کدام fail-open نیست', () => {
     for (const key of ['assurancerequest', WORK_OPS, ...WORK_LISTS] as PageKey[]) {

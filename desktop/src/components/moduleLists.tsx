@@ -178,6 +178,9 @@ export function menuEntryActive(e: ListMenuItem, page: PageKey, section: string 
  * کلید، **نامِ گروهِ ناوبری** است نه صفحه — چون این تصمیم به کلِ ماژول تعلق دارد.
  */
 export const LIST_MENUS: Record<string, ListMenuItem[]> = {
+  'اتوماسیون اداری': [
+    { key: 'letterlist', label: 'دبیرخانه و بایگانی', icon: FileText },
+  ],
   //: «فروش» — دفترِ نظیرِ هر عملیاتِ رکوردساز. «تخفیف‌ها و عوامل» عمداً یک دفترِ
   //: مشترک است، چون دو منوی عملیات در یک جدول می‌نویسند (استثنای دومِ قاعده‌ی نظیر).
   //: کلید باید **دقیقاً** `heading`ِ گروهِ ناوبری باشد، نه نامِ ماژول: هم
@@ -313,6 +316,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
  * وگرنه کاربر بدونِ راهِ برگشت می‌ماند. این نگاشت همان پیوند را می‌سازد.
  */
 export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
+  letterlist: 'اتوماسیون اداری',
   saleslist: 'مشتریان و فروش',
   quotationlist: 'مشتریان و فروش',
   returnlist: 'مشتریان و فروش',
@@ -394,6 +398,8 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
 export type OpsListTarget = PageKey | readonly PageKey[] | 'state' | 'view' | 'none'
 
 export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
+  automation: 'view',
+  letternew: 'letterlist',
   ownertxn: 'ownertxnlist', //: ثبت ↔ دفتر — الگوی «فروش اقساطی»
   // ── دریافت و پرداخت ──
   payflow: 'none', //: راهنمای مسیر

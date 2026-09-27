@@ -263,7 +263,7 @@ export function ModulesPage({
                           onClick={() => toggle(item.key)}
                         >
                           <span className="mp-item-ico">{item.icon}</span>
-                          <span className="mp-item-name">{item.label}</span>
+                          <span className="mp-item-name">{item.key === 'automation' ? 'اتوماسیون اداری' : item.label}</span>
                           <span className="mp-switch" aria-hidden="true">
                             <span className="mp-switch-knob" />
                           </span>
@@ -274,7 +274,7 @@ export function ModulesPage({
                     return (
                       <div key={item.key} className={`mp-item is-static is-${kind}`}>
                         <span className="mp-item-ico">{item.icon}</span>
-                        <span className="mp-item-name">{item.label}</span>
+                        <span className="mp-item-name">{item.key === 'automation' ? 'اتوماسیون اداری' : item.label}</span>
                         {kind === 'core' ? (
                           <span className="mp-tag" title="ستونِ فقراتِ برنامه — خاموش‌شدنی نیست">
                             <Check size={12} /> همیشه

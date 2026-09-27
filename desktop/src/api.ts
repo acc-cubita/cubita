@@ -10454,3 +10454,114 @@ export const fetchAssuranceFindings = (
 
 export const refreshAssuranceRun = (token: string, idempotencyKey?: string) =>
   authedSend<AssuranceRunRecord>(token, 'POST', '/api/assurance/runs', {}, idempotencyKey)
+
+// اتوماسیون اداری: فایل‌ها هم با همان احراز هویتِ نامه دریافت می‌شوند.
+export type OfficeLetterInput = {
+  kind: 'incoming' | 'outgoing' | 'internal'
+  subject: string
+  body: string
+  sender: string
+  addressee: string
+  external_number: string
+  external_date: string | null
+  letter_date: string
+  due_date: string | null
+  priority: 'normal' | 'urgent'
+}
+export type OfficeLetterSummary = Omit<OfficeLetterInput, 'body'> & {
+  id: string
+  number: number | null
+  status: 'draft' | 'registered' | 'archived'
+  created_by_id: string
+  registered_at: string | null
+  created_at: string
+  version: number
+  unread?: boolean
+}
+export type OfficeFile = { id: string; filename: string; content_type: string; size: number; sha256: string }
+export type OfficeLetter = OfficeLetterSummary & {
+  body: string
+  creator_name: string
+  can_edit: boolean
+  attachments: OfficeFile[]
+  referrals: {
+    id: string; from_name: string; to_name: string; from_user_id: string; to_user_id: string
+    instruction: string; due_date: string | null; read_at: string | null; completed_at: string | null
+    response: string; created_at: string; can_complete: boolean
+  }[]
+  events: { id: string; action: string; description: string; actor_name: string; created_at: string }[]
+}
+export type OfficeFilters = {
+  box: 'inbox' | 'sent' | 'drafts' | 'all' | 'archive'
+  kind?: OfficeLetterInput['kind'] | ''
+  q?: string; unread?: boolean; overdue?: boolean; date_from?: string; date_to?: string
+}
+async function officeGet<T>(token: string, path: string): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw apiError(await res.json().catch(() => ({})), 'دریافت مکاتبات انجام نشد؛ اتصال و دسترسی خود را بررسی کنید.', res.status)
+  return res.json()
+}
+export const fetchOfficeLetters = (token: string, filters: OfficeFilters, cursor = '') => {
+  const qs = new URLSearchParams({ limit: '30' })
+  Object.entries({ ...filters, cursor }).forEach(([key, value]) => {
+    if (value !== '' && value !== undefined && value !== false) qs.set(key, String(value))
+  })
+  return officeGet<{ items: OfficeLetterSummary[]; next_cursor: string | null }>(token, `/api/automation/letters?${qs}`)
+}
+export const fetchOfficeRecipients = (token: string) =>
+  officeGet<{ id: string; name: string }[]>(token, '/api/automation/recipients')
+export const fetchOfficeLetter = (token: string, id: string) =>
+  officeGet<OfficeLetter>(token, `/api/automation/letters/${id}`)
+export const createOfficeLetter = (token: string, data: OfficeLetterInput) =>
+  authedSend<OfficeLetter>(token, 'POST', '/api/automation/letters', data)
+export const updateOfficeLetter = (token: string, id: string, data: OfficeLetterInput, version: number) =>
+  authedSend<OfficeLetter>(token, 'PUT', `/api/automation/letters/${id}`, { ...data, version })
+export const officeLetterAction = (token: string, id: string, action: 'register' | 'archive' | 'read', version?: number) =>
+  authedSend<OfficeLetter>(token, 'POST', `/api/automation/letters/${id}/${action}`, { version })
+export const referOfficeLetter = (token: string, id: string, recipients: string[], instruction: string, due_date: string | null) =>
+  authedSend<OfficeLetter>(token, 'POST', `/api/automation/letters/${id}/refer`, { recipients, instruction, due_date })
+export const completeOfficeReferral = (token: string, id: string, response: string) =>
+  authedSend<OfficeLetter>(token, 'POST', `/api/automation/referrals/${id}/complete`, { response })
+export async function uploadOfficeFile(token: string, id: string, file: File): Promise<OfficeLetter> {
+  const res = await fetch(`${API_BASE_URL}/api/automation/letters/${id}/attachments?filename=${encodeURIComponent(file.name)}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' }, body: file,
+  })
+  if (!res.ok) throw apiError(await res.json().catch(() => ({})), 'بارگذاری پیوست انجام نشد؛ اتصال را بررسی کنید.', res.status)
+  return res.json()
+}
+export async function removeOfficeFile(token: string, id: string): Promise<OfficeLetter> {
+  const res = await fetch(`${API_BASE_URL}/api/automation/attachments/${id}`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw apiError(await res.json().catch(() => ({})), 'حذف پیوست انجام نشد؛ نامه را دوباره باز کنید.', res.status)
+  return res.json()
+}
+export async function downloadOfficeFile(token: string, file: OfficeFile): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/automation/attachments/${file.id}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) throw apiError(await res.json().catch(() => ({})), 'دریافت پیوست انجام نشد؛ دسترسی و اتصال را بررسی کنید.', res.status)
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = file.filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 30_000)
+}
+export async function printOfficeLetter(token: string, id: string): Promise<void> {
+  // پنجره در خودِ کلیک باز می‌شود تا انتظارِ شبکه باعثِ مسدودشدنِ popup نشود.
+  const win = window.open('', '_blank')
+  if (!win) throw new Error('اجازهٔ بازشدن پنجرهٔ چاپ را در مرورگر فعال کنید.')
+  win.opener = null
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/automation/letters/${id}/print`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) throw apiError(await res.json().catch(() => ({})), 'دریافت نسخهٔ چاپی انجام نشد؛ دوباره تلاش کنید.', res.status)
+    win.document.write(await res.text())
+    win.document.close()
+    win.focus()
+    win.print()
+  } catch (error) {
+    win.close()
+    throw error
+  }
+}

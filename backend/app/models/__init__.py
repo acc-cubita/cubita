@@ -1,4 +1,5 @@
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.automation import OfficeLetter, OfficeReferral, OfficeAttachment, OfficeEvent
 from app.models.analytic import AnalyticAccount
 from app.models.assets import DepreciationEntry, FixedAsset
 from app.models.assurance import AssuranceEngagement, AssuranceFinding, AssuranceRun
@@ -322,4 +323,5 @@ __all__ = [
     "PayrollDeploymentInfo",
     "ClientError",
     "SalesInquiry",
+    "OfficeLetter", "OfficeReferral", "OfficeAttachment", "OfficeEvent",
 ]

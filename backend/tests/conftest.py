@@ -85,6 +85,7 @@ def _schema():
             append_only_statements()
             + append_only_statements("check_events")
             + append_only_statements("staff_audit_log")
+            + append_only_statements("office_events")
         ):
             conn.execute(text(stmt))
 

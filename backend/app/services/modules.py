@@ -26,6 +26,7 @@ CORE_MODULES: tuple[str, ...] = ("overview", "contacts", "reports")
 
 #: ماژول‌های اختیاری که مالک می‌تواند روشن/خاموش کند (ترتیب = ترتیبِ نمایش در تنظیمات).
 OPTIONAL_MODULES: tuple[str, ...] = (
+    "automation",
     "sales",
     "pos",
     "installments",

@@ -1,0 +1,35 @@
+.office-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.office-grid > * { min-width: 0; }
+.office-grid label, .office-upload, .office-referrals form > label { display: grid; gap: 7px; }
+.office-grid input:not([type=checkbox]), .office-grid select, .office-grid textarea, .office-upload input, .office-referrals textarea { width: 100%; max-width: 100%; box-sizing: border-box; }
+.office-grid textarea, .office-referrals textarea { resize: vertical; }
+.office-wide { grid-column: 1 / -1; }
+.office-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-block: 12px; }
+.office-filters { margin-bottom: 20px; }
+.office-toolbar .office-check, .office-recipients .office-check { display: flex; align-items: center; gap: 8px; }
+.office-check input { width: auto; flex: 0 0 auto; }
+.office-table td { overflow-wrap: anywhere; white-space: normal; }
+.office-table .card-title { min-width: 130px; }
+.office-unread { color: var(--accent); font-weight: 700; }
+.office-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.office-metadata div { min-width: 0; }
+.office-metadata dt { color: var(--muted); font-size: 12px; }
+.office-metadata dd { margin: 4px 0; overflow-wrap: anywhere; }
+.office-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.9; margin-block: 14px; }
+.office-files { list-style: none; padding: 0; }
+.office-files li { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 10px; border-bottom: 1px solid var(--border); }
+.office-files li > span { min-width: 0; overflow-wrap: anywhere; flex: 1 1 180px; }
+.office-referrals article { padding: 16px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.office-referrals h3, .office-refer-form h3 { font-size: 15px; }
+.office-refer-form { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 14px; }
+.office-recipients { display: flex; flex-wrap: wrap; gap: 16px; max-height: 220px; overflow-y: auto; padding: 8px; }
+.office-history { padding-inline-start: 22px; }
+.office-history li { padding-block: 8px; overflow-wrap: anywhere; }
+.office-history small { display: block; margin-top: 4px; color: var(--muted); }
+@media (max-width: 760px) {
+  .office-grid, .office-metadata { grid-template-columns: minmax(0, 1fr); }
+  .office-wide { grid-column: auto; }
+  .office-toolbar { align-items: stretch; }
+  .office-toolbar button { flex: 1 1 auto; }
+  .office-table .card-title { min-width: 0; }
+}

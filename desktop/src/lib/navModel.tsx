@@ -96,6 +96,9 @@ import { isEnterprise } from '../platform'
 // شناسه‌ی هر صفحه‌ی برنامه. منبعِ واحد؛ Sidebar و TopNav هر دو از همین می‌خوانند.
 export type PageKey =
   | 'overview'
+  | 'automation'
+  | 'letternew'
+  | 'letterlist'
   | 'pos'
   | 'installments'
   | 'purchases'
@@ -474,6 +477,14 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    heading: 'اتوماسیون اداری',
+    icon: <ClipboardList size={17} />,
+    items: [
+      { key: 'automation', label: 'کارتابل من', icon: <ClipboardList size={18} /> },
+      { key: 'letternew', label: 'نامه جدید', icon: <FilePenLine size={18} /> },
+    ],
+  },
+  {
     heading: 'سامانه مؤدیان',
     icon: <FileSpreadsheet size={17} />,
     items: [{ key: 'moadian', label: 'سامانه مؤدیان', icon: <FileSpreadsheet size={18} /> }],
@@ -578,6 +589,9 @@ PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 //: «ورود گروهی اشخاص» در گروهِ «تنظیمات» می‌نشیند ولی داده‌اش طرف‌حساب است؛ پس
 //: کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
 PAGE_MODULE_KEY.contactimport = 'contacts'
+for (const key of ['automation', 'letternew', 'letterlist'] as PageKey[]) {
+  PAGE_MODULE_KEY[key] = 'automation'
+}
 
 //: «پیمانکاری» — کلیدِ ماژولِ مجازی، دقیقاً مثلِ `sales`: خودِ `contracting`
 //: هیچ‌کدام از این PageKeyها نیست، فقط نگاشتشان می‌کند.
