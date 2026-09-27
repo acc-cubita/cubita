@@ -13698,8 +13698,6 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td { background: var(--accent-bg); }
   .page .ef-table-wrap > table.xl-grid > tbody > tr.is-selected > td.xl-rowhead { background: var(--accent); }
 
-  /* «وضعیت» روی دسکتاپ فیلترِ سرستون است؛ این نسخه‌ی نوارِ بالا فقط مالِ موبایل. */
-  .acc-inline-field.xl-narrow-only { display: none; }
 }
 @media (max-width: 760px) {
   .jg-find { inline-size: 100%; }
@@ -14899,4 +14897,33 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .page .ef-table-wrap > table.mg-list > tbody > tr.mg-day > td { border: 0; background: transparent; }
   .mg-list > tbody > tr.mg-day { border-color: var(--border-strong); background: color-mix(in srgb, var(--xl-head) 40%, var(--surface)); }
   .page .ef-table-wrap > table.mg-doc > tbody > tr.mg-next > td { border: 0; }
+}
+
+/* ── «اسناد حسابداری» (تمِ اکسلی): گریدِ فهرست در قابِ لغزشِ خودش با سرستون و «جمعِ بازه»ِ چسبنده ──
+ * ستون‌ها همان `xl-grid--list`اند؛ این‌جا فقط کلیک‌به‌سند، ردیفِ فعالِ کیبورد و ارتفاعِ خانه‌های کنش. */
+.el-sheet > tbody > tr.acc-row--clickable { cursor: pointer; }
+.page .ef-table-wrap > table.el-sheet td.xl-rowhead { padding: 0; }
+.page .ef-table-wrap > table.el-sheet td.card-actions { padding-block: 0; }
+.page .lr-scroll:focus-within > table.el-sheet > tbody > tr.is-active:not(.is-selected) > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.lr-scroll:focus .el-sheet > tbody > tr.is-active > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+
+/* ── «دوره‌های بسته‌شده» (تمِ اکسلی): آخرین قفل (مرزِ ثبتِ سند) ته‌رنگِ کهربایی دارد ── */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.pcl-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 640px; }
+  .pcl-sheet col.pcl-c-rowhead { width: 44px; }
+  .pcl-sheet col.pcl-c-date { width: 22%; }
+  .pcl-sheet col.pcl-c-range { width: 26%; }
+  .pcl-sheet col.pcl-c-amt { width: 18%; }
+}
+.pcl-sheet > tbody > tr.acc-row--clickable { cursor: pointer; }
+.page .ef-table-wrap > table.pcl-sheet td.xl-rowhead { color: var(--text-muted); font-size: var(--fs-xs); text-align: center; }
+.page .ef-table-wrap > table.pcl-sheet > tbody > tr.pcl-latest > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--warning-bg) 60%, var(--surface)); }
+.pcl-edge { margin-inline-start: 8px; }
+.pcl-sheet > tbody > tr[tabindex]:focus-visible > td { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+
+@media (max-width: 760px) {
+  .page .ef-table-wrap.lr-scroll:is(*, :focus-within) > table.el-sheet > tbody > tr:is(.is-active, .is-selected, :hover) > td { box-shadow: none; }
+  .el-sheet > tbody > tr.is-selected { border-color: var(--accent); }
+  .page .ef-table-wrap > table.pcl-sheet > tbody > tr.pcl-latest > td:not(.xl-rowhead) { background: transparent; }
+  .pcl-sheet > tbody > tr.pcl-latest { border-color: var(--warning); }
 }

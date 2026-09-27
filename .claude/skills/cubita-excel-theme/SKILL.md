@@ -22,7 +22,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | تفصیلی سایر | #207 | ب: برگه‌ی ویرایشِ درجا | [AnalyticsPage.tsx](../../../desktop/src/pages/accounting/AnalyticsPage.tsx) |
 | صدور سند تسعیر ارز | #208 | ج: پیش‌نمایشِ سندِ خودکار | [FxRevaluationPage.tsx](../../../desktop/src/pages/accounting/FxRevaluationPage.tsx) |
 | ارزها و نرخ برابری | #209 | ب: دو برگه در یک فرم | [CurrenciesPanel.tsx](../../../desktop/src/components/CurrenciesPanel.tsx) |
-| اسناد حسابداری (فهرست) | پیش از #205 | د: دفتر | `EntryTable` در [JournalPages.tsx](../../../desktop/src/pages/accounting/JournalPages.tsx) |
+| اسناد حسابداری (فهرست) | پیش از #205، بازسازی در #231 | د: دفتر — فیلترِ سرستون، کلیک‌به‌سند، صفحه‌بندیِ کرسریِ سرور («سندِ بعدی») با «جمعِ بازه» از `/summary` | [EntryListPage.tsx](../../../desktop/src/pages/accounting/EntryListPage.tsx) |
 | اسناد تکرارشونده | #212 | الف برای فرمِ قالب + د برای فهرستِ قالب‌ها | [RecurringPage.tsx](../../../desktop/src/pages/accounting/RecurringPage.tsx) |
 | بودجه‌بندی | #213 | ب: ماتریسِ حساب × ماه (ستون‌های ثابت، لغزشِ افقی) | [BudgetPage.tsx](../../../desktop/src/pages/accounting/BudgetPage.tsx) |
 | انتقال حساب به سرفصل دیگر | #216 | ب: یک ستونِ ویرایشی روی ردیف‌های ثبت‌شده، بی ردیفِ تازه؛ ذخیره‌ی اتمیِ یک‌درخواسته | [ReclassifyPage.tsx](../../../desktop/src/pages/accounting/ReclassifyPage.tsx) |
@@ -40,6 +40,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | کارتابل اسناد موقت | #227 | د با کنش: برگه‌ی کلیک‌به‌انتخاب، «نمایش» در کشو، «منشأ» فهرستِ سربرگ (نه خانه‌های جدا)، نوارِ «دائم‌کردنِ n سند» و دکمه‌ی دسته‌ایِ منشأ/بازه | [EntryCartablePage.tsx](../../../desktop/src/pages/accounting/EntryCartablePage.tsx) |
 | شماره‌گذاری مجدد اسناد | #228 | ج با انتخاب: نقشه‌ی شماره‌ها (عطفِ ثابت، شماره‌ی تازه‌ی پررنگ)؛ انتخابِ دستی نقشه‌ی خودش را از سرور می‌گیرد؛ «شماره‌ی تکراری» پیش از اعمال | [RenumberEntriesPage.tsx](../../../desktop/src/pages/accounting/RenumberEntriesPage.tsx) |
 | ادغام اسناد | #228 | ج با انتخاب: برگه‌ی اسناد با سرگروهِ روز (روزِ دیگر قفل) و پیش‌نمایشِ سندِ ادغامی با نوارِ هم‌خط | [MergeEntriesPage.tsx](../../../desktop/src/pages/accounting/MergeEntriesPage.tsx) |
+| دوره‌های بسته‌شده | #231 | د: قفل‌ها تازه‌ترین اول با بازه‌ی هر قفل، «مرزِ ثبتِ سند» روی آخرین، کلیک ← سندِ بستن | [PeriodCloseListPage.tsx](../../../desktop/src/pages/accounting/PeriodCloseListPage.tsx) |
 
 **بعدی:** وقتی صفحه‌ای تمام شد، ردیفش را این‌جا اضافه کن. صفحه‌ی بعدی را آرش انتخاب می‌کند.
 منوهای حسابداری پیش از این در #211 بازچینی شدند (شش دسته، تکراری‌ها ادغام) — صفحه‌ای را که ادغام شده
@@ -281,6 +282,10 @@ const nav = useSheetNav<Col>({ gridRef, cols: COLS, rowCount: rows.length, onApp
   خانه‌های سربرگ (بازه، شماره‌ی شروع) را نمی‌گیرد و مرورگر «ذخیره‌ی صفحه» باز می‌کند. `useCtrlS(fn)` (`lib/useCtrlS`) بگذار، نه `onKeyDown`.
 - **پیش‌نمایشی که به انتخاب بستگی دارد:** اگر عملیات انتخابِ دستی را «جای» بازه اجرا می‌کند (بازشماره)، پیش‌نمایشِ کلِ بازه برای انتخاب
   دروغ می‌گوید. نقشه‌ی خودِ انتخاب را از سرور بگیر (با مکث) و تا نرسیده «…» نشان بده.
+- **فهرستِ بلند از سرور:** `limit` ثابت (۳۰۰) + پیجرِ کلاینت یعنی بقیه‌ی دفتر بی‌صدا دیده نمی‌شود. `useCursorList` (کرسرِ سرور با
+  «بعدی») و جمع از `/summary` با **همان** فیلترها (ستونی‌ها هم) — جمعِ ردیف‌های بارشده هرگز جای جمعِ دامنه نمی‌نشیند.
+- **CSSِ کهنه در آزمونِ مرورگر:** اگر قاعده‌ی تازه دیده نمی‌شود، `curl localhost:5173/src/App.css | grep` (نسخه‌ای که صفحه واقعاً
+  وارد می‌کند، نه `?direct`) و `touch src/App.css`. یک‌بار ستونِ ۴۴پیکسلی ۷ پیکسل اندازه گرفته شد چون Vite تغییرِ `cat >>` را ندید.
 - **Playwright:** وقتی صفحه دو فرم دارد، لوکیتور را با `form:has(.xx-sheet)` محدود کن.
 - **سقفِ ورود** ۱۰ بار در ۵ دقیقه است. برای ادامه‌ی آزمایش، uvicornِ :8000 را ری‌استارت کن.
 
