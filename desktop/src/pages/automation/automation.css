@@ -19,6 +19,9 @@
 .office-files { list-style: none; padding: 0; }
 .office-files li { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 10px; border-bottom: 1px solid var(--border); }
 .office-files li > span { min-width: 0; overflow-wrap: anywhere; flex: 1 1 180px; }
+.office-file-picker { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 38px; width: max-content; max-width: 100%; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.office-file-picker:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.office-file-picker input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .office-referrals article { padding: 16px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
 .office-referrals h3, .office-refer-form h3 { font-size: 15px; }
 .office-refer-form { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 14px; }

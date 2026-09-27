@@ -49,6 +49,8 @@ type Props = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'> & {
   onChange?: (e: { target: { value: string } }) => void
   /** متنِ کادرِ جست‌وجو. پیش‌فرض عمومی است چون این کامپوننت همه‌جا می‌نشیند. */
   searchPlaceholder?: string
+  /** فهرستِ گیرندگان حتی با دو نفر هم باید قابلِ جست‌وجو باشد. */
+  forceSearch?: boolean
 }
 
 //: سقفِ ردیف‌های نمایش‌داده‌شده. بریدن لازم است (فهرستِ واحدها ۳۹۳ ردیف است) ولی
@@ -56,10 +58,10 @@ type Props = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'> & {
 //: وجود نداشت. حالا هر وقت چیزی بریده شود، خودِ پاپ‌آور می‌گویدش.
 const SHOW_LIMIT = 80
 
-export function SearchSelect({ children, searchPlaceholder, ...rest }: Props) {
+export function SearchSelect({ children, searchPlaceholder, forceSearch = false, ...rest }: Props) {
   const options = useMemo(() => flatten(children), [children])
 
-  if (!shouldSearch(options.length, { multiple: rest.multiple, size: rest.size })) {
+  if (rest.multiple || rest.size || (!forceSearch && !shouldSearch(options.length, { multiple: rest.multiple, size: rest.size }))) {
     return (
       <select {...(rest as SelectHTMLAttributes<HTMLSelectElement>)}>{children}</select>
     )

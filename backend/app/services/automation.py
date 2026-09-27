@@ -11,6 +11,7 @@ from app.deps import Principal
 from app.models.automation import OfficeAttachment, OfficeEvent, OfficeLetter, OfficeReferral
 from app.models.tenant import Membership
 from app.models.user import User
+from app.schemas.automation import ReferralIn
 from app.services.numbering import next_document_number
 
 MAX_FILE = 5 * 1024 * 1024
@@ -69,7 +70,7 @@ def event(db, p, row, action, description=""):
 
 
 def create(db, p, data):
-    row = OfficeLetter(**data.model_dump(), created_by_id=p.user.id)
+    row = OfficeLetter(**data.model_dump(exclude={"sender"}), sender=p.user.name, created_by_id=p.user.id)
     db.add(row)
     db.flush()
     event(db, p, row, "created", "پیش‌نویس ساخته شد.")
@@ -81,7 +82,8 @@ def update(db, p, letter_id, data):
     row = letter(db, p, letter_id, lock=True)
     assert_draft(row, p)
     check_version(row, data.version)
-    for key, value in data.model_dump(exclude={"version"}).items():
+    # نام فرستنده عکسِ حسابِ سازنده است، نه متنِ دلخواهِ ویرایشگرِ پیش‌نویس.
+    for key, value in data.model_dump(exclude={"version", "sender"}).items():
         setattr(row, key, value)
     row.version += 1
     event(db, p, row, "edited", "پیش‌نویس ویرایش شد.")
@@ -109,10 +111,27 @@ def recipients(db, p):
     memberships = db.query(Membership).join(User).filter(
         Membership.tenant_id == p.tenant_id, Membership.status == "active", User.active.is_(True),
         or_(Membership.expires_at.is_(None), Membership.expires_at > now()),
-    ).all()
-    # نام/شناسه کافی است؛ ایمیل و نقشِ همکاران به این صفحه نیازی ندارند.
-    return [{"id": m.user_id, "name": m.user.name} for m in memberships
-            if Principal(m.user, m).has_permission("automation", "view")]
+    ).order_by(User.name, User.id).all()
+    # عنوانِ نقش برای جست‌وجوی «مدیر» لازم است؛ ایمیل و تلفن در دفتر همکاران نیست.
+    return [{"id": m.user_id, "name": m.user.name, "role_name": m.role.name} for m in memberships
+            if m.role.key not in {"demo", "auditor"}]
+
+
+def send(db, p, letter_id, data):
+    row = letter(db, p, letter_id, lock=True)
+    assert_draft(row, p)
+    check_version(row, data.version)
+    recipient = next((r for r in recipients(db, p) if r["id"] == data.recipient_id), None)
+    if recipient is None:
+        raise HTTPException(400, "گیرنده باید کاربر فعال همین کسب‌وکار باشد؛ فهرست را تازه‌سازی کنید.")
+    # نام برای چاپ snapshot می‌شود؛ شناسهٔ واقعی در ارجاع می‌ماند. ثبت و ارجاع
+    # در یک تراکنش‌اند تا شمارهٔ قطعی بدونِ گیرنده جا نماند.
+    row.addressee = recipient["name"]
+    db.flush()
+    register(db, p, letter_id, data.version)
+    return refer(db, p, letter_id, ReferralIn(
+        recipients=[data.recipient_id], instruction=data.instruction, due_date=row.due_date,
+    ))
 
 
 def refer(db, p, letter_id, data):
@@ -122,7 +141,7 @@ def refer(db, p, letter_id, data):
     ids = set(data.recipients)
     allowed = {r["id"] for r in recipients(db, p)}
     if not ids <= allowed:
-        raise HTTPException(400, "گیرنده باید عضو فعال همین کسب‌وکار و دارای مجوز مشاهدهٔ اتوماسیون باشد.")
+        raise HTTPException(400, "گیرنده باید کاربر فعال همین کسب‌وکار باشد؛ فهرست را تازه‌سازی کنید.")
     pending = db.query(OfficeReferral.id).filter(
         OfficeReferral.letter_id == row.id, OfficeReferral.to_user_id.in_(ids),
         OfficeReferral.completed_at.is_(None),
