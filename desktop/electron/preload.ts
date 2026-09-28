@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('cubita', {
   pushOutbox: () => ipcRenderer.invoke('sync:pushOutbox'),
   queueJournalEntry: (payload: unknown) => ipcRenderer.invoke('journal:queueEntry', payload),
   listOutbox: () => ipcRenderer.invoke('journal:listOutbox'),
+  beginJournalEdit: (id: string) => ipcRenderer.invoke('journal:beginEdit', id),
+  saveJournalEdit: (id: string, lease: string, payload: unknown) => ipcRenderer.invoke('journal:saveEdit', id, lease, payload),
+  cancelJournalEdit: (id: string, lease: string) => ipcRenderer.invoke('journal:cancelEdit', id, lease),
   queueSalesInvoice: (payload: unknown) => ipcRenderer.invoke('invoice:queueSalesInvoice', payload),
   listSalesInvoiceOutbox: () => ipcRenderer.invoke('invoice:listOutbox'),
   queueCheck: (payload: unknown) => ipcRenderer.invoke('check:queueCheck', payload),
@@ -73,6 +76,7 @@ contextBridge.exposeInMainWorld('windowControls', {
 
 contextBridge.exposeInMainWorld('cubitaUpdate', {
   status: () => ipcRenderer.invoke('update:status'),
+  check: () => ipcRenderer.invoke('update:check'),
   installNow: () => ipcRenderer.invoke('update:installNow'),
   onStatus: (cb: (status: unknown) => void) => {
     const listener = (_evt: unknown, status: unknown) => cb(status)

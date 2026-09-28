@@ -1656,6 +1656,10 @@ button:disabled {
   gap: 6px;
 }
 
+.outbox-list > li { overflow-wrap: anywhere; }
+.outbox-list .btn-secondary { margin-inline-start: 8px; }
+.client-update-server { overflow-wrap: anywhere; min-width: 0; }
+
 /* ---------- فرم‌ها ---------- */
 
 .invoice-form {
@@ -2773,10 +2777,8 @@ button:disabled {
   top: calc(100% + 6px);
   inset-inline-start: 0;
   width: 250px;
-  /* روی فیلدهای باریک‌تر از ۲۵۰px (مثلِ ستون‌های ۲۲۰pxِ گریدِ فرم) پاپ‌اور از لبه‌ی
-     فیلد بیرون می‌زد و اعدادِ سمتِ چپ سرریز می‌شدند؛ این سقف پاپ‌اور را به عرضِ فیلد
-     محدود می‌کند تا هرگز بیرون نریزد. روی فیلدهای پهن‌تر همان ۲۵۰px می‌ماند. */
-  max-width: 100%;
+  /* اندازه خوانا حتی داخل ستون باریک؛ کامپوننت موقعیت را به لبه‌های viewport محدود می‌کند. */
+  max-width: calc(100vw - 24px);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -2809,6 +2811,10 @@ button:disabled {
   font-weight: 600;
   color: var(--text-h);
 }
+
+.jalali-date-header .jalali-date-title { color: var(--text-h); min-width: 0; }
+.jalali-date-grid.jalali-date-grid--levels { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.jalali-date-grid--levels .jalali-date-cell { aspect-ratio: auto; min-height: 36px; padding: 4px 1px; }
 
 .jalali-date-weekdays {
   display: grid;

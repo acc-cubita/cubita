@@ -2,6 +2,7 @@ import { getLocalDb } from './db.js'
 import { randomUUID } from 'node:crypto'
 import { runReferenceSync, type ReferenceKey, type ReferenceSyncReport, type SyncPermissions } from '../src/lib/referenceSync.js'
 import { outboxErrorText } from '../src/lib/outboxError.js'
+import { tryLockOutboxSend, unlockOutboxSend } from './outboxLocks.js'
 
 // Sync Engine حداقلی: pull چارت حساب/کالاها/انبارها از سرور، push اسناد صف‌شده‌ی آفلاین (outbox).
 // طبق پلن: تعارض روی سندهای append-only بی‌معناست چون فقط create می‌شوند، نه update همزمان؛
@@ -182,6 +183,7 @@ async function pushOutboxTable(
   config: SyncConfig,
   table: string,
   endpoint: string,
+  onlyId?: string,
 ): Promise<{ pushed: number; failed: number }> {
   const token = config.getToken()
   if (!token) return { pushed: 0, failed: 0 }
@@ -195,7 +197,12 @@ async function pushOutboxTable(
   let failed = 0
 
   for (const item of pending) {
+    if (onlyId && item.local_id !== onlyId) continue
+    if (!tryLockOutboxSend(table, item.local_id)) continue
     try {
+      // فهرست ممکن است پیش از ویرایش خوانده شده باشد؛ زیر قفل بدنهٔ تازه را می‌گیریم.
+      const fresh = db.prepare(`SELECT payload FROM ${table} WHERE local_id = ? AND synced = 0`).get(item.local_id) as { payload: string } | undefined
+      if (!fresh) continue
       const res = await fetch(`${config.apiBaseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -218,7 +225,8 @@ async function pushOutboxTable(
           // «نفروش» در لحظه‌ی فروش گرفته می‌شود، نه ساعت‌ها بعد سرِ همگام‌سازی.
           'X-Cubita-Offline-Replay': '1',
         },
-        body: item.payload,
+        body: fresh.payload,
+        signal: AbortSignal.timeout(30_000),
       })
       if (!res.ok) {
         const text = await res.text()
@@ -234,10 +242,16 @@ async function pushOutboxTable(
     } catch (err) {
       db.prepare(`UPDATE ${table} SET sync_error = ? WHERE local_id = ?`).run(String(err), item.local_id)
       failed++
+    } finally {
+      unlockOutboxSend(table, item.local_id)
     }
   }
 
   return { pushed, failed }
+}
+
+export function pushOneJournal(config: SyncConfig, localId: string): Promise<{ pushed: number; failed: number }> {
+  return pushOutboxTable(config, 'outbox_journal_entries', '/api/journal-entries', localId)
 }
 
 const OUTBOX_ENDPOINTS: Array<[table: string, endpoint: string]> = [

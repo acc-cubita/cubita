@@ -1,143 +1,119 @@
-/**
- * به‌روزرسانی خودکار اپ دسکتاپ.
- *
- * **چرا این لازم شد:** تا امروز هیچ کانالی وجود نداشت. بسته‌ی نصبی روی دستگاه
- * مشتری برای همیشه همان می‌ماند، در حالی که سرور جلو می‌رود — و دقیقاً همین اتفاق
- * روی محیط دمو افتاد که هشت مهاجرت عقب ماند بدون اینکه کسی متوجه شود. اپی که
- * نتواند خودش را به‌روز کند، همان مسئله را روی هر دستگاه مشتری تکرار می‌کند.
- *
- * **چرا سرور خودمان و نه GitHub Releases:** تحریم‌ها دسترسی به GitHub را از ایران
- * غیرقابل‌اتکا می‌کنند، و به‌روزرسانی‌ای که نصفِ وقت‌ها در دسترس نباشد بدتر از
- * نداشتنش است چون کسی به آن اعتماد نمی‌کند. provider از نوع generic فقط یک پوشه‌ی
- * ایستا روی همان سروری می‌خواهد که API آنجاست.
- *
- * **هرگز بی‌صدا نصب نمی‌شود.** این نرم‌افزار حسابداری است؛ بستن ناگهانی برنامه وسط
- * ثبت فاکتور یعنی از دست رفتن کار کاربر. دانلود در پس‌زمینه انجام می‌شود، کاربر
- * خبردار می‌شود، و نصب فقط موقع بستن برنامه اتفاق می‌افتد.
- *
- * **ریسکی که باید بدانید:** بسته امضای کد ندارد (`signAndEditExecutable: false`)،
- * پس `verifyUpdateCodeSignature` خاموش است. یعنی تنها چیزی که به‌روزرسانی را
- * محافظت می‌کند HTTPS است. هرکسی که بتواند اتصال به acc.cubita.ir را جعل کند
- * می‌تواند کد دلخواه بفرستد. با گواهی امضای کد (~۳۰۰ دلار در سال) این بسته
- * می‌شود؛ تا آن وقت این یک بدهی آگاهانه است، نه یک غفلت.
- */
+// همان updater بسته‌بندی‌شده؛ سازمانی فقط از سرور تنظیم‌شده و با امضای ناشر.
 import { autoUpdater } from 'electron-updater'
-import type { BrowserWindow } from 'electron'
-import { app } from 'electron'
+import { app, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
+import { updateProblem, type UpdateStatus } from '../src/lib/updateStatus.js'
+export type { UpdateStatus } from '../src/lib/updateStatus.js'
 
-/** وضعیتی که به رابط کاربری فرستاده می‌شود. */
-export type UpdateStatus =
-  | { state: 'checking' }
-  | { state: 'available'; version: string }
-  | { state: 'downloading'; percent: number }
-  | { state: 'ready'; version: string }
-  | { state: 'none' }
-  | { state: 'error'; message: string }
-
-/** هر شش ساعت. کاربر معمولاً برنامه را روزها باز نگه می‌دارد. */
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
-
-let lastStatus: UpdateStatus = { state: 'none' }
-
-export function currentUpdateStatus(): UpdateStatus {
-  return lastStatus
-}
-
-/**
- * «کوبیتا سازمانی»: فید از سرورِ خودِ شرکت (`/updates/`)، و سنجشِ امضا پیش از نصب.
- *
- * - `feedUrl`: سرور فقط نصابِ **هم‌نسخه‌ی خودش** را می‌دهد، پس کلاینت هرگز از API سرورش جلو
- *   نمی‌زند (`backend/app/onprem/updates.py`).
- * - `verify`: تا وقتی فایلِ دانلودشده با `latest.yml`ِ امضاشده نخواند، `autoInstallOnAppQuit`
- *   خاموش می‌ماند و «نصب» هم کاری نمی‌کند (`updateVerify.ts`).
- * - دانلودِ تفاضلی خاموش: سرورِ شرکت درخواستِ Range را پشتیبانی نمی‌کند و شبکه‌ی داخلی سریع است.
- */
 export interface UpdateOptions {
   feedUrl?: string
-  verify?: (downloadedFile: string) => Promise<string | null>
+  verifyFeed?: () => Promise<string | null>
+  verify?: (downloadedFile: string, version: string) => Promise<string | null>
 }
 
-//: نصب فقط وقتی مجاز است که سنجش (اگر هست) قبول کرده باشد.
-let installAllowed = true
+let options: UpdateOptions = {}
+let getWindow: () => BrowserWindow | null = () => null
+let log: (message: string) => void = () => {}
+let lastStatus: UpdateStatus = { state: 'idle' }
+let configured = false
+let listening = false
+let generation = 0
+let installAllowed = false
+let checking: Promise<UpdateStatus> | null = null
+let startup: ReturnType<typeof setTimeout> | undefined
+let interval: ReturnType<typeof setInterval> | undefined
 
-export function setupAutoUpdate(
-  getWindow: () => BrowserWindow | null,
-  log: (msg: string) => void,
-  options: UpdateOptions = {},
-): void {
-  // در حالت توسعه اصلاً فعال نمی‌شود: نسخه‌ی dev برابر 0.0.0 است و هر انتشاری
-  // «به‌روزرسانی موجود» به‌نظر می‌رسد.
-  if (!app.isPackaged) {
-    log('auto-update: غیرفعال (بسته‌بندی‌نشده)')
-    return
+function send(status: UpdateStatus) {
+  lastStatus = status
+  getWindow()?.webContents.send('update:status', status)
+}
+
+function failed(error: unknown) {
+  log(`auto-update: ${String(error)}`)
+  installAllowed = false
+  autoUpdater.autoInstallOnAppQuit = false
+  send({ state: 'error', message: updateProblem(error, Boolean(options.feedUrl)) })
+}
+
+export function currentUpdateStatus(): UpdateStatus { return lastStatus }
+
+export async function checkForUpdatesNow(): Promise<UpdateStatus> {
+  if (!app.isPackaged || !configured) {
+    return { state: 'error', message: 'بررسی آپدیت در نسخه نصب‌شده و پس از اتصال به سرور در دسترس است.' }
   }
+  if (checking) return checking
+  if (['available', 'downloading', 'verifying', 'ready'].includes(lastStatus.state)) return lastStatus
+  const epoch = generation
+  const verifyFeed = options.verifyFeed
+  send({ state: 'checking' })
+  const task = (async () => {
+    try {
+      const problem = await verifyFeed?.()
+      if (epoch !== generation) return lastStatus
+      if (problem) throw new Error(problem)
+      await autoUpdater.checkForUpdates()
+    } catch (error) {
+      if (epoch === generation) failed(error)
+    }
+    return lastStatus
+  })()
+  checking = task
+  try { return await task } finally { if (checking === task) checking = null }
+}
 
-  // نصب خودکار موقع خروج بله، دانلود خودکار هم بله — ولی *راه‌اندازی مجدد* خودکار نه.
+export function setupAutoUpdate(window: () => BrowserWindow | null, logger: (message: string) => void, next: UpdateOptions = {}): void {
+  getWindow = window
+  log = logger
+  if (!app.isPackaged) { log('auto-update: غیرفعال (بسته‌بندی‌نشده)'); return }
+  generation += 1
+  options = next
+  configured = true
+  checking = null
+  installAllowed = false
   autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = false
   if (options.feedUrl) {
     autoUpdater.setFeedURL({ provider: 'generic', url: options.feedUrl })
     autoUpdater.disableDifferentialDownload = true
   }
-  installAllowed = !options.verify
-  autoUpdater.autoInstallOnAppQuit = installAllowed
-
-  const send = (status: UpdateStatus) => {
-    lastStatus = status
-    getWindow()?.webContents.send('update:status', status)
-  }
-
-  autoUpdater.on('checking-for-update', () => send({ state: 'checking' }))
-  autoUpdater.on('update-available', (info) => {
-    log(`auto-update: نسخه‌ی ${info.version} موجود است`)
-    send({ state: 'available', version: info.version })
-  })
-  autoUpdater.on('update-not-available', () => send({ state: 'none' }))
-  autoUpdater.on('download-progress', (p) => send({ state: 'downloading', percent: Math.round(p.percent) }))
-  autoUpdater.on('update-downloaded', (info) => {
-    const verify = options.verify
-    if (!verify) {
-      log(`auto-update: نسخه‌ی ${info.version} دانلود شد، در خروج نصب می‌شود`)
-      send({ state: 'ready', version: info.version })
-      return
-    }
-    void verify(info.downloadedFile).then((problem) => {
-      if (problem) {
-        log(`auto-update: نسخه‌ی ${info.version} رد شد — ${problem}`)
-        installAllowed = false
-        autoUpdater.autoInstallOnAppQuit = false
-        try {
-          fs.unlinkSync(info.downloadedFile)
-        } catch {
-          // فایل از قبل رفته؛ مهم این است که نصب نشود.
-        }
-        send({ state: 'error', message: problem })
-        return
-      }
-      log(`auto-update: نسخه‌ی ${info.version} دانلود و امضایش سنجیده شد`)
-      installAllowed = true
-      autoUpdater.autoInstallOnAppQuit = true
-      send({ state: 'ready', version: info.version })
+  send({ state: 'idle' })
+  if (!listening) {
+    listening = true
+    autoUpdater.on('checking-for-update', () => send({ state: 'checking' }))
+    autoUpdater.on('update-available', (info) => {
+      installAllowed = false
+      autoUpdater.autoInstallOnAppQuit = false
+      send({ state: 'available', version: info.version })
     })
-  })
-  autoUpdater.on('error', (err) => {
-    // شکست بررسی به‌روزرسانی نباید به کاربر به‌شکل خطا نشان داده شود و کارش را
-    // قطع کند: نبودِ اینترنت حالت عادی این برنامه است، نه استثنا.
-    log(`auto-update error: ${err.message}`)
-    send({ state: 'error', message: err.message })
-  })
-
-  const check = () => {
-    autoUpdater.checkForUpdates().catch((err) => log(`auto-update check failed: ${String(err)}`))
+    autoUpdater.on('update-not-available', () => send({ state: 'none' }))
+    autoUpdater.on('download-progress', (progress) => send({ state: 'downloading', percent: Math.max(0, Math.min(100, Math.round(progress.percent))) }))
+    autoUpdater.on('update-downloaded', (info) => {
+      const epoch = generation
+      const verify = options.verify
+      send({ state: 'verifying' })
+      void (async () => {
+        try {
+          const problem = await verify?.(info.downloadedFile, info.version)
+          if (epoch !== generation) return
+          if (problem) {
+            // فقط فایل موقت همین دانلود؛ داده‌ها و نصاب سرور دست‌نخورده می‌مانند.
+            try { fs.unlinkSync(info.downloadedFile) } catch { /* نصب همچنان ممنوع است. */ }
+            throw new Error(problem)
+          }
+          installAllowed = true
+          autoUpdater.autoInstallOnAppQuit = true
+          send({ state: 'ready', version: info.version })
+        } catch (error) { if (epoch === generation) failed(error) }
+      })()
+    })
+    autoUpdater.on('error', failed)
   }
-
-  // کمی تأخیر تا بررسی به‌روزرسانی با راه‌اندازی پنجره رقابت نکند
-  setTimeout(check, 10_000)
-  setInterval(check, CHECK_INTERVAL_MS)
+  clearTimeout(startup)
+  clearInterval(interval)
+  startup = setTimeout(() => { void checkForUpdatesNow() }, 10_000)
+  interval = setInterval(() => { void checkForUpdatesNow() }, 6 * 60 * 60 * 1000)
 }
 
-/** نصب فوری به درخواست صریح کاربر. */
 export function quitAndInstall(): void {
-  if (!installAllowed) return
-  autoUpdater.quitAndInstall()
+  if (installAllowed && lastStatus.state === 'ready') autoUpdater.quitAndInstall()
 }
