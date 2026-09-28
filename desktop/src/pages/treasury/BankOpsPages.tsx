@@ -65,7 +65,7 @@ export function PosTerminalsPage({ token, bankAccounts }: { token: string; bankA
   return (
     <OpsPage
       icon={CreditCard}
-      title="دستگاه کارت خوان"
+      title="دستگاه کارتخوان"
       description="پایانه‌های فروشگاهی و حسابی که واریزشان به آن می‌نشیند."
     >
       <PosTerminalsPanel token={token} bankAccounts={bankAccounts} />
@@ -358,7 +358,7 @@ export function PosSettlementPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={CreditCard}
-      title="تسویه کارت خوان"
+      title="تسویه کارتخوان"
       description="بردنِ وجوهِ در راهِ یک دستگاه به حسابِ بانکی‌اش، همراه با کارمزد."
       head={
         <div className="cc-head">

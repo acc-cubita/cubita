@@ -106,7 +106,7 @@ function CardPaymentDialog({
   async function pay() {
     if (!selected || !window.cubita?.posTerminal) return
     if (!selected.bank_account_id) {
-      setMsg('برای این کارتخوان حسابِ بانکیِ تسویه تعیین نشده است — در «تنظیمات ← کارتخوان‌ها» آن را مشخص کنید.')
+      setMsg('برای این کارتخوان حسابِ بانکیِ تسویه تعیین نشده است — در «دریافت و پرداخت ← دستگاه کارتخوان» آن را مشخص کنید.')
       setStage('error')
       return
     }
@@ -196,7 +196,7 @@ function CardPaymentDialog({
           )}
           {stage === 'no-terminals' && (
             <div className="card-pay-note">
-              <AlertTriangle size={16} /> هیچ کارتخوانِ فعالی تنظیم نشده است. ابتدا در «تنظیمات ← کارتخوان‌ها» یک
+              <AlertTriangle size={16} /> هیچ کارتخوانِ فعالی تنظیم نشده است. ابتدا در «دریافت و پرداخت ← دستگاه کارتخوان» یک
               دستگاه اضافه کنید.
             </div>
           )}

@@ -810,7 +810,7 @@ export function PettyHolderPage({ token, accounts }: { token: string; accounts: 
   return (
     <OpsPage
       icon={Wallet}
-      title="تنخواه دار"
+      title="تنخواه‌دار"
       description="شارژِ تنخواه‌گردان و ماندهٔ در اختیارِ تنخواه‌دار."
       head={
         <div className="cc-head">

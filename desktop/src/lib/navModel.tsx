@@ -74,7 +74,6 @@ import {
   Target,
   Truck,
   Undo2,
-  UploadCloud,
   UserCircle,
   UserCog,
   UserPlus,
@@ -87,10 +86,23 @@ import {
   Ship,
   BadgePercent,
   TrendingUp,
+  Contact,
+  PackageX,
+  Megaphone,
+  Group,
+  Vault,
+  Nfc,
+  Sheet,
+  DoorOpen,
+  Crosshair,
+  ListChecks,
+  History,
+  Handshake,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import type { ExperienceMode } from './experienceMode'
+import { DAILY_SECTION, DEFINITIONS_SECTION } from './menuSections'
 import { isEnterprise } from '../platform'
 
 // شناسه‌ی هر صفحه‌ی برنامه. منبعِ واحد؛ Sidebar و TopNav هر دو از همین می‌خوانند.
@@ -292,47 +304,61 @@ export type NavItem = {
    * فهرستِ یک‌دستِ قبلی است.
    */
   section?: string
+  /**
+   * صفحه‌ی «مسیرِ کار» — راهنمای ترتیبِ کارهای ماژول، نه خودِ یک کار. بی‌دسته بالای کارتِ «عملیات»
+   * می‌نشیند (به شکلِ پیوندِ کم‌رنگ، نه ردیفِ هم‌وزنِ بقیه) و مقصدِ کلیک روی نامِ ماژول نمی‌شود.
+   */
+  guide?: boolean
 }
 export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
 
 // چیدمانِ ماژول‌ها گروه‌بندی‌شده تا کاربر به‌جای اسکنِ فهرستِ تخت، روی «دسته» تمرکز کند.
 // ترتیبِ گروه‌ها بر اساسِ گردشِ کار: پرکاربردِ روزمره بالا، مالی وسط، اطلاعات/گزارش، ابزارِ کم‌استفاده ته.
+//
+// **درونِ هر گروه، کارِ روزانه اول و تعریف‌ها آخر** (مرتب‌سازیِ زیرمنوها، ۱۴۰۵/۰۷/۰۶). پیش از این
+// «فروش»، «دریافت و پرداخت» و «انبار» هر کدام ۱۹ تا ۲۲ ردیفِ تخت بودند و تعریف‌های یک‌باره لابه‌لای
+// فاکتور و رسید نشسته بودند. نام‌ها هم یک قاعده گرفتند: ردیفِ عملیاتی که دفترِ جدا دارد **مفرد** است
+// («فاکتور فروش»، «بسته محصول») و دفترش **جمع** («فاکتورهای فروش»، «بسته‌های محصول»)؛ صفحه‌ای که فرم و
+// دفترش یکی است جمع است («صندوق‌ها»، «حساب‌های بانکی»). پسوندِ «جدید» رفت — کارِ هر ردیفِ عملیات ساختن است.
 export const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'میزکار',
     items: [{ key: 'overview', label: 'داشبورد', icon: <LayoutDashboard size={18} /> }],
   },
   {
-    //: «مشتریان و فروش» = طرفِ‌حساب + گردشِ کالا و پولِ فروش، یک گروه — قبلاً دو
-    //: گروهِ جدا بودند و کاربر مجبور بود حدس بزند «اشخاص» زیرِ کدام است. ترتیب مسیرِ
-    //: کارِ واقعی را دنبال می‌کند: اول طرفِ‌حساب و کانال‌های مشتری (اشخاص، باشگاه،
-    //: صندوق)، بعد صدورِ سند (فاکتور، پیش‌فاکتور، برگشتی)، بعد اصلاح و بستن، بعد
-    //: پورسانت و گمرک، بعد داده‌های پایه‌ی قیمت‌گذاری، و آخر مرورها.
+    //: «مشتریان و فروش» = طرفِ‌حساب + گردشِ کالا و پولِ فروش، یک گروه. شناسنامه‌ی طرف‌حساب‌ها
+    //: (ثبت، گروه، محلِ جغرافیایی، ورودِ گروهی) از «شرکت» و «تنظیمات» به همین‌جا آمد — داده‌شان
+    //: همین اشخاص است — و «فروش اقساطی» هم کنارِ بقیه‌ی فروش نشست.
     heading: 'مشتریان و فروش',
     icon: <ShoppingBag size={17} />,
     items: [
-      { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} /> },
-      { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} /> },
-      { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} /> },
-      { key: 'salesflow', label: 'فرآیند فروش', icon: <Route size={18} /> },
-      { key: 'salesinvoice', label: 'فاکتور فروش', icon: <ShoppingCart size={18} /> },
-      { key: 'quotations', label: 'پیش‌فاکتور', icon: <FileText size={18} /> },
-      { key: 'salesreturn', label: 'فاکتور برگشتی', icon: <Undo2 size={18} /> },
-      { key: 'invoiceclose', label: 'بستن فاکتور', icon: <Lock size={18} /> },
-      { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: <FileSpreadsheet size={18} /> },
-      { key: 'contactstatement', label: 'صورت حساب طرف مقابل', icon: <ClipboardList size={18} /> },
-      { key: 'commission', label: 'پورسانت', icon: <Wallet size={18} /> },
-      { key: 'commissioncalc', label: 'محاسبه پورسانت', icon: <Calculator size={18} /> },
-      { key: 'customs', label: 'اظهارنامه گمرکی', icon: <Ship size={18} /> },
-      { key: 'saletype', label: 'نوع فروش', icon: <Tags size={18} /> },
-      { key: 'returnreason', label: 'علت برگشت کالا', icon: <Undo2 size={18} /> },
-      { key: 'priceannounce', label: 'اعلامیه قیمت', icon: <FileSpreadsheet size={18} /> },
-      { key: 'bundle', label: 'بسته محصول جدید', icon: <Boxes size={18} /> },
-      { key: 'discount', label: 'تخفیف جدید', icon: <Percent size={18} /> },
-      { key: 'discountgroup', label: 'گروه کالای تخفیف جدید', icon: <Layers size={18} /> },
-      { key: 'markup', label: 'عامل افزاینده جدید', icon: <BadgePercent size={18} /> },
-      { key: 'salesbrowse', label: 'مرور فروش', icon: <TrendingUp size={18} /> },
-      { key: 'contactoverview', label: 'مرور جامع طرف حساب', icon: <UsersRound size={18} /> },
+      { key: 'salesflow', label: 'فرآیند فروش', icon: <Route size={18} />, guide: true },
+      { key: 'salesinvoice', label: 'فاکتور فروش', icon: <ShoppingCart size={18} />, section: DAILY_SECTION },
+      { key: 'quotations', label: 'پیش‌فاکتور', icon: <FileText size={18} />, section: DAILY_SECTION },
+      { key: 'salesreturn', label: 'فاکتور برگشتی', icon: <Undo2 size={18} />, section: DAILY_SECTION },
+      { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} />, section: DAILY_SECTION },
+      { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} />, section: DAILY_SECTION },
+      { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} />, section: 'اشخاص و باشگاه' },
+      { key: 'contactnew', label: 'ثبت طرف حساب', icon: <UserPlus size={18} />, section: 'اشخاص و باشگاه' },
+      { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} />, section: 'اشخاص و باشگاه' },
+      { key: 'invoiceclose', label: 'بستن فاکتور', icon: <Lock size={18} />, section: 'اصلاح و بستن' },
+      { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: <FileSpreadsheet size={18} />, section: 'اصلاح و بستن' },
+      { key: 'commission', label: 'قاعده پورسانت', icon: <Wallet size={18} />, section: 'پورسانت و گمرک' },
+      { key: 'commissioncalc', label: 'محاسبه پورسانت', icon: <Calculator size={18} />, section: 'پورسانت و گمرک' },
+      { key: 'customs', label: 'اظهارنامه گمرکی', icon: <Ship size={18} />, section: 'پورسانت و گمرک' },
+      { key: 'salesbrowse', label: 'مرور فروش', icon: <TrendingUp size={18} />, section: 'مرور و گزارش' },
+      { key: 'contactoverview', label: 'مرور جامع طرف حساب', icon: <Contact size={18} />, section: 'مرور و گزارش' },
+      { key: 'contactstatement', label: 'صورت حساب طرف مقابل', icon: <ClipboardList size={18} />, section: 'مرور و گزارش' },
+      { key: 'saletype', label: 'نوع فروش', icon: <Tags size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'returnreason', label: 'علت برگشت کالا', icon: <PackageX size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'priceannounce', label: 'اعلامیه قیمت', icon: <Megaphone size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'bundle', label: 'بسته محصول', icon: <Boxes size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'discount', label: 'تخفیف', icon: <Percent size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'markup', label: 'عامل افزاینده', icon: <BadgePercent size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'discountgroup', label: 'گروه کالای تخفیف', icon: <Layers size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'contactgroup', label: 'گروه طرف حساب', icon: <Group size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'geo', label: 'محل جغرافیایی', icon: <MapPin size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'contactimport', label: 'ورود گروهی اشخاص', icon: <FileUp size={18} />, section: DEFINITIONS_SECTION },
     ],
   },
   {
@@ -365,31 +391,32 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'manufacturing', label: 'تولید', icon: <Factory size={18} /> }],
   },
   {
-    //: «دریافت و پرداخت» = گردشِ پول. ترتیب عمدی است و مسیرِ کارِ واقعی را دنبال
-    //: می‌کند: اول فرآیند و ثبتِ رسید/اعلامیه، بعد چک، بعد بانک و کارتخوان، و آخر
-    //: داده‌های پایه (صندوق، حساب، دسته‌چک، تنخواه).
+    //: «دریافت و پرداخت» = گردشِ پول. کارِ هرروزه (رسید، اعلامیه، تسویه) اول، بعد چک، بعد بانک و
+    //: کارتخوان و تنخواه، بعد مرورها، و ته تعریف‌ها (صندوق، حساب، دسته‌چک، کارتخوان، تنخواه‌دار).
+    //: «تراکنش شریک» از «شرکت» آمد: آورده و برداشتِ شریک گردشِ پول است.
     heading: 'دریافت و پرداخت',
     icon: <HandCoins size={17} />,
     items: [
-      { key: 'payflow', label: 'فرآیند دریافت و پرداخت', icon: <Route size={18} /> },
-      { key: 'receiptvoucher', label: 'رسید دریافت', icon: <ArrowDownToLine size={18} /> },
-      { key: 'paymentvoucher', label: 'اعلامیه پرداخت', icon: <ArrowUpFromLine size={18} /> },
-      { key: 'checkops', label: 'عملیات بانکی چک دریافتنی', icon: <ScrollText size={18} /> },
-      { key: 'contactsettle', label: 'تسویه حساب طرف مقابل', icon: <Scale size={18} /> },
-      { key: 'checkreturn', label: 'استرداد چک', icon: <Undo2 size={18} /> },
-      { key: 'checkpayclear', label: 'وصول چک پرداختنی', icon: <Landmark size={18} /> },
-      { key: 'checksearch', label: 'جستجوی چک', icon: <Search size={18} /> },
-      { key: 'possettle', label: 'تسویه کارت خوان', icon: <CreditCard size={18} /> },
-      { key: 'bankstatement', label: 'صورت حساب بانکی', icon: <FileSpreadsheet size={18} /> },
-      { key: 'bankreconcile', label: 'مغایرت بانکی', icon: <GitCompareArrows size={18} /> },
-      { key: 'cashbox', label: 'صندوق', icon: <PiggyBank size={18} /> },
-      { key: 'cashboxes', label: 'تعریف صندوق', icon: <PiggyBank size={18} /> },
-      { key: 'bankaccounts', label: 'حساب بانکی', icon: <Landmark size={18} /> },
-      { key: 'posterminals', label: 'دستگاه کارت خوان', icon: <CreditCard size={18} /> },
-      { key: 'checkbooks', label: 'دسته چک', icon: <BookMarked size={18} /> },
-      { key: 'pettyholder', label: 'تنخواه دار', icon: <Wallet size={18} /> },
-      { key: 'pettyexpense', label: 'صورت هزینه تنخواه', icon: <Receipt size={18} /> },
-      { key: 'bankledger', label: 'مرور عملیات بانکی', icon: <ListTree size={18} /> },
+      { key: 'payflow', label: 'فرآیند دریافت و پرداخت', icon: <Route size={18} />, guide: true },
+      { key: 'receiptvoucher', label: 'رسید دریافت', icon: <ArrowDownToLine size={18} />, section: DAILY_SECTION },
+      { key: 'paymentvoucher', label: 'اعلامیه پرداخت', icon: <ArrowUpFromLine size={18} />, section: DAILY_SECTION },
+      { key: 'contactsettle', label: 'تسویه حساب طرف مقابل', icon: <Scale size={18} />, section: DAILY_SECTION },
+      { key: 'ownertxn', label: 'تراکنش شریک', icon: <HandCoins size={18} />, section: DAILY_SECTION },
+      { key: 'checkops', label: 'چک دریافتنی', icon: <ScrollText size={18} />, section: 'چک' },
+      { key: 'checkpayclear', label: 'وصول چک پرداختنی', icon: <BadgeCheck size={18} />, section: 'چک' },
+      { key: 'checkreturn', label: 'استرداد چک', icon: <Undo2 size={18} />, section: 'چک' },
+      { key: 'checksearch', label: 'جست‌وجوی چک', icon: <Search size={18} />, section: 'چک' },
+      { key: 'bankstatement', label: 'صورت حساب بانکی', icon: <FileSpreadsheet size={18} />, section: 'بانک، کارتخوان و تنخواه' },
+      { key: 'bankreconcile', label: 'مغایرت بانکی', icon: <GitCompareArrows size={18} />, section: 'بانک، کارتخوان و تنخواه' },
+      { key: 'possettle', label: 'تسویه کارتخوان', icon: <CreditCard size={18} />, section: 'بانک، کارتخوان و تنخواه' },
+      { key: 'pettyexpense', label: 'صورت هزینه تنخواه', icon: <Receipt size={18} />, section: 'بانک، کارتخوان و تنخواه' },
+      { key: 'cashbox', label: 'گردش صندوق', icon: <PiggyBank size={18} />, section: 'مرور و گزارش' },
+      { key: 'bankledger', label: 'مرور عملیات بانکی', icon: <ListTree size={18} />, section: 'مرور و گزارش' },
+      { key: 'cashboxes', label: 'صندوق‌ها', icon: <Vault size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'bankaccounts', label: 'حساب‌های بانکی', icon: <Landmark size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'posterminals', label: 'دستگاه کارتخوان', icon: <Nfc size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'checkbooks', label: 'دسته چک', icon: <BookMarked size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'pettyholder', label: 'تنخواه‌دار', icon: <Wallet size={18} />, section: DEFINITIONS_SECTION },
     ],
   },
   {
@@ -398,58 +425,64 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'fixedassets', label: 'دارایی ثابت', icon: <Building2 size={18} /> }],
   },
   {
-    //: «حسابداری» = دفترداری، از ساختِ چارت تا بستنِ سال، در شش دسته به ترتیبِ کارِ
-    //: واقعی: ساختار، ثبت، بازبینی، اصلاح، پایانِ دوره، گزارش. بازچینیِ ۱۴۰۵/۰۷/۰۳
-    //: منوهای تکراری را یکی کرد (PROJECT_OVERVIEW §۱۰): «سرفصل جدید» و «فهرست حساب‌ها»
-    //: در درختواره، «تبدیل اسناد موقت به دائم» در کارتابل، «صدور سند کل» در گزارش ترازها.
+    //: «حسابداری» = دفترداری. صفحه‌هایش همه با تمِ اکسلی بازسازی شده‌اند و دست نخوردند؛ فقط ترتیبِ
+    //: دسته‌ها عوض شد (۱۴۰۵/۰۷/۰۶): کارِ هرروزه (ثبت، بازبینی، گزارش) بالا، پایانِ دوره بعد، و ساختار
+    //: — که سالی یک‌بار ساخته می‌شود — ته و پیش‌فرض بسته. «مرکز هزینه» و سه کارِ ابتدا/پایانِ سال از
+    //: «شرکت» به این‌جا آمدند: پایانِ سال پیش از این در سه ماژول پخش بود.
+    //: بازچینیِ ۱۴۰۵/۰۷/۰۳ منوهای تکراری را یکی کرد (PROJECT_OVERVIEW §۱۰): «سرفصل جدید» و «فهرست
+    //: حساب‌ها» در درختواره، «تبدیل اسناد موقت به دائم» در کارتابل، «صدور سند کل» در گزارش ترازها.
     //: کلیدهای قدیمی از `LEGACY_PAGES` به جای تازه‌شان می‌روند.
     heading: 'حسابداری',
     icon: <BookOpen size={17} />,
     items: [
-      { key: 'acctchart', label: 'درختواره حساب‌ها', icon: <ListTree size={18} />, section: 'ساختار و تعریف‌ها' },
-      { key: 'reclassify', label: 'انتقال حساب به سرفصل دیگر', icon: <FolderTree size={18} />, section: 'ساختار و تعریف‌ها' },
-      { key: 'analytics', label: 'تفصیلی سایر', icon: <Tag size={18} />, section: 'ساختار و تعریف‌ها' },
-      //: این سه فرم و دفترشان را در همان صفحه دارند (RecurringPage، BudgetPage،
-      //: CurrenciesPanel) — فرم و دفترشان یکی است، پس عملیات‌اند نه فهرست.
-      { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: <Coins size={18} />, section: 'ساختار و تعریف‌ها' },
-      { key: 'budgetlist', label: 'بودجه‌بندی', icon: <Target size={18} />, section: 'ساختار و تعریف‌ها' },
       { key: 'journalentry', label: 'سند حسابداری', icon: <BookOpen size={18} />, section: 'ثبت سند' },
       { key: 'openingbalance', label: 'مانده اول دوره', icon: <Wallet size={18} />, section: 'ثبت سند' },
+      //: این سه فرم و دفترشان را در همان صفحه دارند (RecurringPage، BudgetPage،
+      //: CurrenciesPanel) — فرم و دفترشان یکی است، پس عملیات‌اند نه فهرست.
       { key: 'recurringlist', label: 'اسناد تکرارشونده', icon: <Repeat size={18} />, section: 'ثبت سند' },
       { key: 'entrycartable', label: 'کارتابل اسناد موقت', icon: <ClipboardCheck size={18} />, section: 'بازبینی اسناد' },
       { key: 'mergeentries', label: 'ادغام اسناد', icon: <Combine size={18} />, section: 'بازبینی اسناد' },
       { key: 'renumber', label: 'شماره‌گذاری مجدد اسناد', icon: <Hash size={18} />, section: 'بازبینی اسناد' },
-      { key: 'balancereclass', label: 'انتقال مانده به حساب دیگر', icon: <ArrowLeftRight size={18} />, section: 'اصلاح و تعدیل' },
-      { key: 'fxrevaluation', label: 'صدور سند تسعیر ارز', icon: <Coins size={18} />, section: 'اصلاح و تعدیل' },
-      { key: 'closepnl', label: 'بستن حساب‌های سود و زیان', icon: <CalendarCheck size={18} />, section: 'پایان دوره' },
-      { key: 'closingopening', label: 'صدور سند اختتامیه و افتتاحیه', icon: <Archive size={18} />, section: 'پایان دوره' },
       { key: 'accountbrowse', label: 'مرور حساب‌ها', icon: <Layers size={18} />, section: 'گزارش و کنترل' },
       { key: 'balancereport', label: 'گزارش ترازها', icon: <Scale size={18} />, section: 'گزارش و کنترل' },
       { key: 'ledgerreport', label: 'گزارش دفتر', icon: <BookOpenCheck size={18} />, section: 'گزارش و کنترل' },
-      { key: 'ebooks', label: 'دفاتر تجارت الکترونیک', icon: <BookMarked size={18} />, section: 'گزارش و کنترل' },
-      { key: 'vat', label: 'مالیات بر ارزش افزوده', icon: <Percent size={18} />, section: 'گزارش و کنترل' },
-      { key: 'integrity', label: 'بررسی یکپارچگی', icon: <ShieldCheck size={18} />, section: 'گزارش و کنترل' },
       { key: 'reports', label: 'گزارش‌ها', icon: <BarChart3 size={18} />, section: 'گزارش و کنترل' },
+      { key: 'vat', label: 'مالیات بر ارزش افزوده', icon: <Percent size={18} />, section: 'گزارش و کنترل' },
+      { key: 'ebooks', label: 'دفاتر تجارت الکترونیک', icon: <BookMarked size={18} />, section: 'گزارش و کنترل' },
+      { key: 'integrity', label: 'بررسی یکپارچگی', icon: <ShieldCheck size={18} />, section: 'گزارش و کنترل' },
+      { key: 'balancereclass', label: 'انتقال مانده به حساب دیگر', icon: <ArrowLeftRight size={18} />, section: 'اصلاح و تعدیل' },
+      { key: 'fxrevaluation', label: 'صدور سند تسعیر ارز', icon: <RefreshCcw size={18} />, section: 'اصلاح و تعدیل' },
+      { key: 'yearendops', label: 'عملیات پایان سال', icon: <ListChecks size={18} />, section: 'پایان دوره' },
+      { key: 'closepnl', label: 'بستن حساب‌های سود و زیان', icon: <CalendarCheck size={18} />, section: 'پایان دوره' },
+      { key: 'closingopening', label: 'صدور سند اختتامیه و افتتاحیه', icon: <Archive size={18} />, section: 'پایان دوره' },
+      { key: 'openingops', label: 'عملیات اول دوره', icon: <PlayCircle size={18} />, section: 'پایان دوره' },
+      { key: 'yearendreminder', label: 'یادآوری عملیات پایان سال', icon: <BellRing size={18} />, section: 'پایان دوره' },
+      { key: 'acctchart', label: 'درختواره حساب‌ها', icon: <ListTree size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'costcenter', label: 'مرکز هزینه', icon: <Crosshair size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'analytics', label: 'تفصیلی سایر', icon: <Tag size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'reclassify', label: 'انتقال حساب به سرفصل دیگر', icon: <FolderTree size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'currencylist', label: 'ارزها و نرخ ارز', icon: <Coins size={18} />, section: 'ساختار و تعریف‌ها' },
+      { key: 'budgetlist', label: 'بودجه‌بندی', icon: <Target size={18} />, section: 'ساختار و تعریف‌ها' },
     ],
   },
   {
-    //: ترتیب عمدی است و همان ترتیبِ کار: اول داده‌های پایه (محل خدمت، شغل، عوامل،
-    //: گروه مالیاتی) ساخته می‌شوند، بعد قرارداد که از همه‌ی آن‌ها انتخاب می‌کند.
-    //: خودِ «حقوق و دستمزد» سرِ جایش می‌ماند — کارکرد، فیش و مزایا آن‌جاست.
+    //: کارِ ماهانه اول — «حقوق و دستمزد» (کارکرد و فیش) و قرارداد — و هفت تعریفِ پایه (محل خدمت،
+    //: شغل، عوامل، گروه مالیاتی، جداول، نوع وام، سوابقِ پیش از کوبیتا) ته و پیش‌فرض بسته. پیش از این
+    //: ترتیب برعکس بود و کلیک روی نامِ ماژول «قرارداد جدید» را باز می‌کرد، نه فیش را.
     heading: 'حقوق و دستمزد',
     icon: <Users size={17} />,
     items: [
-      { key: 'contractnew', label: 'قرارداد جدید', icon: <FileSignature size={18} /> },
-      { key: 'servicelocation', label: 'محل خدمت جدید', icon: <Building size={18} /> },
-      { key: 'jobtitle', label: 'شغل جدید', icon: <Briefcase size={18} /> },
-      { key: 'payrollfactors', label: 'عوامل حقوق و مزایا', icon: <SlidersHorizontal size={18} /> },
-      { key: 'payrolltaxgroups', label: 'گروه مالیاتی و شعب', icon: <Percent size={18} /> },
-      { key: 'taxtables', label: 'جداول مالیات', icon: <Percent size={18} /> },
-      { key: 'loantype', label: 'نوع وام جدید', icon: <Banknote size={18} /> },
-      { key: 'employeeloans', label: 'تقسیط — وام‌های پرسنلی', icon: <HandCoins size={18} /> },
-      { key: 'settlement', label: 'تسویه حساب', icon: <Undo2 size={18} /> },
-      { key: 'deploymentinfo', label: 'اطلاعات استقرار', icon: <UploadCloud size={18} /> },
-      { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} /> },
+      { key: 'payroll', label: 'حقوق و دستمزد', icon: <Users size={18} />, section: DAILY_SECTION },
+      { key: 'contractnew', label: 'قرارداد', icon: <FileSignature size={18} />, section: DAILY_SECTION },
+      { key: 'employeeloans', label: 'وام‌های پرسنلی', icon: <HandCoins size={18} />, section: DAILY_SECTION },
+      { key: 'settlement', label: 'تسویه پایان کار', icon: <DoorOpen size={18} />, section: DAILY_SECTION },
+      { key: 'servicelocation', label: 'محل‌های خدمت', icon: <Building size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'jobtitle', label: 'مشاغل', icon: <Briefcase size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'payrollfactors', label: 'عوامل حقوق و مزایا', icon: <SlidersHorizontal size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'payrolltaxgroups', label: 'گروه مالیاتی و شعب', icon: <Percent size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'taxtables', label: 'جداول مالیات', icon: <Sheet size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'loantype', label: 'انواع وام', icon: <Banknote size={18} />, section: DEFINITIONS_SECTION },
+      { key: 'deploymentinfo', label: 'سوابق پیش از کوبیتا', icon: <History size={18} />, section: DEFINITIONS_SECTION },
     ],
   },
   {
@@ -459,7 +492,8 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: 'پیمانکاری',
     icon: <HardHat size={17} />,
     items: [
-      { key: 'contractingnew', label: 'پیمان', icon: <FileSignature size={18} /> },
+      //: `FileSignature` در lucide نامِ دیگرِ `FilePenLine` است؛ «پیمان» و «متمم پیمان» یک نقش داشتند.
+      { key: 'contractingnew', label: 'پیمان', icon: <Handshake size={18} /> },
       { key: 'contractingamendment', label: 'متمم پیمان', icon: <FilePenLine size={18} /> },
       { key: 'contractingstatement', label: 'صورت وضعیت دریافتی', icon: <Receipt size={18} /> },
       { key: 'contractingsettlement', label: 'تسویه حساب پیمان', icon: <HandCoins size={18} /> },
@@ -481,7 +515,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: <ClipboardList size={17} />,
     items: [
       { key: 'automation', label: 'کارتابل من', icon: <ClipboardList size={18} /> },
-      { key: 'letternew', label: 'نامه جدید', icon: <FilePenLine size={18} /> },
+      { key: 'letternew', label: 'نامه', icon: <FilePenLine size={18} /> },
     ],
   },
   {
@@ -490,47 +524,33 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ key: 'moadian', label: 'سامانه مؤدیان', icon: <FileSpreadsheet size={18} /> }],
   },
   {
-    //: «شرکت» = کارهای سطحِ سازمان: شناسنامه‌ی طرف‌حساب‌ها، فروشِ اقساطی، و عملیاتِ
-    //: ابتدا/انتهای دوره. ترتیب عمدی است — از ساختِ داده‌ی پایه تا بستنِ سال.
-    heading: 'شرکت',
-    icon: <Building size={17} />,
+    //: جانشینِ «شرکت» (۱۴۰۵/۰۷/۰۶). «شرکت» شانزده کارِ بی‌ربط را کنارِ هم داشت؛ طرف‌حساب‌ها و
+    //: فروشِ اقساطی به «مشتریان و فروش» رفتند، تراکنشِ شریک به «دریافت و پرداخت»، مرکزِ هزینه و
+    //: ابتدا/پایانِ سال به «حسابداری». آنچه ماند کارِ هیچ ماژولِ خاصی نیست: گزارش‌های فراماژولی و ابزار.
+    heading: 'گزارش و ابزار',
+    icon: <BarChart3 size={17} />,
     items: [
-      { key: 'contactnew', label: 'طرف حساب جدید', icon: <UserPlus size={18} /> },
-      { key: 'ownertxn', label: 'تراکنش شریک', icon: <HandCoins size={18} /> },
-      { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} /> },
-      { key: 'costcenter', label: 'مرکز هزینه', icon: <Target size={18} /> },
-      { key: 'geo', label: 'محل‌های جغرافیایی', icon: <MapPin size={18} /> },
-      { key: 'contactgroup', label: 'گروه جدید', icon: <Tags size={18} /> },
-      { key: 'openingops', label: 'عملیات اول دوره', icon: <PlayCircle size={18} /> },
-      { key: 'yearendops', label: 'عملیات پایان سال', icon: <Archive size={18} /> },
-      { key: 'yearendreminder', label: 'یادآوری عملیات پایان سال', icon: <BellRing size={18} /> },
-      { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} /> },
-      //: شش ابزارِ زیر تا امروز فقط در کارتِ «فهرست» بودند، ولی دفترِ هیچ عملیاتی
-      //: نیستند — خودشان کاری‌اند که اجرا می‌شود. با دامنه‌دارشدنِ کارتِ فهرست،
-      //: جایشان این‌جاست وگرنه از هیچ‌جا باز نمی‌شدند.
-      { key: 'dataexport', label: 'ارسال اطلاعات', icon: <Upload size={18} /> },
-      { key: 'dataimport', label: 'دریافت اطلاعات', icon: <Download size={18} /> },
-      { key: 'reportbuilder', label: 'گزارش‌ساز', icon: <Wrench size={18} /> },
-      { key: 'dayactivity', label: 'فعالیت‌های روز', icon: <Activity size={18} /> },
-      { key: 'mgmtreports', label: 'گزارش‌ها و نمودارهای مدیریتی', icon: <BarChart3 size={18} /> },
-      { key: 'usagereport', label: 'گزارش استفاده از نرم‌افزار', icon: <Gauge size={18} /> },
+      { key: 'mgmtreports', label: 'گزارش‌ها و نمودارهای مدیریتی', icon: <BarChart3 size={18} />, section: 'گزارش' },
+      { key: 'reportbuilder', label: 'گزارش‌ساز', icon: <Wrench size={18} />, section: 'گزارش' },
+      { key: 'dayactivity', label: 'فعالیت‌های روز', icon: <Activity size={18} />, section: 'گزارش' },
+      { key: 'usagereport', label: 'گزارش استفاده از نرم‌افزار', icon: <Gauge size={18} />, section: 'گزارش' },
+      { key: 'calendar', label: 'تقویم و یادآوری', icon: <CalendarDays size={18} />, section: 'ابزار' },
+      { key: 'dataexport', label: 'ارسال اطلاعات', icon: <Upload size={18} />, section: 'ابزار' },
+      { key: 'dataimport', label: 'دریافت اطلاعات', icon: <Download size={18} />, section: 'ابزار' },
     ],
   },
   {
+    //: فقط تنظیماتِ سطحِ شرکت. ترجیح‌های شخصی (رمز، ظاهر، کلیدهای میان‌بر) و راهنما به منوی کاربر
+    //: رفتند (`SECONDARY_NAV_ITEMS`)، و «ورود گروهی اشخاص» به «مشتریان و فروش».
     heading: 'تنظیمات',
     icon: <Settings size={17} />,
     items: [
       { key: 'fiscalyear', label: 'سال مالی', icon: <CalendarRange size={18} /> },
       { key: 'coding', label: 'کدینگ', icon: <ListTree size={18} /> },
+      { key: 'numbering', label: 'شماره‌گذاری اسناد', icon: <Hash size={18} /> },
       { key: 'personalization', label: 'شخصی‌سازی', icon: <Settings2 size={18} /> },
-      { key: 'shortcuts', label: 'کلیدهای میان‌بر', icon: <Keyboard size={18} /> },
-      { key: 'numbering', label: 'روش‌های شماره‌گذاری', icon: <Hash size={18} /> },
-      { key: 'contactimport', label: 'ورود گروهی اشخاص', icon: <FileUp size={18} /> },
-      { key: 'team', label: 'کاربر جدید', icon: <UserCog size={18} /> },
-      { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },
+      { key: 'team', label: 'دعوت کاربر', icon: <UserCog size={18} /> },
       { key: 'backup', label: 'پشتیبان‌گیری خودکار', icon: <DatabaseBackup size={18} /> },
-      { key: 'theme', label: 'ظاهر و پوسته', icon: <Palette size={18} /> },
-      { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
     ],
   },
 ]
@@ -552,6 +572,9 @@ export const PAGE_MODULE_KEY: Partial<Record<PageKey, string | string[]>> = Obje
       'closepnl', 'closingopening', 'vat', 'ebooks', 'accountbrowse',
       'balancereport', 'ledgerreport', 'integrity',
       'entrylist', 'recurringlist', 'budgetlist', 'currencylist', 'periodcloselist',
+      //: از «شرکت» به «حسابداری» آمدند (۱۴۰۵/۰۷/۰۶). بی‌گیت، گروهِ «حسابداری» برای کسب‌وکارِ بی‌ماژولِ
+      //: حسابداری با همین پنج ردیف زنده می‌ماند — بسته‌شدنِ سال و مرکزِ هزینه بی دفترِ حساب معنایی ندارند.
+      'costcenter', 'costcenterlist', 'openingops', 'yearendops', 'yearendreminder',
     ] as PageKey[]
   ).map((key) => [key, 'accounting']),
 ) as Partial<Record<PageKey, string | string[]>>
@@ -564,6 +587,8 @@ for (const key of [
   'treasuryledger', 'paymentnoticelist', 'checkbooklist', 'posterminallist', 'possettlelist',
   'checkoplist', 'contactsettlelist',
   'statementlist', 'pettylist',
+  //: «تراکنش شریک» از «شرکت» آمد — همان قاعده‌ی حسابداری: بی‌گیت، گروه را تنها زنده نگه می‌داشت.
+  'ownertxn', 'ownertxnlist',
 ] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'banking'
 }
@@ -586,8 +611,7 @@ for (const key of [
 PAGE_MODULE_KEY.creditnote = ['sales', 'purchases']
 PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 
-//: «ورود گروهی اشخاص» در گروهِ «تنظیمات» می‌نشیند ولی داده‌اش طرف‌حساب است؛ پس
-//: کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
+//: «ورود گروهی اشخاص» داده‌اش طرف‌حساب است؛ پس کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
 PAGE_MODULE_KEY.contactimport = 'contacts'
 for (const key of ['automation', 'letternew', 'letterlist'] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'automation'
@@ -636,10 +660,15 @@ const GATED_MODULE_KEYS = new Set<PageKey>([
 //: مستقلِ `admin/` کوچ کردند — `admin.cubita.ir`. این اپ فقط دفترِ مشتری است.
 //: تستِ `navModel.test.ts` نمی‌گذارد هیچ‌کدامشان بی‌صدا برگردند.
 
-//: ورودی‌های پایینِ سایدبار/منوی کاربر. «ظاهر» و «راهنما» به گروهِ «تنظیمات» منتقل
-//: شدند تا در ساختارِ تازه‌ی ماژول‌ها یک‌جا جمع باشند.
+//: ورودی‌های منوی کاربر (آواتار در نوار، پایینِ سایدبار). **ترجیح‌های شخصی این‌جایند، نه در
+//: «تنظیمات»** (۱۴۰۵/۰۷/۰۶): رمزِ من، ظاهرِ من و کلیدهای میان‌برِ من مالِ کاربرند، نه تنظیمِ شرکت —
+//: و «تنظیمات» با آن‌ها دوازده ردیف شده بود. راهنما هم کنارشان است تا در هر دو پوسته یک‌جا باشد.
 export const SECONDARY_NAV_ITEMS: NavItem[] = [
   { key: 'profile', label: 'پروفایل من', icon: <UserCircle size={18} /> },
+  { key: 'password', label: 'تغییر کلمه عبور', icon: <KeyRound size={18} /> },
+  { key: 'theme', label: 'ظاهر و پوسته', icon: <Palette size={18} /> },
+  { key: 'shortcuts', label: 'کلیدهای میان‌بر', icon: <Keyboard size={18} /> },
+  { key: 'help', label: 'راهنما', icon: <HelpCircle size={18} /> },
 ]
 
 //: ورودیِ «مجوز نرم‌افزار» — فقط کوبیتا سازمانی. برای همه‌ی اعضا (دیدنِ اینکه چرا
@@ -764,8 +793,9 @@ export function orderNavGroups(groups: NavGroup[], mode: ExperienceMode): NavGro
 /**
  * صفحه‌ای که کلیک روی نامِ گروه در نوار باز می‌کند، وقتی با پیش‌فرض فرق دارد.
  *
- * پیش‌فرض اولین صفحه‌ی گروه است؛ برای «حسابداری» یعنی «درختواره حساب‌ها» — ساختنِ
- * چارت، که کاری یک‌باره است. کارِ هرروزه‌ی حسابدار ثبتِ سند است.
+ * پیش‌فرض اولین کارِ گروه است (`groupEntry`). از ۱۴۰۵/۰۷/۰۶ اولین کارِ «حسابداری» خودش «سند
+ * حسابداری» است، پس این نگاشت امروز همان پیش‌فرض را می‌گوید — می‌ماند تا اگر ترتیب روزی عوض شد،
+ * حسابدار باز هم مستقیم به سند برسد.
  */
 export const MODE_GROUP_LANDING: Record<ExperienceMode, Partial<Record<string, PageKey>>> = {
   accountant: { 'حسابداری': 'journalentry' },
@@ -776,6 +806,25 @@ export function groupLanding(group: NavGroup, mode: ExperienceMode): PageKey | u
   const key = MODE_GROUP_LANDING[mode][group.heading]
   //: صفحه‌ای که این کسب‌وکار نمی‌بیند مقصد نمی‌شود — حالت ≠ مجوز.
   return key && group.items.some((i) => i.key === key) ? key : undefined
+}
+
+/** اولین **کارِ** گروه — صفحه‌ی «مسیرِ کار» (`guide`) راهنماست، نه جایی که با کلیک روی نامِ ماژول
+ *  باید فرود آمد. گروهی که فقط راهنما دارد به همان می‌رود. */
+export function groupEntry(group: NavGroup): NavItem {
+  return group.items.find((i) => !i.guide) ?? group.items[0]
+}
+
+/**
+ * نامِ گروه روی نوارِ بالا.
+ *
+ * گروهی که **ذاتاً** تک‌صفحه است («دارایی ثابت»، «داشبورد») نامِ همان صفحه را می‌گیرد. ولی گروهی که
+ * فقط برای این کسب‌وکار به یک صفحه رسیده نامِ خودش را نگه می‌دارد: پیش از این «حسابرسی» پیش از تأییدِ
+ * قرارداد روی نوار «درخواست حسابرسی» خوانده می‌شد — نامِ یک کار، جای نامِ ماژول.
+ */
+export function groupBarLabel(group: NavGroup): string {
+  if (group.items.length !== 1) return group.heading
+  const defined = NAV_GROUPS.find((g) => g.heading === group.heading)
+  return !defined || defined.items.length === 1 ? group.items[0].label : group.heading
 }
 
 //: صفحه‌هایی که خودشان ردیفِ منوی اصلی دارند، برای هر نوعِ کسب‌وکار. صفحه‌های
@@ -823,10 +872,20 @@ export function menuEntryVisible(key: PageKey, groups: NavGroup[]): boolean {
  * ندارند یک دسته‌ی بی‌نام می‌شود — همان فهرستِ یک‌دستِ قبلی، بی‌تیتر.
  */
 export function navSections<T extends { section?: string }>(items: readonly T[]): { title: string | null; items: T[] }[] {
+  return groupByTitle(items, (it) => it.section)
+}
+
+/** همان دسته‌بندی برای ورودی‌های `OPS_MENUS`/`LIST_MENUS` — دسته‌شان در `category` است، چون
+ *  `section` آن‌جا تبِ صفحه است. */
+export function menuCategories<T extends { category?: string }>(items: readonly T[]): { title: string | null; items: T[] }[] {
+  return groupByTitle(items, (it) => it.category)
+}
+
+function groupByTitle<T>(items: readonly T[], titleOf: (it: T) => string | undefined): { title: string | null; items: T[] }[] {
   const out: { title: string | null; items: T[] }[] = []
   const at = new Map<string | null, number>()
   for (const it of items) {
-    const title = it.section ?? null
+    const title = titleOf(it) ?? null
     let i = at.get(title)
     if (i === undefined) {
       i = out.length

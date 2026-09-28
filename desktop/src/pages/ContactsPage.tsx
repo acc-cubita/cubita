@@ -308,7 +308,7 @@ export function ContactsPage({
       <Tabs
         syncPage="contacts"
         tabs={[
-          { key: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound, content: contactsTab },
+          { key: 'contacts', label: 'مانده و اعتبار اشخاص', icon: UsersRound, content: contactsTab },
           { key: 'aging', label: 'سنین مطالبات', icon: CalendarClock, content: <AgingPanel token={token} onStatement={setStatementContact} /> },
         ]}
       />

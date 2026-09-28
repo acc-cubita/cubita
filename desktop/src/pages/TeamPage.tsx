@@ -105,7 +105,7 @@ export function TeamPage({ token }: { token: string }) {
     <div className="page panels">
       <PageHeader
         icon={UserPlus}
-        title="کاربر جدید"
+        title="دعوت کاربر"
         description="همکار تازه دعوت کنید و دقیقاً مشخص کنید به کدام ماژول و کدام عملیات دسترسی داشته باشد."
       />
 

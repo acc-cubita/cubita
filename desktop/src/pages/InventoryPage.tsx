@@ -352,7 +352,7 @@ export function InventoryPage({
             //: فقط فرم. انتقال‌های ثبت‌شده همان حواله‌های نوعِ «انتقال»اند و در «فهرست
             //: رسیدها و حواله‌های انبار» با فیلترِ نوع دیده می‌شوند — نه نمای دومی از حواله‌ها.
             key: 'transfer',
-            label: 'رسید/حواله انتقال بین انبارها',
+            label: 'انتقال بین انبارها',
             icon: ArrowLeftRight,
             content: guided ? (
               <TransferWizard token={token} warehouses={warehouses} items={items} onCreated={() => void refreshStock()} />
@@ -390,7 +390,7 @@ export function InventoryPage({
           {
             //: ردیابیِ میان‌سندیِ سریال — «کجاست و به چه کسی رفت؟»
             key: 'serials',
-            label: 'جستجوی سریال',
+            label: 'جست‌وجوی سریال',
             icon: ScanSearch,
             content: <SerialSearchTab token={token} />,
           },
@@ -410,7 +410,7 @@ export function InventoryPage({
             //: دفترِ مشترکِ رسیدها و حواله‌ها — همان دو دفتری که پیش‌تر زیرِ فرمِ «رسید انبار»
             //: (صفحه‌ی خرید) و «خروج انبار» بودند، حالا یک‌جا در «فهرست».
             key: 'documents',
-            label: 'فهرست رسیدها و حواله‌های انبار',
+            label: 'رسیدها و حواله‌های انبار',
             icon: FileStack,
             content: (
               <>
@@ -437,7 +437,7 @@ export function InventoryPage({
           },
           {
             key: 'count-list',
-            label: 'فهرست انبارگردانی‌ها',
+            label: 'انبارگردانی‌ها',
             icon: ListChecks,
             content: <StockCountPanel token={token} warehouses={warehouses} mode="list" onOpenSession={openCountSession} />,
           },

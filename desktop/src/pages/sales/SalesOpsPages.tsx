@@ -1368,7 +1368,7 @@ export function DiscountPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={Percent}
-      title="تخفیف جدید"
+      title="تخفیف"
       description="تخفیفی که هنگامِ زدنِ فاکتور پیشنهاد می‌شود. دفترِ همه‌ی تخفیف‌ها و عوامل در فهرست است."
     >
       <PricingFactorForm token={token} kind="discount" />
@@ -1380,7 +1380,7 @@ export function MarkupPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={BadgePercent}
-      title="عامل افزاینده جدید"
+      title="عامل افزاینده"
       description="هزینه‌ای که به قیمت اضافه می‌شود — حمل، بسته‌بندی، بیمه. پیش از تخفیف اعمال می‌شود."
     >
       <PricingFactorForm token={token} kind="markup" />
@@ -1416,7 +1416,7 @@ export function DiscountGroupPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={Layers}
-      title="گروه کالای تخفیف جدید"
+      title="گروه کالای تخفیف"
       description="مجموعه‌ای نام‌دار از کالاها که یک تخفیف یا عاملِ افزاینده رویشان اعمال می‌شود."
     >
       <FormCard
@@ -1860,7 +1860,7 @@ export function ProductBundlePage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={Boxes}
-      title="بسته محصول جدید"
+      title="بسته محصول"
       description="چند کالا که با هم و به یک قیمت فروخته می‌شوند. بسته موجودی ندارد؛ هنگامِ فروش به کالاهای عضوش باز می‌شود."
     >
       <FormCard

@@ -167,7 +167,7 @@ export function ManufacturingPage({ token }: { token: string }) {
           { key: 'materials', label: 'تحویل مواد', icon: PackageMinus, content: <MaterialIssueTab token={token} boms={boms} plans={plans} itemById={itemById} stockLevels={stockLevels} materialIssues={materialIssues} onChanged={refresh} /> },
           { key: 'receipts', label: 'رسید محصول', icon: PackageCheck, content: <ProductReceiptTab token={token} plans={plans} itemById={itemById} productReceipts={productReceipts} onChanged={refresh} /> },
           { key: 'costing', label: 'محاسبه قیمت تمام‌شده', icon: Calculator, content: <CostCalcTab token={token} plans={plans} itemById={itemById} onChanged={refresh} /> },
-          { key: 'bom-list', label: 'فهرست فرمول‌های ساخته‌شده', icon: Layers, content: <BomListTab token={token} boms={boms} itemById={itemById} onEdit={editBom} onChanged={refresh} /> },
+          { key: 'bom-list', label: 'فرمول‌های ثبت‌شده', icon: Layers, content: <BomListTab token={token} boms={boms} itemById={itemById} onEdit={editBom} onChanged={refresh} /> },
           { key: 'order-list', label: 'سفارشات تولید', icon: ListChecks, content: <OrderListTab token={token} plans={plans} itemById={itemById} onChanged={refresh} /> },
           { key: 'variance', label: 'انحراف مصرف مواد', icon: AlertTriangle, content: <VarianceTab token={token} plans={plans} itemById={itemById} /> },
           { key: 'kardex', label: 'کاردکس تولید', icon: History, content: <KardexTab token={token} plans={plans} items={items} itemById={itemById} /> },

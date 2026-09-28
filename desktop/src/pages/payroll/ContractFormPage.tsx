@@ -267,7 +267,7 @@ export function ContractFormPage({
     <div className="page panels">
       <PageHeader
         icon={FileSignature}
-        title="قرارداد جدید"
+        title="قرارداد"
         description="استخدام یا اصلاحِ قرارداد یک کارمند — با اطلاعات استخدامی، حقوق و مزایای ثابت، کسورات و اطلاعات بیمه و مالیات."
       />
 
