@@ -59,6 +59,7 @@ import { verifyDownloadedUpdate, verifyUpdateFeed } from './updateVerify.js'
 import { TRUSTED_UPDATE_KEYS } from './updateKeys.js'
 import { beginJournalEdit, saveJournalEdit, cancelJournalEdit, clearJournalEditors } from './journalOutbox.js'
 import { normalizeServerUrl } from './serverAddress.js'
+import { applyNetwork, disableNetwork, inspectNetwork, previewNetwork } from './enterpriseNetwork.js'
 import { driverFor, listSerialPorts } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
 
@@ -215,6 +216,19 @@ ipcMain.on('server:config', (evt) => {
 ipcMain.handle('server:probe', (_evt, input: string) => probeServer(String(input ?? '')))
 
 ipcMain.handle('server:discover', () => discoverServers())
+
+// Privileged configuration is local to the installed app, never available over HTTP.
+for (const [channel, action] of Object.entries({
+  'network:inspect': inspectNetwork, 'network:preview': previewNetwork,
+  'network:apply': applyNetwork, 'network:disable': disableNetwork,
+})) {
+  ipcMain.handle(channel, (evt, input) => {
+    if (EDITION !== 'enterprise' || evt.sender !== mainWindow?.webContents || evt.senderFrame !== mainWindow?.webContents.mainFrame) {
+      return { ok: false, error: 'تنظیم شبکه فقط در پنجرهٔ اصلی کوبیتا سازمانی مجاز است.' }
+    }
+    return action(input)
+  })
+}
 
 // اجرای نصابِ نسخه‌ی تازه روی **خودِ سرور** (کوبیتا سازمانی). مسیر از API می‌آید، پس فقط
 // نصابی اجرا می‌شود که واقعاً در پوشه‌ی آپدیتِ سرور است — نه هر exeِ دلخواه.

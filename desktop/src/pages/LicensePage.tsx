@@ -14,6 +14,7 @@ import { SectionCard } from '../components/SectionCard'
 import { ServerBackupCard } from '../components/ServerBackupCard'
 import { ServerUpdateCard } from '../components/ServerUpdateCard'
 import { ClientUpdateCard } from '../components/ClientUpdateCard'
+import { EnterpriseNetworkCard } from '../components/EnterpriseNetworkCard'
 import { formatJalali } from '../lib/jalali'
 import { LICENSE_MODE_LABEL, licenseTone } from '../lib/license'
 
@@ -121,7 +122,7 @@ export function LicensePage({
       <PageHeader
         icon={BadgeCheck}
         title="سرور و مجوز"
-        description="مجوزِ کوبیتا سازمانی، به‌روزرسانی، پشتیبانِ خودکار و عیب‌یابیِ سرور."
+        description="شبکهٔ داخلی، مجوزِ کوبیتا سازمانی، به‌روزرسانی و پشتیبانِ خودکار."
       />
 
       {msg && (
@@ -265,6 +266,7 @@ export function LicensePage({
           )}
         </SectionCard>
       </div>
+      {isOwner && <EnterpriseNetworkCard />}
       <ClientUpdateCard />
       {isOwner && <ServerUpdateCard token={token} />}
       {isOwner && <ServerBackupCard token={token} />}

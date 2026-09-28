@@ -1,4 +1,5 @@
 import type { ReferenceSyncReport, SyncPermissions } from './lib/referenceSync'
+import type { NetworkConfig, NetworkInventory, NetworkPlan, NetworkResult, NetworkState } from './lib/enterpriseNetwork'
 
 export interface AccountCache {
   id: string
@@ -153,6 +154,10 @@ export interface CubitaBridge {
   serverSave?: (url: string) => Promise<ServerResult>
   /** کوبیتا سازمانی: جست‌وجوی سرور روی همین رایانه و `/24`ِ شبکه‌ی داخلی. */
   serverDiscover?: () => Promise<string[]>
+  networkInspect?: () => Promise<NetworkResult<NetworkInventory>>
+  networkPreview?: (config: NetworkConfig) => Promise<NetworkResult<NetworkPlan>>
+  networkApply?: (config: NetworkConfig) => Promise<NetworkResult<NetworkState>>
+  networkDisable?: () => Promise<NetworkResult<NetworkState>>
   /** کوبیتا سازمانی، فقط روی خودِ سرور: اجرای نصابِ دانلودشده. خطا یا null. */
   runUpdateInstaller?: (installerPath: string) => Promise<string | null>
   posTerminal?: PosTerminalBridge

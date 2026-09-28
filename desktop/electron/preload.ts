@@ -53,6 +53,10 @@ contextBridge.exposeInMainWorld('cubita', {
   serverProbe: (url: string) => ipcRenderer.invoke('server:probe', url),
   serverSave: (url: string) => ipcRenderer.invoke('server:save', url),
   serverDiscover: () => ipcRenderer.invoke('server:discover'),
+  networkInspect: () => ipcRenderer.invoke('network:inspect'),
+  networkPreview: (config: unknown) => ipcRenderer.invoke('network:preview', config),
+  networkApply: (config: unknown) => ipcRenderer.invoke('network:apply', config),
+  networkDisable: () => ipcRenderer.invoke('network:disable'),
   runUpdateInstaller: (installerPath: string) => ipcRenderer.invoke('updates:runInstaller', installerPath),
   posTerminal: {
     pay: (profile: unknown, amountRial: number, refId: string) =>

@@ -219,7 +219,37 @@ def cmd_selftest(_args) -> int:
     return 0 if routes and alembic_versions else 1
 
 
+def cmd_network(args) -> int:
+    import base64
+    import json
+    import subprocess
+    from app.onprem import network_windows as nw
+    from app.onprem.network import NetworkError, make_plan
+
+    try:
+        if args.cmd == "network-inspect":
+            result = nw.inventory()
+        elif args.cmd in {"network-plan", "network-apply"}:
+            if len(args.payload) > 4096:
+                raise NetworkError("ورودی تنظیم شبکه بیش از حد بزرگ است.")
+            raw = json.loads(base64.b64decode(args.payload, validate=True))
+            result = make_plan(raw, nw.inventory()) if args.cmd == "network-plan" else nw.apply(raw)
+        elif args.cmd == "network-disable":
+            result = nw.disable()
+        elif args.cmd == "network-resume":
+            result = nw.resume()
+        else:
+            result = nw.maintain()
+        print(json.dumps({"ok": True, "data": result}, ensure_ascii=False))
+        return 0
+    except (NetworkError, OSError, ValueError, TimeoutError, subprocess.TimeoutExpired) as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
+    if not getattr(sys, "frozen", False):
+        sys.path.insert(0, str(_bundle_dir()))
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
@@ -249,8 +279,15 @@ def main(argv: list[str] | None = None) -> int:
     common(reset)
     reset.add_argument("--email", default=None)
     sub.add_parser("selftest")
+    for command in ("network-inspect", "network-maintain", "network-disable", "network-resume"):
+        sub.add_parser(command)
+    for command in ("network-plan", "network-apply"):
+        p = sub.add_parser(command)
+        p.add_argument("--payload", required=True)
 
     args = parser.parse_args(argv)
+    if args.cmd.startswith("network-"):
+        return cmd_network(args)
     return {
         "install": lambda: cmd_setup(args, services=True),
         "setup": lambda: cmd_setup(args, services=False),

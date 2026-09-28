@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { EnterpriseNetworkCard } from './EnterpriseNetworkCard'
 import { ArrowLeft, CheckCircle2, Network, Radar, Server, ShieldCheck, Users } from 'lucide-react'
 import { BrandMark } from './BrandMark'
 
@@ -104,6 +105,10 @@ export function ServerConnectScreen({
       </div>
 
       <div className="login-form-panel">
+        <details className="enterprise-network-connect">
+          <summary>تنظیم شبکهٔ این رایانه (خودکار / دستی)</summary>
+          <EnterpriseNetworkCard />
+        </details>
         <form className="login-card" onSubmit={probe}>
           <h1>اتصال به سرور</h1>
           <p className="login-card-subtitle">
