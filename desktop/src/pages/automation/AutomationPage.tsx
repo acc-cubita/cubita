@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Archive, ClipboardList, FilePenLine, FileText, History, Paperclip, Send } from 'lucide-react'
 import {
   can, completeOfficeReferral, createOfficeLetter, downloadOfficeFile,
-  fetchOfficeLetters, fetchOfficeRecipients, officeLetterAction, printOfficeLetter,
-  referOfficeLetter, removeOfficeFile, updateOfficeLetter, uploadOfficeFile,
+  fetchOfficeLetter, fetchOfficeLetters, fetchOfficeRecipients, officeLetterAction, printOfficeLetter,
+  referOfficeLetter, removeOfficeFile, sendOfficeLetter, updateOfficeLetter, uploadOfficeFile,
   type MeResponse, type OfficeFilters, type OfficeLetter, type OfficeLetterInput,
 } from '../../api'
 import { SectionCard } from '../../components/SectionCard'
@@ -12,6 +12,7 @@ import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { EmptyState } from '../../components/EmptyState'
 import { AsyncBlock, Note, OpsPage, useAsync } from '../accounting/kit'
 import { formatJalali, todayIso, toFaDigits } from '../../lib/jalali'
+import { textMatches } from '../../lib/faText'
 import type { PageKey } from '../../lib/navModel'
 import './automation.css'
 
@@ -21,28 +22,29 @@ const BOXES = { inbox: 'دریافتی‌های من', sent: 'ارجاع‌ها�
 type Message = { text: string; kind: 'ok' | 'err' } | null
 type Props = { token: string; me: MeResponse; mode: 'inbox' | 'new' | 'registry'; onNavigate: (page: PageKey) => void }
 const errorText = (e: unknown) => e instanceof Error ? e.message : 'ارتباط با سرور برقرار نشد؛ دوباره تلاش کنید.'
-const emptyLetter = (): OfficeLetterInput => ({ kind: 'incoming', subject: '', body: '', sender: '', addressee: '', external_number: '', external_date: null, letter_date: todayIso(), due_date: null, priority: 'normal' })
+const emptyLetter = (): OfficeLetterInput => ({ kind: 'internal', subject: '', body: '', sender: '', addressee: '', external_number: '', external_date: null, letter_date: todayIso(), due_date: null, priority: 'normal' })
 const letterInput = (row: OfficeLetter): OfficeLetterInput => ({ kind: row.kind, subject: row.subject, body: row.body, sender: row.sender, addressee: row.addressee, external_number: row.external_number, external_date: row.external_date, letter_date: row.letter_date, due_date: row.due_date, priority: row.priority })
 
 export function AutomationPage(props: Props) {
-  if (!can(props.me, 'automation', 'view')) return <OpsPage icon={ClipboardList} title="اتوماسیون اداری" description="مکاتبات و پیگیری ارجاع‌ها"><p role="alert">اجازهٔ مشاهدهٔ مکاتبات ندارید؛ از مدیر کسب‌وکار بخواهید دسترسی اتوماسیون را بررسی کند.</p></OpsPage>
   return <Workspace key={`${props.mode}:${props.token}`} {...props} />
 }
 
 function Workspace({ token, me, mode, onNavigate }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Message>(null)
   const [generation, setGeneration] = useState(0)
   const title = mode === 'new' ? 'نامه جدید' : mode === 'inbox' ? 'کارتابل من' : 'دبیرخانه و بایگانی'
   return <OpsPage icon={ClipboardList} title={title} description="ثبت مکاتبات، ارجاع به همکاران و پیگیری پاسخ‌ها؛ بدون اثر مالی." canvas>
     <section className="office-toolbar" aria-label="بخش‌های اتوماسیون">
       <button type="button" onClick={() => onNavigate('automation')}>کارتابل من</button>
       <button type="button" onClick={() => onNavigate('letterlist')}>دبیرخانه و بایگانی</button>
-      {can(me, 'automation', 'create') && <button type="button" onClick={() => { setSelected(null); setGeneration(v => v + 1); onNavigate('letternew') }}>نامه جدید</button>}
+      {can(me, 'automation', 'create') && <button type="button" onClick={() => { setSelected(null); setNotice(null); setGeneration(v => v + 1); onNavigate('letternew') }}>نامه جدید</button>}
     </section>
-    {selected ? <LetterDetail key={selected} id={selected} token={token} me={me} onBack={() => { setSelected(null); setGeneration(v => v + 1) }} />
+    {notice && <section><Note msg={notice} /></section>}
+    {selected ? <LetterDetail key={selected} id={selected} token={token} me={me} onBack={() => { setSelected(null); setNotice(null); setGeneration(v => v + 1) }} />
       : mode === 'new' ? can(me, 'automation', 'create')
-        ? <SectionCard icon={FilePenLine} title="پیش‌نویس نامه" description="ابتدا پیش‌نویس را ذخیره کنید، سپس پیوست‌ها را اضافه کرده و نامه را ثبت نهایی کنید.">
-          <LetterEditor key={generation} initial={emptyLetter()} save={data => createOfficeLetter(token, data)} onSaved={row => setSelected(row.id)} />
+        ? <SectionCard icon={FilePenLine} title="نامه جدید" description="گیرنده را از کاربران همین کسب‌وکار انتخاب کنید؛ پیوست‌ها پیش از ارسال بارگذاری می‌شوند.">
+          <LetterEditor key={generation} token={token} me={me} initial={emptyLetter()} save={data => createOfficeLetter(token, data)} onSaved={(row, warning) => { setSelected(row.id); setNotice(warning ? { kind: 'err', text: warning } : { kind: 'ok', text: row.status === 'registered' ? 'نامه همراه پیوست‌ها به گیرنده ارسال شد.' : 'پیش‌نویس ذخیره شد.' }) }} />
         </SectionCard>
         : <p role="alert">اجازهٔ ساخت نامه ندارید؛ از مدیر کسب‌وکار بخواهید دسترسی ایجاد را بررسی کند.</p>
       : <LetterList key={generation} token={token} mode={mode} onOpen={setSelected} />}
@@ -90,32 +92,61 @@ function LetterList({ token, mode, onOpen }: { token: string; mode: 'inbox' | 'r
   </SectionCard>
 }
 
-function LetterEditor({ initial, save, onSaved, onCancel }: { initial: OfficeLetterInput; save: (data: OfficeLetterInput) => Promise<OfficeLetter>; onSaved: (row: OfficeLetter) => void; onCancel?: () => void }) {
+function LetterEditor({ token, me, initial, save, onSaved, onCancel, existingFiles = [] }: { token: string; me: MeResponse; initial: OfficeLetterInput; save: (data: OfficeLetterInput) => Promise<OfficeLetter>; onSaved: (row: OfficeLetter, warning?: string) => void; onCancel?: () => void; existingFiles?: OfficeLetter['attachments'] }) {
   const [data, setData] = useState(initial)
+  const [recipientId, setRecipientId] = useState('')
+  const [instruction, setInstruction] = useState('جهت بررسی و اقدام')
+  const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Message>(null)
+  const recipients = useAsync(() => fetchOfficeRecipients(token), [token])
+  const allowSend = can(me, 'automation', 'update')
   const lock = useRef(false)
+  const intent = useRef<'draft' | 'send'>('draft')
   const change = <K extends keyof OfficeLetterInput>(key: K, value: OfficeLetterInput[K]) => setData(old => ({ ...old, [key]: value }))
   return <form onSubmit={async e => {
     e.preventDefault()
     if (lock.current) return
     if (!data.subject.trim() || !data.letter_date) { setMsg({ kind: 'err', text: 'موضوع و تاریخ نامه را تکمیل کنید.' }); return }
+    const action = intent.current
+    const recipient = recipients.data?.find(r => r.id === recipientId)
+    if (action === 'send' && !recipient) { setMsg({ kind: 'err', text: 'گیرنده را از فهرست کاربران همین کسب‌وکار انتخاب کنید.' }); return }
+    if (existingFiles.length + files.length > 10 || existingFiles.reduce((sum, f) => sum + f.size, 0) + files.reduce((sum, f) => sum + f.size, 0) > 20 * 1024 * 1024) {
+      setMsg({ kind: 'err', text: 'هر نامه حداکثر ۱۰ پیوست و در مجموع ۲۰ مگابایت ظرفیت دارد؛ فایل‌های اضافه را حذف کنید.' }); return
+    }
     lock.current = true; setBusy(true); setMsg(null)
-    try { onSaved(await save(data)) } catch (err) { setMsg({ kind: 'err', text: errorText(err) }) }
-    finally { lock.current = false; setBusy(false) }
+    let row: OfficeLetter | null = null
+    try {
+      row = await save({ ...data, sender: initial.sender || me.name, addressee: recipient?.name ?? data.addressee })
+      for (const file of files) row = await uploadOfficeFile(token, row.id, file)
+      if (action === 'send' && recipient) row = await sendOfficeLetter(token, row.id, row.version, recipient.id, instruction.trim())
+      onSaved(row)
+    } catch (err) {
+      if (row) {
+        // قطعِ پاسخ الزاماً شکستِ تراکنش نیست؛ پیش از پیشنهادِ تلاشِ دوباره،
+        // نتیجهٔ واقعی همان نامه را می‌خوانیم تا ارسالِ تکراری ساخته نشود.
+        const latest = await fetchOfficeLetter(token, row.id).catch(() => row!)
+        const delivered = action === 'send' && latest.status === 'registered' && latest.referrals.some(r => r.to_user_id === recipientId && r.from_user_id === me.id)
+        onSaved(latest, delivered ? undefined : `پیش‌نویس ذخیره شد، اما ${action === 'send' ? 'ارسال یا بارگذاری پیوست' : 'بارگذاری پیوست'} تأیید نشد: ${errorText(err)}. وضعیت نامه و فایل‌های ذخیره‌شده را بررسی کنید و ادامه دهید.`)
+      } else setMsg({ kind: 'err', text: errorText(err) })
+    } finally { intent.current = 'draft'; lock.current = false; setBusy(false) }
   }}>
     <fieldset disabled={busy} className="office-grid">
       <label>نوع نامه<SearchSelect value={data.kind} onChange={e => change('kind', e.target.value as OfficeLetterInput['kind'])}>{Object.entries(KINDS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</SearchSelect></label>
       <label>اولویت<SearchSelect value={data.priority} onChange={e => change('priority', e.target.value as OfficeLetterInput['priority'])}><option value="normal">عادی</option><option value="urgent">فوری</option></SearchSelect></label>
       <label className="office-wide">موضوع<input required maxLength={300} value={data.subject} onChange={e => change('subject', e.target.value)} /></label>
-      <label>فرستنده<input maxLength={200} value={data.sender} onChange={e => change('sender', e.target.value)} /></label>
-      <label>گیرندهٔ نامه<input maxLength={200} value={data.addressee} onChange={e => change('addressee', e.target.value)} /></label>
+      <label>فرستنده<input value={initial.sender || me.name} readOnly aria-readonly="true" /></label>
+      <div><label htmlFor="office-recipient">گیرندهٔ نامه</label><SearchSelect id="office-recipient" aria-label="گیرندهٔ نامه" forceSearch searchPlaceholder="نام کاربر یا نقش را جست‌وجو کنید…" value={recipientId} onChange={e => setRecipientId(e.target.value)}><option value="">— گیرنده را انتخاب کنید —</option>{(recipients.data ?? []).map(r => <option key={r.id} value={r.id}>{r.name}{r.role_name ? ` — ${r.role_name}` : ''}</option>)}</SearchSelect>{recipients.loading && <small className="muted">در حال دریافت کاربران…</small>}{recipients.error && <small role="alert">فهرست کاربران دریافت نشد؛ دوباره تلاش کنید.</small>}{!recipients.loading && !recipients.error && !recipients.data?.length && <small>کاربر فعالی در این کسب‌وکار پیدا نشد.</small>}{recipients.error && <button type="button" onClick={recipients.reload}>بارگذاری دوبارهٔ کاربران</button>}</div>
+      {initial.addressee && <small className="muted office-wide">نام گیرندهٔ قبلی پیش‌نویس: {initial.addressee}. برای ارسال، حساب گیرنده را دوباره از فهرست انتخاب کنید؛ هویت از روی نام حدس زده نمی‌شود.</small>}
       <div><label htmlFor="office-date">تاریخ نامه (الزامی)</label><JalaliDatePicker id="office-date" value={data.letter_date} onChange={v => change('letter_date', v)} /></div>
       <div><label htmlFor="office-due">مهلت پیگیری</label><JalaliDatePicker id="office-due" value={data.due_date ?? ''} onChange={v => change('due_date', v || null)} clearLabel="بدون مهلت" /></div>
       <label>شمارهٔ نامهٔ مرجع<input maxLength={100} value={data.external_number} onChange={e => change('external_number', e.target.value)} /></label>
       <div><label htmlFor="office-external-date">تاریخ نامهٔ مرجع</label><JalaliDatePicker id="office-external-date" value={data.external_date ?? ''} onChange={v => change('external_date', v || null)} clearLabel="بدون تاریخ" /></div>
       <label className="office-wide">متن نامه<textarea rows={9} maxLength={50000} value={data.body} onChange={e => change('body', e.target.value)} /></label>
-      <div className="office-toolbar office-wide"><button type="submit" className="btn-primary">{busy ? 'در حال ذخیره…' : 'ذخیره پیش‌نویس'}</button>{onCancel && <button type="button" onClick={onCancel}>انصراف از ویرایش</button>}</div>
+      <label className="office-wide">دستور ارجاع<textarea rows={2} maxLength={4000} value={instruction} onChange={e => setInstruction(e.target.value)} /></label>
+      <div className="office-wide"><label className="office-upload">پیوست فایل (PDF، PNG یا JPEG)<span className="office-file-picker">انتخاب فایل‌ها<input type="file" multiple disabled={!allowSend} accept=".pdf,.png,.jpg,.jpeg" onChange={e => { const picked = Array.from(e.currentTarget.files ?? []); e.currentTarget.value = ''; const invalid = picked.find(f => !/\.(pdf|png|jpe?g)$/i.test(f.name) || !f.size || f.size > 5 * 1024 * 1024); if (invalid) { setMsg({ kind: 'err', text: `فایل «${invalid.name}» پذیرفته نمی‌شود؛ PDF، PNG یا JPEG غیرخالی و حداکثر ۵ مگابایت انتخاب کنید.` }); return } setFiles(old => [...old, ...picked]); setMsg(null) }} /></span></label><small className="muted">هر فایل حداکثر ۵ مگابایت؛ حداکثر ۱۰ فایل و مجموع ۲۰ مگابایت.</small>{files.length > 0 && <ul className="office-files">{files.map((file, i) => <li key={`${file.name}-${i}`}><span dir="auto">{file.name}</span><small>{Math.ceil(file.size / 1024).toLocaleString('fa-IR')} کیلوبایت</small><button type="button" onClick={() => setFiles(old => old.filter((_, index) => index !== i))}>حذف</button></li>)}</ul>}</div>
+      <small className="muted office-wide">پس از ارسال، متن و پیوست‌ها قابل تغییر نیستند.{!allowSend && ' برای ارسال و افزودن پیوست، از مدیر بخواهید مجوز ویرایش اتوماسیون را فعال کند.'}</small>
+      <div className="office-toolbar office-wide"><button type="submit" onClick={() => { intent.current = 'draft' }}>{busy ? 'در حال ذخیره…' : 'ذخیره پیش‌نویس'}</button><button type="submit" className="btn-primary" disabled={!allowSend || !recipientId || !!recipients.error || recipients.loading || !instruction.trim()} onClick={() => { intent.current = 'send' }}>{busy ? 'در حال ارسال…' : 'ثبت و ارسال نامه'}</button>{onCancel && <button type="button" onClick={onCancel}>انصراف از ویرایش</button>}</div>
     </fieldset><Note msg={msg} />
   </form>
 }
@@ -150,7 +181,7 @@ function LetterDetail({ id, token, me, onBack }: { id: string; token: string; me
     <section><div className="office-toolbar"><button type="button" disabled={busy} onClick={onBack}>بازگشت</button><button type="button" disabled={busy || loading} onClick={() => { setEditing(false); setRetry(v => v + 1) }}>بازخوانی نامه</button></div><Note msg={msg} />{loading && <p className="muted">در حال بارگذاری نامه…</p>}</section>
     {!loading && row && <>
       <SectionCard icon={FileText} title={row.subject} description={`${KINDS[row.kind]} · ${STATUSES[row.status]} · ${row.number === null ? 'هنوز شماره ندارد' : `شمارهٔ ${toFaDigits(row.number)}`}`}>
-        {editing && editable ? <LetterEditor key={row.version} initial={letterInput(row)} save={data => updateOfficeLetter(token, row.id, data, row.version)} onSaved={r => { setRow(r); setEditing(false); setMsg({ kind: 'ok', text: 'پیش‌نویس ذخیره شد.' }) }} onCancel={() => setEditing(false)} /> : <>
+        {editing && editable ? <LetterEditor key={row.version} token={token} me={me} initial={letterInput(row)} existingFiles={row.attachments} save={data => updateOfficeLetter(token, row.id, data, row.version)} onSaved={(r, warning) => { setRow(r); setEditing(false); setMsg({ kind: warning ? 'err' : 'ok', text: warning ?? (r.status === 'registered' ? 'نامه همراه پیوست‌ها ارسال شد.' : 'پیش‌نویس ذخیره شد.') }) }} onCancel={() => setEditing(false)} /> : <>
           <dl className="office-metadata">
             <div><dt>از</dt><dd>{row.sender || '—'}</dd></div><div><dt>به</dt><dd>{row.addressee || '—'}</dd></div>
             <div><dt>تاریخ نامه</dt><dd>{formatJalali(row.letter_date)}</dd></div><div><dt>مهلت پیگیری</dt><dd>{formatJalali(row.due_date)}</dd></div>
@@ -180,10 +211,10 @@ function LetterDetail({ id, token, me, onBack }: { id: string; token: string; me
             <h3>{ref.from_name} ← {ref.to_name}</h3><p className="office-body">{ref.instruction}</p>
             <p>مهلت: {formatJalali(ref.due_date ?? row.due_date)} · {ref.completed_at ? `تکمیل‌شده در ${formatJalali(ref.completed_at)}` : ref.read_at ? `خوانده‌شده در ${formatJalali(ref.read_at)}` : 'هنوز خوانده نشده'}</p>
             {ref.response && <p className="office-body"><strong>پاسخ: </strong>{ref.response}</p>}
-            {writable && row.status === 'registered' && ref.can_complete && <ResponseForm busy={busy} onComplete={response => run(() => completeOfficeReferral(token, ref.id, response), 'پاسخ ثبت و ارجاع تکمیل شد.')} />}
+            {row.status === 'registered' && ref.can_complete && <ResponseForm busy={busy} onComplete={response => run(() => completeOfficeReferral(token, ref.id, response), 'پاسخ ثبت و ارجاع تکمیل شد.')} />}
           </article>)}</div>
           {writable && row.status === 'registered' && <ReferralForm token={token} busy={busy} onRefer={(ids, instruction, due) => run(() => referOfficeLetter(token, id, ids, instruction, due), 'نامه به همکاران انتخاب‌شده ارجاع شد.')} />}
-          {row.status === 'draft' && <p className="muted">برای ارجاع، ابتدا نامه را ثبت نهایی کنید.</p>}
+          {row.status === 'draft' && <p className="muted">برای ارسالِ نامه و پیوست‌ها، «ویرایش پیش‌نویس» را باز کنید، گیرنده را انتخاب کنید و «ثبت و ارسال نامه» را بزنید.</p>}
         </SectionCard>
         <SectionCard icon={History} title="سابقهٔ مکاتبه" description="سابقهٔ عملیات قابل ویرایش یا حذف نیست."><ol className="office-history">{row.events.map(event => <li key={event.id}><span>{toFaDigits(event.description)}</span><small>{event.actor_name} · {formatJalali(event.created_at)}</small></li>)}</ol></SectionCard>
       </>}
@@ -201,7 +232,7 @@ function ReferralForm({ token, busy, onRefer }: { token: string; busy: boolean; 
     <h3>ارجاع تازه</h3><AsyncBlock loading={recipients.loading} error={recipients.error} empty={false}>
       <fieldset disabled={busy} className="office-grid">
         <label className="office-wide">جست‌وجوی همکار<input value={search} onChange={e => setSearch(e.target.value)} /></label>
-        <div className="office-recipients office-wide" role="group" aria-label="گیرندگان ارجاع">{(recipients.data ?? []).filter(r => r.name.includes(search)).map(r => <label key={r.id} className="office-check"><input type="checkbox" checked={ids.includes(r.id)} disabled={!ids.includes(r.id) && ids.length >= 20} onChange={e => setIds(old => e.target.checked ? [...old, r.id] : old.filter(id => id !== r.id))} />{r.name}</label>)}{!recipients.data?.length && <p>همکار مجاز دیگری پیدا نشد؛ عضویت و دسترسی اتوماسیون را در مدیریت کاربران بررسی کنید.</p>}</div>
+        <div className="office-recipients office-wide" role="group" aria-label="گیرندگان ارجاع">{(recipients.data ?? []).filter(r => textMatches(`${r.name} ${r.role_name ?? ''}`, search)).map(r => <label key={r.id} className="office-check"><input type="checkbox" checked={ids.includes(r.id)} disabled={!ids.includes(r.id) && ids.length >= 20} onChange={e => setIds(old => e.target.checked ? [...old, r.id] : old.filter(id => id !== r.id))} />{r.name}{r.role_name ? ` — ${r.role_name}` : ''}</label>)}{!recipients.data?.length && <p>کاربر فعال دیگری پیدا نشد؛ عضویت کاربران را در مدیریت کاربران بررسی کنید.</p>}</div>
         <label className="office-wide">دستور ارجاع<textarea required maxLength={4000} rows={3} value={instruction} onChange={e => setInstruction(e.target.value)} /></label>
         <div><label htmlFor="office-ref-due">مهلت این ارجاع (اختیاری)</label><JalaliDatePicker id="office-ref-due" value={due} onChange={setDue} clearLabel="مهلت نامه" /></div>
         <div className="office-toolbar"><button type="submit" disabled={!ids.length || !instruction.trim()} className="btn-primary">ارجاع به {ids.length.toLocaleString('fa-IR')} همکار</button></div>

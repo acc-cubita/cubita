@@ -31,6 +31,19 @@ def as_user(p):
     app.dependency_overrides[get_principal] = lambda: p
 
 
+@pytest.fixture
+def office_enterprise_license(monkeypatch):
+    from app.config import get_settings
+    from app.licensing import state as license_state
+
+    monkeypatch.setattr(get_settings(), "edition", "enterprise")
+    license_ = [license_state.LicenseStatus(mode="active", writable=True, mods=frozenset({"automation"}))]
+    # یک منبع برای گیت نوشتن و فهرست ماژول‌ها؛ هیچ مجوز واقعی یا فایلِ نصب لمس نمی‌شود.
+    monkeypatch.setattr(license_state, "current", lambda _db: license_[0])
+    monkeypatch.setattr(license_state, "peek", lambda: license_[0])
+    return license_
+
+
 def draft(client, **kwargs):
     response = client.post("/api/automation/letters", json={"kind": "incoming", "subject": "آزمایش نامه",
         "body": "متن نامه", "letter_date": "2026-09-27", **kwargs})
@@ -95,11 +108,13 @@ def test_private_letter_file_print_and_history_cannot_leak(client, actors):
 
 
 def test_draft_edit_version_lock_and_registered_immutability(client):
-    row = draft(client)
+    row = draft(client, sender="نام جعلی")
     path = f"/api/automation/letters/{row['id']}"
-    payload = {"kind": "internal", "subject": "ویرایش", "letter_date": "2026-09-27", "version": 1}
+    assert row["sender"] == row["creator_name"]
+    payload = {"kind": "internal", "subject": "ویرایش", "sender": "نام جعلی دوم", "letter_date": "2026-09-27", "version": 1}
     edited = client.put(path, json=payload)
     assert edited.status_code == 200
+    assert edited.json()["sender"] == row["sender"]
     assert client.put(path, json=payload).status_code == 409
     client.post(path + "/register", json={"version": 2})
     payload["version"] = 3
@@ -132,11 +147,119 @@ def test_no_permission_and_expired_recipient(client, actors, db):
     stranger.membership.permissions = {"calendar": ["view"]}
     db.flush()
     as_user(Principal(stranger.user, stranger.membership))
-    assert client.get("/api/automation/letters").status_code == 403
+    # عضوِ عادی می‌تواند کارتابلِ خصوصی داشته باشد، ولی نامهٔ بی‌ارتباط را نمی‌بیند.
+    assert client.get("/api/automation/letters").json()["items"] == []
+    assert client.get("/api/automation/recipients").status_code == 403
+    assert client.post("/api/automation/letters", json={"kind": "internal", "subject": "بدون مجوز", "letter_date": "2026-09-27"}).status_code == 403
     as_user(actors[0])
     recipient.membership.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
     db.flush()
     assert str(recipient.user.id) not in [r["id"] for r in client.get("/api/automation/recipients").json()]
+
+
+@pytest.mark.parametrize("edition", ["cloud", "enterprise"])
+def test_staff_sender_recipient_and_file_send(client, actors, db, edition, request):
+    if edition == "enterprise":
+        request.getfixturevalue("office_enterprise_license")
+    owner, _, courier, stranger = actors
+    courier.membership.permissions = {"automation": ["view", "create", "update"], "marketplace": ["view", "deliver"]}
+    stranger.membership.permissions = {"calendar": ["view"]}
+    db.flush()
+    as_user(Principal(courier.user, courier.membership))
+    options = client.get("/api/automation/recipients")
+    assert options.status_code == 200
+    assert {r["id"] for r in options.json()} >= {str(owner.user.id), str(courier.user.id)}
+    assert next(r["role_name"] for r in options.json() if r["id"] == str(owner.user.id)) == owner.role.name
+    assert all(set(r) == {"id", "name", "role_name"} for r in options.json())
+    row = draft(client, sender="دیگری", addressee="نام آزاد")
+    assert row["sender"] == courier.user.name
+    path = f"/api/automation/letters/{row['id']}"
+    bad = client.post(path + "/send", json={"version": row["version"], "recipient_id": str(uuid4())})
+    assert bad.status_code == 400
+    assert client.get(path).json()["status"] == "draft"
+    blob = b"%PDF-1.4\nattachment"
+    row = client.post(path + "/attachments?filename=note.pdf", content=blob).json()
+    sent = client.post(path + "/send", json={"version": row["version"], "recipient_id": str(owner.user.id),
+                                        "instruction": "بررسی کنید"})
+    assert sent.status_code == 200, sent.text
+    assert sent.json()["status"] == "registered"
+    assert sent.json()["number"] == 1
+    assert sent.json()["addressee"] == owner.user.name
+    assert sent.json()["sender"] == courier.user.name
+    assert sent.json()["referrals"][0]["to_user_id"] == str(owner.user.id)
+    assert sent.json()["attachments"][0]["filename"] == "note.pdf"
+    assert client.post(path + "/send", json={"version": row["version"], "recipient_id": str(owner.user.id)}).status_code == 409
+    as_user(Principal(stranger.user, stranger.membership))
+    assert client.get(path).status_code == 404
+    as_user(Principal(courier.user, courier.membership))
+    referred = client.post(path + "/refer", json={"recipients": [str(stranger.user.id)], "instruction": "پاسخ بدهید"})
+    assert referred.status_code == 200, referred.text
+    ref_id = next(r["id"] for r in referred.json()["referrals"] if r["to_user_id"] == str(stranger.user.id))
+    as_user(Principal(stranger.user, stranger.membership))
+    assert client.get(path).status_code == 200
+    assert client.get(f"/api/automation/attachments/{sent.json()['attachments'][0]['id']}").content == blob
+    assert client.post(f"/api/automation/referrals/{ref_id}/complete", json={"response": "انجام شد"}).status_code == 200
+    as_user(owner)
+    assert client.get("/api/automation/letters?box=inbox").json()["items"][0]["id"] == row["id"]
+    assert client.get(f"/api/automation/attachments/{sent.json()['attachments'][0]['id']}").content == blob
+
+
+def test_enterprise_expired_license_keeps_private_mail_readable(client, actors, db, office_enterprise_license):
+    from app.licensing.state import LicenseStatus
+
+    _, sender, recipient, _ = actors
+    as_user(sender)
+    row = draft(client, kind="internal")
+    path = f"/api/automation/letters/{row['id']}"
+    blob = b"%PDF-1.4\nenterprise-private-file"
+    row = client.post(path + "/attachments?filename=enterprise.pdf", content=blob).json()
+    sent = client.post(path + "/send", json={"version": row["version"], "recipient_id": str(recipient.user.id)})
+    assert sent.status_code == 200, sent.text
+    recipient.membership.permissions = {"calendar": ["view"]}
+    db.flush()
+    office_enterprise_license[0] = LicenseStatus(mode="expired", writable=False,
+        message="مجوز شرکت منقضی شده است.", mods=frozenset({"automation"}))
+    as_user(Principal(recipient.user, recipient.membership))
+    assert client.get(path).status_code == 200
+    assert client.get(f"/api/automation/attachments/{sent.json()['attachments'][0]['id']}").content == blob
+    referral = sent.json()["referrals"][0]["id"]
+    response = client.post(f"/api/automation/referrals/{referral}/complete", json={"response": "اقدام شد"})
+    assert response.status_code == 402, response.text
+    as_user(sender)
+    assert client.post("/api/automation/letters", json={"kind": "internal", "subject": "تازه",
+        "letter_date": "2026-09-28"}).status_code == 402
+
+
+def test_enterprise_automation_requires_licensed_module(client, office_enterprise_license):
+    from app.licensing.state import LicenseStatus
+
+    office_enterprise_license[0] = LicenseStatus(mode="active", writable=True, mods=frozenset({"accounting"}))
+    for path in ("/api/automation/letters", "/api/automation/recipients"):
+        assert client.get(path).status_code == 403
+    assert client.post("/api/automation/letters", json={"kind": "internal", "subject": "تازه",
+        "letter_date": "2026-09-28"}).status_code == 403
+
+
+def test_recipient_response_still_obeys_subscription(client, actors, db, tenant_id):
+    from app.models.subscription import Subscription
+    from app.services.subscriptions import GRACE_DAYS
+
+    _, sender, recipient, _ = actors
+    as_user(sender)
+    row = registered(client)
+    path = f"/api/automation/letters/{row['id']}"
+    referred = client.post(path + "/refer", json={"recipients": [str(recipient.user.id)], "instruction": "پاسخ"}).json()
+    recipient.membership.permissions = {"calendar": ["view"]}
+    db.query(Subscription).filter_by(tenant_id=tenant_id).delete()
+    db.add(Subscription(tenant_id=tenant_id, starts_at=datetime.now(timezone.utc) - timedelta(days=365),
+                        expires_at=datetime.now(timezone.utc) - timedelta(days=GRACE_DAYS + 1)))
+    db.flush()
+    as_user(Principal(recipient.user, recipient.membership))
+    assert client.get(path).status_code == 200
+    assert client.post(f"/api/automation/referrals/{referred['referrals'][0]['id']}/complete", json={"response": "اقدام"}).status_code == 402
+    recipient.membership.tenant.is_trial = True
+    db.flush()
+    assert client.get(path).status_code == 402
 
 
 def test_filters_pagination_print_escaping(client, actors):
