@@ -8419,17 +8419,22 @@ button.mp-item:focus-visible {
 }
 
 /* ── دو کارتِ ماژول: «عملیات» و «فهرست» ──────────────────────────────────
-   یک ستونِ باریک کنارِ ناحیه‌ی محتوا؛ «فهرست» *زیرِ* «عملیات» می‌نشیند، نه
-   کنارش. «عملیات» به‌اندازه‌ی زیرمنوهایش بلند می‌شود (تا سقفِ نیمِ ستون) و
-   «فهرست» باقیِ ارتفاع را می‌گیرد و خودش می‌لغزد. هرکدام جداگانه جمع‌شدنی
-   است؛ جمع‌شده فقط سرتیترش می‌ماند تا بشود دوباره بازش کرد. */
+   یک ستونِ باریک کنارِ ناحیه‌ی محتوا؛ «فهرست» *زیرِ* «عملیات» می‌نشیند، نه کنارش.
+
+   **هر کارت به‌اندازه‌ی محتوایش، و کلِ ستون یک لغزش** (۱۴۰۵/۰۷/۰۶). پیش از این «عملیات» تا ۶۰٪ِ
+   ستون بلند می‌شد و «فهرست» باقی را پر می‌کرد، هر کدام با لغزشِ خودش: در «فروش» و «حسابداری» نیمی از
+   ردیف‌ها پشتِ دو جعبه‌ی لغزانِ کوچک پنهان بود، و «فهرست»ِ یک‌ردیفه (مؤدیان) ۷۵۰px کارتِ خالی
+   می‌شد. حالا دسته‌ها (با «تعریف‌ها»ی پیش‌فرض بسته) کارت را کوتاه نگه می‌دارند و هرچه ماند با یک
+   لغزش دیده می‌شود. هر کارت هنوز جداگانه جمع‌شدنی است. */
 .mod-panels {
   display: flex;
   flex-direction: column;
   width: 252px;
   flex-shrink: 0;
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   border-inline-end: 1px solid var(--border);
 }
@@ -8437,20 +8442,10 @@ button.mp-item:focus-visible {
 .mod-panel {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  flex: 0 0 auto;
   border-block-end: 1px solid var(--border);
 }
-/* «عملیات» به‌اندازه‌ی محتوا، ولی هرگز بیشتر از نیمِ ستون — وگرنه ماژولی با
-   زیرمنوهای زیاد، «فهرست» را از صفحه بیرون می‌راند. */
-.mod-panels > .mod-panel:not(.mod-panel--list) {
-  flex: 0 1 auto;
-  max-height: 60%;
-}
-/* «فهرست» باقیِ ارتفاع را پر می‌کند. */
-.mod-panel--list { flex: 1 1 auto; }
 .mod-panels > .mod-panel:last-child { border-block-end: none; }
-/* جمع‌شده فقط سرتیتر است، پس نه رشد می‌کند و نه سقفِ ارتفاع لازم دارد. */
-.mod-panel.collapsed { flex: 0 0 auto; max-height: none; }
 
 /* تیترِ کارت («عملیات»/«فهرست») — **برچسبِ دسته، نه لینک**: کوچک‌تر، کم‌رنگ و بی‌پس‌زمینه.
    پیش از این هم‌اندازه‌ی لینک‌ها بود (۱۲px) و با رنگِ `--text-h` حتی از آن‌ها پررنگ‌تر
@@ -8504,9 +8499,6 @@ button.mp-item:focus-visible {
 .mod-panel.collapsed .mod-panel-head { padding-bottom: 10px; }
 
 .mod-panel-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding: 2px 6px 8px;
 }
 
@@ -8643,19 +8635,96 @@ button.mp-item:focus-visible {
 /* تیترِ دسته‌ی منوهای یک گروه («ساختار و تعریف‌ها»، «ثبت سند»، …) — کوچک، کم‌رنگ و بی‌کنش تا با
    منوها قاطی نشود؛ خطِ نازکِ بالا دسته‌ها را از هم جدا می‌کند (جز اولی). فاصله‌ی حرفی نمی‌گیرد:
    letter-spacing پیوستگیِ حروفِ فارسی را می‌شکند. */
-.mod-section-label {
+/* تیترِ دسته — دکمه‌ی بازوبسته، ولی با وزنِ برچسب نه لینک (همان قاعده‌ی تیترِ کارت): کوچک و کم‌رنگ،
+   تا چشم به خودِ کارها برود. بسته که باشد تعدادِ ردیف‌هایش را می‌گوید. */
+.mod-panels .mod-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 8px);
   margin: 8px 4px 2px;
-  padding: 8px 6px 2px;
+  padding: 8px 6px 3px;
+  border: 0;
   border-block-start: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-muted);
+  font: inherit;
   font-size: var(--fs-xs);
   font-weight: 600;
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
   user-select: none;
 }
-.mod-section-label:first-child {
+.mod-panels .mod-section-label:first-child {
   margin-block-start: 0;
   padding-block-start: 2px;
   border-block-start: 0;
+}
+.mod-panels .mod-section-label:hover,
+.mod-panels .mod-section-label:focus-visible {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border);
+}
+.mod-section-title { flex: 1; min-width: 0; }
+.mod-section-chev {
+  flex: 0 0 13px;
+  transition: transform 0.18s ease;
+}
+/* بسته = چورون رو به کنار، هم‌جهتِ چورونِ تیترِ کارت («عملیات»/«فهرست»ِ جمع‌شده). */
+.mod-section-label.collapsed .mod-section-chev { transform: rotate(-90deg); }
+.mod-section-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* دسته‌ی بسته‌ای که صفحه‌ی فعال را دارد: شمارشش رنگِ فعال می‌گیرد، همان نشانِ نقطه‌ی آکاردئونِ کشو. */
+.mod-section-label.has-current .mod-section-count {
+  background: var(--accent-bg);
+  color: var(--accent-on-tint);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mod-section-chev { transition: none; }
+}
+
+/* «مسیرِ کار» — راهنمای ترتیبِ کارهای ماژول. پیوندِ کم‌رنگِ بالای کارت، نه ردیفِ هم‌وزنِ کارها. */
+.mod-panels .mod-guide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 5px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
+}
+.mod-panels .mod-guide > svg { flex: 0 0 14px; width: 14px; height: 14px; }
+.mod-panels .mod-guide:hover,
+.mod-panels .mod-guide:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+.mod-panels .mod-guide.active {
+  color: var(--accent-on-tint);
+  background: var(--accent-bg);
+  border-style: solid;
+  border-color: transparent;
 }
 
 /* بخش‌های صفحه، تودرتو زیرِ ردیفِ والد. خطِّ راهنما دقیقاً زیرِ مرکزِ آیکونِ والد است

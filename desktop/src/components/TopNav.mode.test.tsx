@@ -90,10 +90,11 @@ describe('منوی بالا در هر حالت', () => {
     expect(onNavigate).toHaveBeenCalledWith('journalentry', undefined)
   })
 
-  it('در حالتِ ساده همان پیش‌فرضِ قبلی — اولین صفحه‌ی گروه', () => {
+  it('در حالتِ ساده همان پیش‌فرض — اولین کارِ گروه، که از ۱۴۰۵/۰۷/۰۶ خودش «سند حسابداری» است', () => {
+    //: پیش از مرتب‌سازیِ زیرمنوها اولین صفحه «درختواره حساب‌ها» بود؛ حالا ساختار ته گروه است.
     act(() => setExperience('simple'))
     click('حسابداری')
-    expect(onNavigate).toHaveBeenCalledWith('acctchart', undefined)
+    expect(onNavigate).toHaveBeenCalledWith('journalentry', undefined)
   })
 })
 

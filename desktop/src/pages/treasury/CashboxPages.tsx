@@ -102,7 +102,7 @@ export function CashboxesPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={PiggyBank}
-      title="تعریف صندوق"
+      title="صندوق‌ها"
       description="صندوق جایی است که پولِ نقد نگه داشته می‌شود — یک موجودیتِ عملیاتی که با تفصیلی به حسابداری وصل می‌شود، نه خودِ حسابِ معین."
       head={
         <div className="cc-head">

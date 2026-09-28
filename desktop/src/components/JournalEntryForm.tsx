@@ -637,7 +637,7 @@ function ShortcutsDialog({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
-        <p className="jk-foot">فهرستِ همه‌ی میان‌برهای برنامه: تنظیمات ← میان‌برهای صفحه‌کلید</p>
+        <p className="jk-foot">فهرستِ همه‌ی میان‌برهای برنامه: منوی کاربر ← کلیدهای میان‌بر</p>
       </div>
     </div>,
     document.body,

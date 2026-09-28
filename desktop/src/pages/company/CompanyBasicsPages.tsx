@@ -149,7 +149,7 @@ export function ContactGroupPage({ token }: { token: string }) {
     <div className="page panels">
       <PageHeader
         icon={Tags}
-        title="گروه جدید"
+        title="گروه طرف حساب"
         description="طرف‌حساب‌ها را دسته کنید (عمده‌فروش، خرده‌فروش، همکار…) تا گزارش‌های فروش و مطالبات به تفکیکِ گروه معنا پیدا کنند."
       />
       <div className="ef-form">

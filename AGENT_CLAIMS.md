@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/src/{lib/navModel.tsx,lib/menuSections.ts,components/moduleLists.tsx,components/moduleSections.tsx,components/ModulePanels.tsx,components/TopNav.tsx,App.css}`، سرصفحه‌ها و راهنما، `.claude/skills/cubita-page/SKILL.md`، `PROJECT_OVERVIEW.md` | مرتب‌سازیِ زیرمنوها (مرحله‌ی ۱): دسته‌ها، انحلالِ «شرکت»، منوی کاربر، نام‌ها | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/{package.json,package-lock.json,scripts/dist-enterprise.mjs}`، `PROJECT_OVERVIEW.md` | انتشارِ دسکتاپ ۱.۹.۳ (ابری + سازمانی)؛ `dist:enterprise` با پوسته‌ی EPERM | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/src/{components/TopNav.tsx,lib/topnavFit.ts,lib/topnavFit.test.ts,App.css}`، `PROJECT_OVERVIEW.md` | نوارِ ماژول‌ها: همبرگر فقط تبلت/گوشی، کوچک‌شدنِ هم‌نسبتِ منو روی دسکتاپ | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/{package.json,package-lock.json,scripts/gen-brand-assets.mjs,src/components/TitleBar.tsx,src/App.css}`، `mobile/{app.json,assets/splash-icon.png}`، `PROJECT_OVERVIEW.md` | انتشارِ دسکتاپِ ابری ۱.۹.۲ و اندروید ۱.۹.۰ (v10) | ۱۴۰۵/۰۷/۰۶ |
