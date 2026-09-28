@@ -315,9 +315,12 @@ function apiError(body: { detail?: unknown; line_errors?: unknown }, fallback: s
   return new ApiError(detailText(body.detail) ?? fallback, status, body.detail, body.line_errors)
 }
 
-async function authedGet<T>(token: string, path: string): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error(`دریافت اطلاعات ناموفق بود (${res.status})`)
+async function authedGet<T>(token: string, path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw apiError(body && typeof body === 'object' ? body : {}, `دریافت اطلاعات ناموفق بود (${res.status.toLocaleString('fa-IR')})`, res.status)
+  }
   return res.json()
 }
 
@@ -1180,8 +1183,8 @@ export const fetchNumbering = (token: string) =>
 export const setNumbering = (token: string, docType: string, nextNumber: number) =>
   authedSend<NumberingRule>(token, 'PATCH', `/api/numbering/${docType}`, { next_number: nextNumber })
 
-export const fetchFiscalYears = (token: string) =>
-  authedGet<FiscalYearRecord[]>(token, '/api/fiscal-years')
+export const fetchFiscalYears = (token: string, signal?: AbortSignal) =>
+  authedGet<FiscalYearRecord[]>(token, '/api/fiscal-years', signal)
 
 export const fetchFiscalYearSuggestion = (token: string) =>
   authedGet<FiscalYearSuggestion>(token, '/api/fiscal-years/suggest')

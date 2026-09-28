@@ -1,5 +1,7 @@
 import { getLocalDb } from './db.js'
 import { randomUUID } from 'node:crypto'
+import { runReferenceSync, type ReferenceKey, type ReferenceSyncReport, type SyncPermissions } from '../src/lib/referenceSync.js'
+import { outboxErrorText } from '../src/lib/outboxError.js'
 
 // Sync Engine حداقلی: pull چارت حساب/کالاها/انبارها از سرور، push اسناد صف‌شده‌ی آفلاین (outbox).
 // طبق پلن: تعارض روی سندهای append-only بی‌معناست چون فقط create می‌شوند، نه update همزمان؛
@@ -22,8 +24,11 @@ async function fetchAllRows<T>(config: SyncConfig, endpoint: string, token: stri
 
   for (;;) {
     const url = `${config.apiBaseUrl}${endpoint}${sep}limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    if (!res.ok) throw new Error(`pull ${endpoint} failed: ${res.status}`)
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) })
+    if (!res.ok) {
+      const body = await res.text()
+      throw Object.assign(new Error(body ? outboxErrorText(body) : `دریافت اطلاعات ناموفق بود (${res.status.toLocaleString('fa-IR')})؛ وضعیت سرور را بررسی کنید.`), { status: res.status })
+    }
     const data = (await res.json()) as unknown
 
     if (Array.isArray(data)) {
@@ -31,8 +36,9 @@ async function fetchAllRows<T>(config: SyncConfig, endpoint: string, token: stri
       break
     }
 
-    const page = data as { items?: T[]; next_cursor?: string | null }
-    if (Array.isArray(page.items)) all.push(...page.items)
+    const page = data as { items?: T[]; next_cursor?: string | null } | null
+    if (!page || !Array.isArray(page.items)) throw new Error('پاسخ فهرست از سرور معتبر نیست؛ وضعیت سرور را بررسی کنید و دوباره «هم‌گام‌سازی» را بزنید.')
+    all.push(...page.items)
     cursor = page.next_cursor ?? null
     if (!cursor) break
   }
@@ -48,7 +54,7 @@ async function pullTable<T extends { id: string }>(
   toRow: (item: T) => Record<string, unknown>,
 ): Promise<void> {
   const token = config.getToken()
-  if (!token) return
+  if (!token) throw Object.assign(new Error('نشست ورود موجود نیست؛ دوباره وارد حساب خود شوید و «هم‌گام‌سازی» را بزنید.'), { status: 401 })
 
   const items = await fetchAllRows<T>(config, endpoint, token)
 
@@ -119,6 +125,20 @@ export async function pullBankAccounts(config: SyncConfig): Promise<void> {
     name: string
     bank_name: string
   }) => b)
+}
+
+const REFERENCE_TABLES: Record<ReferenceKey, string> = {
+  accounts: 'accounts_cache', warehouses: 'warehouses_cache', items: 'items_cache', bankAccounts: 'bank_accounts_cache',
+}
+
+export async function pullAll(config: SyncConfig, permissions?: SyncPermissions): Promise<ReferenceSyncReport> {
+  const pulls = { accounts: pullAccounts, warehouses: pullWarehouses, items: pullItems, bankAccounts: pullBankAccounts }
+  return runReferenceSync((Object.keys(pulls) as ReferenceKey[]).map((key) => ({
+    key,
+    run: () => pulls[key](config),
+    // کشِ مرجعِ مجوزِ برداشته‌شده نباید نمایش داده شود؛ هیچ صف یا سندِ مالی پاک نمی‌شود.
+    onSkipped: () => { getLocalDb().prepare(`DELETE FROM ${REFERENCE_TABLES[key]}`).run() },
+  })), permissions)
 }
 
 export function queueJournalEntry(payload: unknown): string {

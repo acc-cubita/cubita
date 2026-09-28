@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { SyncPermissions } from '../src/lib/referenceSync.js'
 
 // نسخه و نشانیِ سرور — همزمان، چون api.ts پیش از اولین fetch به آن نیاز دارد.
 contextBridge.exposeInMainWorld('cubitaConfig', ipcRenderer.sendSync('server:config'))
@@ -12,7 +13,7 @@ contextBridge.exposeInMainWorld('cubita', {
   restoreSession: () => ipcRenderer.invoke('auth:restoreSession'),
   clearSession: () => ipcRenderer.invoke('auth:clearSession'),
   currentRefreshToken: () => ipcRenderer.invoke('auth:currentRefreshToken'),
-  pullAll: () => ipcRenderer.invoke('sync:pullAll'),
+  pullAll: (permissions?: SyncPermissions) => ipcRenderer.invoke('sync:pullAll', permissions),
   pushOutbox: () => ipcRenderer.invoke('sync:pushOutbox'),
   queueJournalEntry: (payload: unknown) => ipcRenderer.invoke('journal:queueEntry', payload),
   listOutbox: () => ipcRenderer.invoke('journal:listOutbox'),

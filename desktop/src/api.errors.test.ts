@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, detailText } from './api'
+import { ApiError, detailText, fetchFiscalYears } from './api'
+
+afterEach(() => vi.unstubAllGlobals())
 
 /**
  * `detail`ِ FastAPI دو شکل دارد: متن (HTTPException) و آرایه (۴۲۲). آرایه تا امروز
@@ -31,5 +33,13 @@ describe('متنِ خوانای خطای سرور', () => {
     expect(e).toBeInstanceOf(Error)
     expect(e.message).toBe('پیام')
     expect(e.status).toBe(422)
+  })
+  it('GET هم کد وضعیت را نگه می‌دارد تا ۴۰۳ِ مرجع با قطعی شبکه اشتباه نشود', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"detail":"دسترسی ندارید"}', { status: 403 })))
+    await expect(fetchFiscalYears('t')).rejects.toMatchObject({ name: 'ApiError', status: 403, message: 'دسترسی ندارید', detail: 'دسترسی ندارید' })
+  })
+  it.each(['null', '<html>خطای سرور</html>'])('پاسخ خطای ناخوانا هم کد وضعیت و پیامِ جایگزین خوانا دارد: %s', async (body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 500 })))
+    await expect(fetchFiscalYears('t')).rejects.toMatchObject({ name: 'ApiError', status: 500, message: 'دریافت اطلاعات ناموفق بود (۵۰۰)' })
   })
 })

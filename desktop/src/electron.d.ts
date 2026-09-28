@@ -1,3 +1,5 @@
+import type { ReferenceSyncReport, SyncPermissions } from './lib/referenceSync'
+
 export interface AccountCache {
   id: string
   code: string
@@ -101,7 +103,7 @@ export interface CubitaBridge {
   clearSession: () => Promise<void>
   /** رفرشِ فعلی — فقط برای دادن به switch-tenant (تا نشستِ آفلاین هم سوییچ کند). */
   currentRefreshToken: () => Promise<string | null>
-  pullAll: () => Promise<void>
+  pullAll: (permissions?: SyncPermissions) => Promise<ReferenceSyncReport>
   pushOutbox: () => Promise<{ pushed: number; failed: number }>
   queueJournalEntry: (payload: unknown) => Promise<string>
   listOutbox: () => Promise<OutboxEntry[]>
