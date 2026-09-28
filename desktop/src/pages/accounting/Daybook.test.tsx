@@ -241,7 +241,7 @@ describe('دفتر روزنامه', () => {
       page: () => new Response('{}', { status: 500 }),
     })
     await render()
-    expect(text()).toContain('دریافت اطلاعات ناموفق بود (500)')
+    expect(text()).toContain('دریافت اطلاعات ناموفق بود (۵۰۰)')
     expect(text()).toContain('جمعِ دفتر نیامد')
     //: سربرگ و انتخابِ دفتر سرِ جایشان‌اند.
     expect([...container.querySelectorAll('[aria-label="دفتر"] button')].map((b) => b.textContent)).toContain('معین')
