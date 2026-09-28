@@ -31,6 +31,19 @@ def as_user(p):
     app.dependency_overrides[get_principal] = lambda: p
 
 
+@pytest.fixture
+def office_enterprise_license(monkeypatch):
+    from app.config import get_settings
+    from app.licensing import state as license_state
+
+    monkeypatch.setattr(get_settings(), "edition", "enterprise")
+    license_ = [license_state.LicenseStatus(mode="active", writable=True, mods=frozenset({"automation"}))]
+    # یک منبع برای گیت نوشتن و فهرست ماژول‌ها؛ هیچ مجوز واقعی یا فایلِ نصب لمس نمی‌شود.
+    monkeypatch.setattr(license_state, "current", lambda _db: license_[0])
+    monkeypatch.setattr(license_state, "peek", lambda: license_[0])
+    return license_
+
+
 def draft(client, **kwargs):
     response = client.post("/api/automation/letters", json={"kind": "incoming", "subject": "آزمایش نامه",
         "body": "متن نامه", "letter_date": "2026-09-27", **kwargs})
@@ -144,7 +157,10 @@ def test_no_permission_and_expired_recipient(client, actors, db):
     assert str(recipient.user.id) not in [r["id"] for r in client.get("/api/automation/recipients").json()]
 
 
-def test_staff_sender_recipient_and_file_send(client, actors, db):
+@pytest.mark.parametrize("edition", ["cloud", "enterprise"])
+def test_staff_sender_recipient_and_file_send(client, actors, db, edition, request):
+    if edition == "enterprise":
+        request.getfixturevalue("office_enterprise_license")
     owner, _, courier, stranger = actors
     courier.membership.permissions = {"automation": ["view", "create", "update"], "marketplace": ["view", "deliver"]}
     stranger.membership.permissions = {"calendar": ["view"]}
@@ -186,6 +202,42 @@ def test_staff_sender_recipient_and_file_send(client, actors, db):
     as_user(owner)
     assert client.get("/api/automation/letters?box=inbox").json()["items"][0]["id"] == row["id"]
     assert client.get(f"/api/automation/attachments/{sent.json()['attachments'][0]['id']}").content == blob
+
+
+def test_enterprise_expired_license_keeps_private_mail_readable(client, actors, db, office_enterprise_license):
+    from app.licensing.state import LicenseStatus
+
+    _, sender, recipient, _ = actors
+    as_user(sender)
+    row = draft(client, kind="internal")
+    path = f"/api/automation/letters/{row['id']}"
+    blob = b"%PDF-1.4\nenterprise-private-file"
+    row = client.post(path + "/attachments?filename=enterprise.pdf", content=blob).json()
+    sent = client.post(path + "/send", json={"version": row["version"], "recipient_id": str(recipient.user.id)})
+    assert sent.status_code == 200, sent.text
+    recipient.membership.permissions = {"calendar": ["view"]}
+    db.flush()
+    office_enterprise_license[0] = LicenseStatus(mode="expired", writable=False,
+        message="مجوز شرکت منقضی شده است.", mods=frozenset({"automation"}))
+    as_user(Principal(recipient.user, recipient.membership))
+    assert client.get(path).status_code == 200
+    assert client.get(f"/api/automation/attachments/{sent.json()['attachments'][0]['id']}").content == blob
+    referral = sent.json()["referrals"][0]["id"]
+    response = client.post(f"/api/automation/referrals/{referral}/complete", json={"response": "اقدام شد"})
+    assert response.status_code == 402, response.text
+    as_user(sender)
+    assert client.post("/api/automation/letters", json={"kind": "internal", "subject": "تازه",
+        "letter_date": "2026-09-28"}).status_code == 402
+
+
+def test_enterprise_automation_requires_licensed_module(client, office_enterprise_license):
+    from app.licensing.state import LicenseStatus
+
+    office_enterprise_license[0] = LicenseStatus(mode="active", writable=True, mods=frozenset({"accounting"}))
+    for path in ("/api/automation/letters", "/api/automation/recipients"):
+        assert client.get(path).status_code == 403
+    assert client.post("/api/automation/letters", json={"kind": "internal", "subject": "تازه",
+        "letter_date": "2026-09-28"}).status_code == 403
 
 
 def test_recipient_response_still_obeys_subscription(client, actors, db, tenant_id):
