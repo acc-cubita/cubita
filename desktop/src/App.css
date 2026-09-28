@@ -3677,8 +3677,8 @@ button:disabled {
   visibility: visible;
   pointer-events: auto;
 }
-/* آیتم‌ها نباید فشرده شوند: سنجشِ بالا به عرضِ *طبیعیِ* هر ماژول تکیه دارد، و فشرده‌شدن
-   یعنی نوار به‌جای رفتن به کشو، متن‌ها را روی هم می‌ریزد. */
+/* آیتم‌ها نباید با flex فشرده شوند: سنجشِ TopNav به عرضِ *طبیعیِ* هر ماژول تکیه دارد و کوچک‌شدن
+   فقط از راهِ `--topnav-scale` است — فشرده‌شدنِ flex متن‌ها را روی هم می‌ریخت. */
 .topnav-item {
   flex: 0 0 auto;
 }
@@ -3704,10 +3704,10 @@ button:disabled {
 .topnav-menu {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: calc(2px * var(--topnav-scale, 1));
   margin-inline-start: 8px;
-  /* overflow نباید مخفی/auto شود وگرنه دراپ‌داونِ absolute بریده می‌شود؛ در عوض زیرِ
-     ۱۰۲۴px کلِ منو به کشوی همبرگری می‌رود تا سرریز رخ ندهد. */
+  /* overflow نباید مخفی/auto شود وگرنه دراپ‌داونِ absolute بریده می‌شود؛ در عوض منو با
+     `--topnav-scale` کوچک می‌شود تا جا شود، و روی تبلت/گوشی کلش به کشوی همبرگری می‌رود. */
   overflow: visible;
 }
 /* نشانِ خوانده‌نشده روی آیتمِ منو (گفتگوی بازار) — پیلِ قرمزِ کوچک با شمار. */
@@ -3752,17 +3752,21 @@ button:disabled {
 .topnav-download:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
 @media (max-width: 760px) { .topnav-download-txt { display: none; } }
 
+/* اندازه‌ی ماژول‌ها یک عدد است: `--topnav-scale` (از TopNav، ۱ = استاندارد). قلم و فاصله‌ها با هم
+   و به یک نسبت کوچک می‌شوند تا همه‌ی ماژول‌ها روی نوار جا شوند — به‌جای پله‌های ثابتِ قبلی (۱۶۰۰/۱۴۴۰)
+   که یا زود کوچک می‌کردند یا منو را به کشو می‌فرستادند. */
 .topnav-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: calc(5px * var(--topnav-scale, 1));
   height: 30px;
-  padding: 0 10px;
+  padding: 0 calc(10px * var(--topnav-scale, 1));
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--topnav-muted);
   font: inherit;
+  font-size: calc(var(--fs-base) * var(--topnav-scale, 1));
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -4365,9 +4369,6 @@ button.topnav-org:hover {
    با فشرده‌سازی از ۱۶۰۰، همان منو ۱۰۸۰px می‌شود و تا ۱۴۴۰ روی نوار می‌ماند. */
 @media (max-width: 1600px) {
   .topnav-org { display: none; }
-  .topnav-menu { gap: 0; margin-inline-start: 4px; }
-  .topnav-item { padding: 0 7px; gap: 3px; font-size: 13px; }
-  .topnav-item .topnav-item-chev { width: 13px; height: 13px; margin-inline-start: -1px; }
   .topnav-actions { gap: 6px; }
   .topnav-brand { padding: 0 4px; }
   .topnav-brand-name { font-size: 14px; }
@@ -4384,19 +4385,32 @@ button.topnav-org:hover {
    نمی‌شود** — نه از یک عددِ گردِ دلخواه. پله‌ی اول تا ۱۴۳۳px کشش دارد، پس این
    یکی ۱۴۴۰ است؛ وگرنه بازه‌ی ۱۳۶۷–۱۴۳۹ همان منطقه‌ی مرده را دوباره می‌ساخت. */
 @media (max-width: 1440px) {
-  .topnav-item { padding: 0 5px; gap: 2px; font-size: 12px; }
-  .topnav-item .topnav-item-chev { width: 12px; height: 12px; }
   .topnav-search-kbd { display: none; }
   .topnav-brand-name { font-size: 13px; }
 }
 /* جست‌وجوی ماژول با بریک‌پوینتِ ثابت کنار نمی‌رود، بلکه *سنجیده* — کلاسِ
    `topnav--tight` از TopNav. پیش از رفتن به کشوی همبرگری، اول این ~۱۳۰px آزاد
    می‌شود؛ در بیشترِ عرض‌ها همین کافی است تا کلِ ماژول‌ها روی نوار بمانند. */
-/* زیرِ ۱۰۲۴px منوی افقی جا نمی‌شود → همبرگر + کشو.
-   این‌جا برخلافِ `topnav--collapsed` واقعاً `display:none` است، چون پارکِ یک منوی
-   ~۹۰۰px داخلِ پنجره‌ی ۳۹۰px خودش سرریزِ افقی می‌سازد. عوضش سنجشِ TopNav همین
-   `display:none` را می‌بیند و می‌فهمد منو در هیچ قیمتی روی نوار نیست. */
-@media (max-width: 1024px) {
+/* نوارِ فشرده (`topnav--compact` از TopNav) — پله‌ی پیش از کوچک‌شدنِ ماژول‌ها: نامِ کنارِ نشان
+   (نشان خودش برند را می‌گوید)، نوشته‌ی «دانلودِ دسکتاپ» (آیکون و `title` می‌مانند) و فلشِ کنارِ
+   آواتار کنار می‌روند و فاصله‌های نوار کمی تنگ می‌شوند. این جا را پیش از ریز شدنِ قلمِ ماژول‌ها آزاد
+   می‌کند؛ خوانا ماندنِ ماژول‌ها از این‌ها مهم‌تر است. */
+.topnav--compact .topnav-brand-name,
+.topnav--compact .topnav-download-txt,
+.topnav--compact .topnav-user .topnav-item-chev {
+  display: none;
+}
+.topnav--compact .topnav-inner { padding-inline: 8px; }
+.topnav--compact .topnav-actions { gap: 4px; }
+.topnav--compact .topnav-download { padding: 0 9px; }
+
+/* **همبرگر فقط برای تبلت و گوشی** (خواستِ آرش، ۱۴۰۵/۰۷/۰۶): هر نمایشگرِ تا ۱۰۲۴px، و دستگاهِ لمسی
+   تا ۱۲۸۰px — تبلتِ ۱۱ اینچ در حالتِ افقی ۱۱۸۰ تا ۱۲۸۰ است و با عرضِ تنها از لپ‌تاپ جدا نمی‌شود؛
+   `hover: none` و `pointer: coarse` جدایش می‌کنند. روی دسکتاپ منو روی نوار می‌ماند و کوچک می‌شود.
+   این‌جا برخلافِ `topnav--collapsed` واقعاً `display:none` است، چون پارکِ یک منوی ~۱۱۰۰px داخلِ
+   پنجره‌ی ۳۹۰px خودش سرریزِ افقی می‌سازد. عوضش سنجشِ TopNav همین `display:none` را می‌بیند و
+   می‌فهمد منو در هیچ قیمتی روی نوار نیست. */
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) and (max-width: 1280px) {
   .topnav-menu {
     display: none;
   }
