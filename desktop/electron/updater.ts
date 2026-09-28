@@ -72,6 +72,13 @@ export function setupAutoUpdate(window: () => BrowserWindow | null, logger: (mes
   installAllowed = false
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
+  clearTimeout(startup)
+  clearInterval(interval)
+  if (options.feedUrl && !options.verify) {
+    configured = false
+    failed(new Error('سنجش امضای آپدیت سازمانی تنظیم نشده است؛ برای امنیت، نصب انجام نمی‌شود.'))
+    return
+  }
   if (options.feedUrl) {
     autoUpdater.setFeedURL({ provider: 'generic', url: options.feedUrl })
     autoUpdater.disableDifferentialDownload = true
@@ -88,6 +95,7 @@ export function setupAutoUpdate(window: () => BrowserWindow | null, logger: (mes
     autoUpdater.on('update-not-available', () => send({ state: 'none' }))
     autoUpdater.on('download-progress', (progress) => send({ state: 'downloading', percent: Math.max(0, Math.min(100, Math.round(progress.percent))) }))
     autoUpdater.on('update-downloaded', (info) => {
+      if (!configured) return
       const epoch = generation
       const verify = options.verify
       send({ state: 'verifying' })
@@ -108,8 +116,6 @@ export function setupAutoUpdate(window: () => BrowserWindow | null, logger: (mes
     })
     autoUpdater.on('error', failed)
   }
-  clearTimeout(startup)
-  clearInterval(interval)
   startup = setTimeout(() => { void checkForUpdatesNow() }, 10_000)
   interval = setInterval(() => { void checkForUpdatesNow() }, 6 * 60 * 60 * 1000)
 }

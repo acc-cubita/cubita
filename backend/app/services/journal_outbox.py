@@ -22,6 +22,12 @@ def outbox_status(db: Session, key: str, payload: JournalEntryIn) -> dict:
         JournalEntry.entry_date == payload.entry_date,
         JournalEntry.description == payload.description,
         JournalEntry.source_type == "manual",
+        # دو سند یکسان با دو کلیدِ شناخته‌شده می‌توانند عمدی باشند. ابهام فقط
+        # دربارهٔ سندی است که نسخهٔ قدیمی هیچ کلیدی برایش ذخیره نکرده است.
+        ~db.query(IdempotencyKey.id).filter(
+            IdempotencyKey.operation == OPERATION,
+            IdempotencyKey.resource_id == JournalEntry.id,
+        ).exists(),
     )
     wanted = [(
         line.account_id, line.debit, line.credit, line.description,

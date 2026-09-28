@@ -36,6 +36,11 @@ async function editing() {
   return result.edit
 }
 describe('ویرایش امن همان ردیف SQLite', () => {
+  it('پاسخ HTML یا JSON خراب با پیام فارسی رد می‌شود و صف دست‌نخورده است', async () => {
+    fetchMock.mockImplementation(async () => new Response('<html>proxy</html>'))
+    await expect(beginJournalEdit(config, 'same-id')).rejects.toThrow(/پاسخ وضعیت سند/)
+    expect(state.updates).toBe(0); expect(state.row!.payload).toBe(JSON.stringify(payload))
+  })
   it('قفل هنگام ویرایش، ذخیره همان local_id و created_at و retry فقط همان سند', async () => {
     const edit = await editing()
     expect(tryLockOutboxSend('outbox_journal_entries', edit.local_id)).toBe(false)

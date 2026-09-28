@@ -18,6 +18,13 @@ beforeEach(async () => {
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
 const setup = (options: import('./updater').UpdateOptions = {}) => api.setupAutoUpdate(() => null, () => {}, options)
 describe('آپدیت دستی LAN با همان updater', () => {
+  it('فید سازمانی بدون verifier هرگز به مسیر نصب بدون امضا برنمی‌گردد', async () => {
+    setup({ feedUrl: 'http://a/updates/' })
+    expect(api.currentUpdateStatus()).toMatchObject({ state: 'error', message: expect.stringMatching(/سنجش امضا/) })
+    await api.checkForUpdatesNow(); expect(mock.updater.checkForUpdates).not.toHaveBeenCalled()
+    emit('update-downloaded', { version: '1.9.4', downloadedFile: 'not-a-real-file' })
+    api.quitAndInstall(); expect(mock.updater.quitAndInstall).not.toHaveBeenCalled(); expect(mock.updater.autoInstallOnAppQuit).toBe(false)
+  })
   it('فقط فید شرکت، بدون دانلود تفاضلی و بدون نصب پیش از سنجش', async () => {
     const verifyFeed = vi.fn().mockResolvedValue(null)
     setup({ feedUrl: 'http://192.168.50.1:8420/updates/', verifyFeed, verify: async () => null })
@@ -28,15 +35,15 @@ describe('آپدیت دستی LAN با همان updater', () => {
   })
   it('دو بررسی همزمان یک درخواست می‌سازند و تغییر سرور listener/timer اضافه نمی‌کند', async () => {
     let resolve!: (problem: null) => void
-    setup({ feedUrl: 'http://a/updates/', verifyFeed: () => new Promise((done) => { resolve = done }) })
+    setup({ feedUrl: 'http://a/updates/', verify: async () => null, verifyFeed: () => new Promise((done) => { resolve = done }) })
     const first = api.checkForUpdatesNow(); const second = api.checkForUpdatesNow(); resolve(null)
     await Promise.all([first, second]); expect(mock.updater.checkForUpdates).toHaveBeenCalledOnce()
-    setup({ feedUrl: 'http://b/updates/' })
+    setup({ feedUrl: 'http://b/updates/', verify: async () => null })
     expect(mock.listeners.get('update-downloaded')).toHaveLength(1); expect(vi.getTimerCount()).toBe(2)
     await api.checkForUpdatesNow(); expect(mock.updater.setFeedURL).toHaveBeenLastCalledWith({ provider: 'generic', url: 'http://b/updates/' })
   })
   it('امضای ناقص مانع بررسی provider است و فایل معتبر به نصب می‌رسد', async () => {
-    setup({ feedUrl: 'http://a/updates/', verifyFeed: async () => 'امضای آپدیت معتبر نیست' })
+    setup({ feedUrl: 'http://a/updates/', verify: async () => null, verifyFeed: async () => 'امضای آپدیت معتبر نیست' })
     expect((await api.checkForUpdatesNow()).state).toBe('error'); expect(mock.updater.checkForUpdates).not.toHaveBeenCalled()
     setup({ feedUrl: 'http://a/updates/', verify: async () => null })
     emit('update-downloaded', { version: '1.9.4', downloadedFile: 'not-a-real-file' }); await Promise.resolve(); await Promise.resolve()

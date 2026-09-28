@@ -23,7 +23,9 @@ try {
         check: async () => {
           window.__updateQA.checks++
           const result = window.__updateQA.complete ? { state: 'none' } : { state: 'downloading', percent: 25 }
-          window.__updateQA.emit(result); return result
+          window.__updateQA.emit(result)
+          // پاسخ IPC قدیمی نباید رویداد تازه پیشرفت را بازنویسی کند.
+          return window.__updateQA.complete ? result : { state: 'checking' }
         }, installNow: async () => { window.__updateQA.installs++ },
       }
     })

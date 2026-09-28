@@ -143,6 +143,7 @@ try {
         await editor.locator('.jalali-date-trigger').first().click()
         await editor.getByRole('button', { name: 'انتخاب ماه', exact: true }).click()
         assert.equal(await editor.locator('.jalali-date-grid--levels button').count(), 12)
+        assert.equal(await editor.locator('.jalali-date-grid--levels').evaluate(element => getComputedStyle(element).gridTemplateColumns.split(' ').length), 3)
         await metrics('calendar-months')
         await editor.getByRole('button', { name: 'انتخاب سال', exact: true }).click()
         await metrics('calendar-years')
@@ -179,14 +180,14 @@ try {
       await page.locator('[data-cell="1-3"] input').fill('100')
       if (desktop) {
         years = [{ ...years[0], end_date: '2026-03-22' }]
-        await page.getByRole('button', { name: /ثبت سند/ }).click()
+        await page.locator('form:visible').getByRole('button', { name: /ثبت سند/ }).click()
         await page.getByText(/سند هنوز وارد صف نشده است/).waitFor()
         assert.equal((await page.evaluate(() => window.__journalFixture.queued)).length, 0)
         assert.equal(await page.getByLabel('شرح سند', { exact: true }).inputValue(), 'سند آزمایشی شبکه')
         await metrics('invalid-date-keeps-draft')
         years = [{ ...years[0], end_date: '2027-03-20' }]
       }
-      await page.getByRole('button', { name: /ثبت سند/ }).click()
+      await page.locator('form:visible').getByRole('button', { name: /ثبت سند/ }).click()
       await page.getByText(desktop ? /سند در صف محلی ذخیره شد/ : /سندِ موقت ثبت شد/).waitFor()
       if (desktop) assert.equal((await page.evaluate(() => window.__journalFixture.queued)).length, 1)
       else assert.equal(posts, 1)

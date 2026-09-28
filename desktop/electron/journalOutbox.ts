@@ -25,7 +25,9 @@ async function remoteStatus(config: Config, localId: string, payload: string): P
     throw new Error('این سرور هنوز ویرایش امن صف را پشتیبانی نمی‌کند؛ ابتدا سرور را به نسخهٔ جدید به‌روز کنید. صف حفظ شده است.')
   }
   if (!response.ok) throw new Error(outboxErrorText(await response.text()))
-  const result = await response.json() as RemoteState
+  let result: RemoteState
+  try { result = await response.json() as RemoteState }
+  catch { throw new Error('پاسخ وضعیت سند از سرور معتبر نیست؛ صف تغییر نکرد. اتصال و نسخهٔ سرور را بررسی کنید.') }
   if (result?.state === 'editable' || result?.state === 'ambiguous') return result
   if (result?.state === 'synced' && typeof result.server_id === 'string' && Number.isInteger(result.server_number)) return result
   throw new Error('وضعیت سند از سرور خوانده نشد؛ ویرایش انجام نشد. اتصال و نسخهٔ سرور را بررسی کنید.')

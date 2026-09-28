@@ -61,6 +61,27 @@ def test_legacy_identical_journal_is_ambiguous_not_assigned(client, db):
     assert check(client, str(uuid4()), {**payload, "description": "سند دیگر"}) == {"state": "editable"}
 
 
+def test_automatic_retry_of_unacknowledged_legacy_entry_cannot_duplicate_it(client, db):
+    payload = body(db)
+    assert client.post("/api/journal-entries", json=payload).status_code == 201
+    count = db.query(JournalEntry).count()
+    response = client.post("/api/journal-entries", json=payload, headers={"Idempotency-Key": str(uuid4())})
+    assert response.status_code == 409, response.text
+    assert "نسخهٔ قدیمی" in response.json()["detail"]
+    assert db.query(JournalEntry).count() == count
+
+
+def test_identical_new_documents_with_distinct_keys_are_not_legacy_ambiguity(client, db):
+    payload = body(db)
+    first = client.post("/api/journal-entries", json=payload, headers={"Idempotency-Key": str(uuid4())})
+    assert first.status_code == 201, first.text
+    key = str(uuid4())
+    assert check(client, key, payload) == {"state": "editable"}
+    second = client.post("/api/journal-entries", json=payload, headers={"Idempotency-Key": key})
+    assert second.status_code == 201, second.text
+    assert second.json()["id"] != first.json()["id"]
+
+
 def test_failed_date_can_be_fixed_with_same_key_after_rollback(client, db):
     create_year(db, FiscalYearIn(title="۱۴۰۵", start_date=date(2026, 3, 21), end_date=date(2027, 3, 20)))
     db.commit()  # فقط savepoint فیکسچر؛ outer transaction داده واقعی را لمس نمی‌کند.

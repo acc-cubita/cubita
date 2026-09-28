@@ -8,13 +8,14 @@ export function ClientUpdateCard() {
   const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
+  const eventRevision = useRef(0)
   const bridge = window.cubitaUpdate
   useEffect(() => {
     if (!bridge) return
     let active = true
     // رویداد تازه بر پاسخ قدیمی status مقدم است.
     let received = false
-    const stop = bridge.onStatus((next) => { received = true; if (active) setStatus(next) })
+    const stop = bridge.onStatus((next) => { received = true; eventRevision.current++; if (active) setStatus(next) })
     void bridge.status().then((next) => { if (active && !received) setStatus(next) }).catch(() => {})
     return () => { active = false; stop() }
   }, [bridge])
@@ -24,9 +25,11 @@ export function ClientUpdateCard() {
     if (busyRef.current) return
     busyRef.current = true
     setBusy(true)
+    const revision = eventRevision.current
     try {
       if (!bridge?.check) throw new Error('این نسخه بررسی دستی ندارد؛ یک‌بار نصاب تازه را روی این رایانه اجرا کنید.')
-      setStatus(await bridge.check())
+      const result = await bridge.check()
+      if (eventRevision.current === revision) setStatus(result)
     } catch (error) { setStatus({ state: 'error', message: updateProblem(error, true) }) }
     finally { busyRef.current = false; setBusy(false) }
   }
