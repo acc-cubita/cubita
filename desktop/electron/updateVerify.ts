@@ -56,7 +56,37 @@ export async function verifyDownloadedUpdate(
   downloadedFile: string,
   keys: Record<string, string>,
   fetchImpl: typeof fetch = fetch,
+  expectedVersion?: string,
 ): Promise<string | null> {
+  const result = await readVerifiedManifest(feedUrl, keys, fetchImpl)
+  if (typeof result === 'string') return result
+  const text = result.toString('utf8')
+  if (expectedVersion && manifestValue(text, 'version') !== expectedVersion) {
+    return 'نسخه فایل دانلودشده با نسخه امضاشده سرور یکی نیست؛ دوباره بررسی کنید.'
+  }
+  const expected = manifestSha512(text)
+  if (!expected) return 'فایلِ latest.yml ناقص است؛ آپدیت نصب نشد.'
+  const actual = await fileSha512(downloadedFile)
+  if (actual !== expected) return 'فایلِ دانلودشده با نسخه‌ی امضاشده یکی نیست؛ آپدیت نصب نشد.'
+  return null
+}
+
+function manifestValue(text: string, name: string): string | null {
+  return new RegExp(`^${name}:\\s*(.+)$`, 'm').exec(text)?.[1]?.trim().replace(/^['"]|['"]$/g, '') ?? null
+}
+
+export async function verifyUpdateFeed(feedUrl: string, keys: Record<string, string>, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  const result = await readVerifiedManifest(feedUrl, keys, fetchImpl)
+  if (typeof result === 'string') return result
+  const text = result.toString('utf8')
+  const names = [manifestValue(text, 'path'), ...Array.from(text.matchAll(/^\s*(?:-\s*)?url:\s*(.+)$/gm), (m) => m[1].trim().replace(/^['"]|['"]$/g, ''))]
+  if (!manifestValue(text, 'version') || !manifestSha512(text) || names.some((name) => !name || !/^[A-Za-z0-9._ -]+\.exe$/.test(name))) {
+    return 'فهرست آپدیت سرور ناقص است یا فایل خارج از سرور شرکت را معرفی می‌کند؛ نصب انجام نمی‌شود.'
+  }
+  return null
+}
+
+async function readVerifiedManifest(feedUrl: string, keys: Record<string, string>, fetchImpl: typeof fetch): Promise<Buffer | string> {
   if (Object.keys(keys).length === 0) {
     return 'کلیدِ امضای آپدیت در این نسخه تعریف نشده است؛ آپدیت نصب نمی‌شود.'
   }
@@ -65,8 +95,8 @@ export async function verifyDownloadedUpdate(
   let signature: string
   try {
     const [m, s] = await Promise.all([
-      fetchImpl(`${base}latest.yml`, { cache: 'no-store' }),
-      fetchImpl(`${base}latest.yml.sig`, { cache: 'no-store' }),
+      fetchImpl(`${base}latest.yml`, { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(10_000) }),
+      fetchImpl(`${base}latest.yml.sig`, { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(10_000) }),
     ])
     if (!m.ok || !s.ok) return 'امضای آپدیت از سرور گرفته نشد؛ آپدیت نصب نمی‌شود.'
     manifest = Buffer.from(await m.arrayBuffer())
@@ -77,11 +107,5 @@ export async function verifyDownloadedUpdate(
   if (!verifyManifestSignature(manifest, signature, keys)) {
     return 'امضای آپدیت معتبر نیست؛ ممکن است فایل روی شبکه دست‌کاری شده باشد. آپدیت نصب نشد.'
   }
-  const expected = manifestSha512(manifest.toString('utf8'))
-  if (!expected) return 'فایلِ latest.yml ناقص است؛ آپدیت نصب نشد.'
-  const actual = await fileSha512(downloadedFile)
-  if (actual !== expected) {
-    return 'فایلِ دانلودشده با نسخه‌ی امضاشده یکی نیست؛ آپدیت نصب نشد.'
-  }
-  return null
+  return manifest
 }

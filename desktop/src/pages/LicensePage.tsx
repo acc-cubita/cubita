@@ -13,6 +13,7 @@ import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { ServerBackupCard } from '../components/ServerBackupCard'
 import { ServerUpdateCard } from '../components/ServerUpdateCard'
+import { ClientUpdateCard } from '../components/ClientUpdateCard'
 import { formatJalali } from '../lib/jalali'
 import { LICENSE_MODE_LABEL, licenseTone } from '../lib/license'
 
@@ -264,6 +265,7 @@ export function LicensePage({
           )}
         </SectionCard>
       </div>
+      <ClientUpdateCard />
       {isOwner && <ServerUpdateCard token={token} />}
       {isOwner && <ServerBackupCard token={token} />}
     </div>

@@ -34,6 +34,9 @@ from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
 from app.services.reports import ReportFilters, apply_report_filters
 from app.services import tafsili
+from app.services.idempotency import idempotent, read_key
+from app.services.journal_outbox import OPERATION, outbox_status
+from app.schemas.journal_outbox import JournalOutboxCheckIn
 from app.services.voiding import void_journal_entry
 
 router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
@@ -259,9 +262,35 @@ def get_entry(
 @router.post("", response_model=JournalEntryOut, status_code=201)
 def create_entry(
     data: JournalEntryIn,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("accounting", "create")),
 ):
+    key = read_key(request)
+    if key and outbox_status(db, key, data)["state"] == "ambiguous":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "ممکن است این سند قبلاً با نسخهٔ قدیمی ثبت شده باشد؛ برای جلوگیری از ثبت تکراری، "
+            "این ارسال انجام نشد. فهرست اسناد را با مدیر بررسی کنید؛ اطلاعات صف حفظ شده است.",
+        )
+    return idempotent(
+        db, request, user, operation=OPERATION, payload=data,
+        run=lambda: _create_entry(data, db, user),
+        replay=lambda resource_id: db.get(JournalEntry, resource_id),
+    )
+
+
+@router.post("/outbox-status")
+def check_outbox_status(
+    data: JournalOutboxCheckIn,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "create")),
+):
+    """فقط خواندن؛ RLS همان کسب‌وکار و گارد ساخت سند روی این مسیر هم برقرار است."""
+    return outbox_status(db, str(data.local_id), data.payload)
+
+
+def _create_entry(data: JournalEntryIn, db: Session, user: User):
     assert_period_open(db, data.entry_date)
     cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
     entry_analytic_id = resolve_analytic_id(db, data.analytic_id)

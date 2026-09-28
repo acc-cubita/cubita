@@ -57,6 +57,14 @@ export function todayIso(): string {
   return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
 }
 
+/** فقط متن نمایشیِ خطا؛ تاریخ ذخیره‌شده و بدنهٔ درخواست همچنان ISO می‌مانند. */
+export function formatErrorDates(text: string): string {
+  return text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, (date) => {
+    const parsed = new Date(`${date}T00:00:00Z`)
+    return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date ? date : formatJalali(date)
+  })
+}
+
 function jalaliWeekdayIndex(jy: number, jm: number, jd: number): number {
   const { gy, gm, gd } = toGregorian(jy, jm, jd)
   const jsDay = new Date(gy, gm - 1, gd).getDay() // 0=یکشنبه ... 6=شنبه (استاندارد جاوااسکریپت)

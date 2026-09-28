@@ -10,6 +10,7 @@ vi.mock('./db.js', () => ({
     transaction: (fn: (rows: unknown[]) => void) => fn,
     prepare: (sql: string) => ({
       all: () => state.pending[/FROM (\w+)/.exec(sql)?.[1] ?? ''] ?? [],
+      get: (id: string) => state.pending[/FROM (\w+)/.exec(sql)?.[1] ?? '']?.find((row) => row.local_id === id),
       run: (...args: unknown[]) => {
         state.writes.push({ sql, args })
         if (/SET synced = 1/.test(sql)) {

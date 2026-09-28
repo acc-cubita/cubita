@@ -44,6 +44,16 @@ export interface OutboxEntry {
   sync_error: string | null
 }
 
+export interface JournalOutboxEdit {
+  local_id: string
+  lease: string
+  payload: string
+}
+export interface JournalOutboxSaveResult {
+  state: 'synced' | 'queued'
+  message: string
+}
+
 export interface PosTerminalProfileClient {
   transport: 'simulator' | 'network' | 'serial' | 'sdk'
   host?: string
@@ -107,6 +117,9 @@ export interface CubitaBridge {
   pushOutbox: () => Promise<{ pushed: number; failed: number }>
   queueJournalEntry: (payload: unknown) => Promise<string>
   listOutbox: () => Promise<OutboxEntry[]>
+  beginJournalEdit?: (localId: string) => Promise<{ state: 'editing'; edit: JournalOutboxEdit } | JournalOutboxSaveResult>
+  saveJournalEdit?: (localId: string, lease: string, payload: unknown) => Promise<JournalOutboxSaveResult>
+  cancelJournalEdit?: (localId: string, lease: string) => Promise<void>
   queueSalesInvoice: (payload: unknown) => Promise<string>
   listSalesInvoiceOutbox: () => Promise<OutboxEntry[]>
   queueCheck: (payload: unknown) => Promise<string>
@@ -180,6 +193,7 @@ export type ServerResult = { ok: true; url: string } | { ok: false; url?: string
 
 /** نسخه و نشانیِ سرور — preload همزمان از main می‌گیرد. در وب وجود ندارد. */
 export interface CubitaConfig {
+  version?: string
   edition: 'cloud' | 'enterprise'
   /** سازمانیِ هنوز وصل‌نشده: null. */
   serverUrl: string | null
@@ -195,6 +209,12 @@ export interface WindowControlsBridge {
 
 declare global {
   interface Window {
+    cubitaUpdate?: {
+      status: () => Promise<import('./lib/updateStatus').UpdateStatus>
+      check?: () => Promise<import('./lib/updateStatus').UpdateStatus>
+      installNow: () => Promise<void>
+      onStatus: (cb: (status: import('./lib/updateStatus').UpdateStatus) => void) => () => void
+    }
     cubita: CubitaBridge
     cubitaConfig?: CubitaConfig
     windowControls: WindowControlsBridge

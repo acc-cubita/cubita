@@ -1,4 +1,5 @@
 import { isEnterprise } from './platform'
+import { formatErrorDates } from './lib/jalali'
 
 // کوبیتا سازمانی نشانیِ سرورِ شرکت را در زمانِ اجرا از preload می‌گیرد (کاربر در
 // جادوگرِ «اتصال به سرور» داده). ابری: build همیشه VITE_API_URL را صریح می‌دهد، پس
@@ -292,7 +293,7 @@ export class ApiError extends Error {
   readonly detail: unknown
   readonly lineErrors: unknown
   constructor(message: string, status: number, detail: unknown, lineErrors?: unknown) {
-    super(message)
+    super(formatErrorDates(message))
     this.name = 'ApiError'
     this.status = status
     this.detail = detail
