@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 import { TenantSwitcher } from './TenantSwitcher'
 import {
@@ -19,7 +19,7 @@ import { setExperience, useExperienceMode, type ExperienceMode } from '../lib/ex
 import { updateProfile } from '../api'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
 import { MODULE_SECTIONS, listSections, opsSections } from './moduleSections'
-import { fitBar } from '../lib/topnavFit'
+import { fitBar, sameFit, type BarFit } from '../lib/topnavFit'
 import { useNavSection } from './navContext'
 import { isElectron, PRODUCT_NAME } from '../platform'
 import { BrandMark } from './BrandMark'
@@ -111,21 +111,13 @@ export function TopNav({
   const innerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLElement>(null)
 
-  /* ── جمع‌شدنِ سنجیده‌ی نوار ────────────────────────────────────────────────
-     تعدادِ ماژول‌های نوار از حسابی به حسابِ دیگر فرق دارد: گرنتِ ماژول‌های محدود،
-     گروهِ «بازارِ عمده‌فروشی» برای پخش‌کننده/فروشگاه، «مدیریت سامانه» برای سوپرادمین.
-     پس هیچ بریک‌پوینتِ ثابتی درست نیست — با یک ترکیب جا می‌شود و با ترکیبِ بعدی نوار
-     از لبه بیرون می‌زند. این‌جا خودِ جا‌شدن سنجیده می‌شود و اگر جا نشد همان کشوی
-     همبرگریِ موبایل می‌آید.
-
-     `neededRef` عرضِ طبیعیِ نوارِ *باز* را نگه می‌دارد؛ چون منو نمی‌شکند، این عدد به
-     عرضِ پنجره وابسته نیست. باز‌شدنِ دوباره با همان عدد سنجیده می‌شود، پس نوسانِ
-     باز/بسته رخ نمی‌دهد (همبرگر از منو باریک‌تر است، پس هر بار که باز می‌شود جا دارد). */
-  //: دو مرحله‌ی کوچک‌شدنِ نوار، به همین ترتیب: اول قرصِ جست‌وجو به ذره‌بین جمع
-  //: می‌شود (`tight`)، و تنها اگر باز هم جا نشد کلِ منو به کشوی همبرگری می‌رود
-  //: (`collapsed`). جست‌وجو در هیچ پله‌ای پنهان نمی‌شود — قاعده در `fitBar` است.
-  const [tight, setTight] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  /* ── جا دادنِ سنجیده‌ی نوار ────────────────────────────────────────────────
+     تعدادِ ماژول‌های نوار از حسابی به حسابِ دیگر فرق دارد (گرنتِ ماژول‌های محدود، «بازارِ
+     عمده‌فروشی» برای پخش‌کننده/فروشگاه، …)، پس هیچ بریک‌پوینتِ ثابتی برای اندازه‌ی ماژول‌ها درست
+     نیست. این‌جا خودِ جا‌شدن سنجیده می‌شود و `fitBar` (lib/topnavFit) پله را انتخاب می‌کند: قلمِ
+     استاندارد تا وقتی جا هست، بعد ذره‌بین، نوارِ فشرده، و کوچک‌شدنِ هم‌نسبتِ همه‌ی ماژول‌ها.
+     همبرگر روی دسکتاپ فقط تورِ ایمنی است؛ جای اصلی‌اش تبلت و گوشی است و آن را CSS تعیین می‌کند. */
+  const [fit, setFit] = useState<BarFit>({ search: 'pill', menu: 'bar', compact: false, scale: 1 })
 
   // امضای *محتوایی* گروه‌ها، نه هویتِ آرایه: `groups` هر رندر تازه ساخته می‌شود و
   // وابستگی به خودش این افکت را در هر رندر می‌دواند (باز↔بسته، حلقه‌ی بی‌پایان).
@@ -135,47 +127,33 @@ export function TopNav({
   )
 
   useLayoutEffect(() => {
+    const bar = barRef.current
     const inner = innerRef.current
     const menu = menuRef.current
-    if (!inner || !menu) return
+    if (!bar || !inner || !menu) return
 
     const px = (v: string) => parseFloat(v) || 0
 
-    function fit() {
-      if (!inner || !menu) return
+    function measure() {
+      if (!bar || !inner || !menu) return
       const items = Array.from(menu.children) as HTMLElement[]
       if (items.length === 0) return
 
-      // عرضِ *طبیعیِ* منو. آیتم‌ها `flex: 0 0 auto` دارند و منوی جمع‌شده هم از جریان
-      // بیرون است ولی اندازه‌پذیر — پس این عدد به عرضِ پنجره و به حالتِ فعلی وابسته
-      // نیست، و همین است که بازشدنِ دوباره را ممکن می‌کند.
+      // **همه‌چیز در حالتِ طبیعی سنجیده می‌شود**، نه در حالتِ فعلی: کلاس‌های پله و ضریبِ قلم لحظه‌ای
+      // برداشته و بعد برگردانده می‌شوند — همزمان و پیش از نقاشی، پس چیزی دیده نمی‌شود. این‌طور عرضِ
+      // استانداردِ منو و هزینه‌ی هر دو حالتِ نوار (کامل و فشرده) در *یک* سنجش به دست می‌آیند و
+      // نتیجه به حالتِ فعلی وابسته نیست؛ نوار بین دو پله نمی‌لرزد.
+      const cls = bar.className
+      const scaleVar = bar.style.getPropertyValue('--topnav-scale')
+      bar.className = 'topnav'
+      bar.style.setProperty('--topnav-scale', '1')
+
+      // منو زیرِ بریک‌پوینتِ تبلت/گوشی `display:none` است (CSS)؛ آن‌جا «در هیچ قیمتی روی نوار نیست».
+      const menuForced = getComputedStyle(menu).display === 'none'
       const ms = getComputedStyle(menu)
-      const menuWidth =
-        items.reduce((sum, el) => sum + el.offsetWidth, 0) +
-        px(ms.columnGap) * (items.length - 1) +
-        px(ms.marginInlineStart)
+      const menuWidth = items.reduce((sum, el) => sum + el.offsetWidth, 0) + px(ms.columnGap) * (items.length - 1)
+      const menuFixed = px(ms.marginInlineStart)
 
-      // بقیه‌ی نوار. منو و همبرگر هر دو کنار گذاشته می‌شوند و جداگانه به `fitBar`
-      // داده می‌شوند، چون **جایگزینِ هم‌اند نه اضافه بر هم**: یا منو روی نوار است و
-      // همبرگری نیست، یا برعکس. شمردنِ همیشگیِ همبرگر نوار را در عرض‌های میانی
-      // بی‌دلیل به کشو می‌فرستاد، و نشمردنش روی ۳۲۰px سرریز می‌داد.
-      const others = (Array.from(inner.children) as HTMLElement[]).filter(
-        (el) => el !== menu && !el.classList.contains('topnav-hamburger') && el.offsetWidth > 0,
-      )
-      const cs = getComputedStyle(inner)
-      const gap = px(cs.columnGap)
-      // فرزندانِ درجریانِ نوار همیشه `others` هستند به‌علاوه‌ی *یکی* از «منو یا
-      // همبرگر» — آن دو هرگز با هم نیستند. پس تعدادِ فاصله‌ها `others.length` است،
-      // در هر دو چیدمان.
-      const chrome =
-        others.reduce((sum, el) => sum + el.offsetWidth, 0) +
-        px(cs.paddingInlineStart) +
-        px(cs.paddingInlineEnd) +
-        gap * others.length
-
-      // هزینه‌ی هر دو نمای جست‌وجو در *یک* سنجش لازم است، وگرنه هر تغییرِ حالت یک
-      // سنجشِ تازه می‌خواهد و نوار بین دو حالت می‌لرزد. نمایی که لازم نیست از
-      // جریان بیرون می‌رود ولی اندازه‌پذیر می‌ماند، پس هر دو همیشه خواندنی‌اند.
       const actions = inner.querySelector('.topnav-actions') as HTMLElement | null
       const aGap = actions ? px(getComputedStyle(actions).columnGap) : 0
       const costOf = (sel: string) => {
@@ -184,36 +162,54 @@ export function TopNav({
       }
       const pill = costOf('.topnav-search')
       const icon = costOf('.topnav-search-icon')
-
-      // همبرگر با `display:none` اندازه‌پذیر نیست، ولی عرضش در CSS صریح است، پس
-      // `getComputedStyle` همان را می‌دهد حتی وقتی رندر نشده.
+      // همبرگر با `display:none` اندازه‌پذیر نیست، ولی عرضش در CSS صریح است.
       const ham = inner.querySelector('.topnav-hamburger') as HTMLElement | null
+      const hamburger = ham ? px(getComputedStyle(ham).width) : 0
 
-      // زیرِ ۱۰۲۴px مدیاکوئری خودش منو را برمی‌دارد و همبرگر را می‌گذارد. آن‌جا عرضِ
-      // آیتم‌ها صفر خوانده می‌شود و سنجش نتیجه می‌گرفت «منو روی نوار جا شد»، پس
-      // هزینه‌ی همبرگر را نمی‌شمرد و نوار روی ۳۲۰px از لبه بیرون می‌زد. `Infinity`
-      // یعنی «منو در هیچ قیمتی روی نوار نیست» — که دقیقاً حقیقتِ آن‌جاست.
-      const menuForced = getComputedStyle(menu).display === 'none'
+      // بقیه‌ی نوار: منو و همبرگر هر دو کنار گذاشته می‌شوند و جداگانه به `fitBar` می‌روند، چون
+      // **جایگزینِ هم‌اند نه اضافه بر هم**. در حالتِ طبیعی قرص در جریان است و ذره‌بین پارک، پس
+      // برداشتنِ `pill` «نوار بدونِ جست‌وجو» را می‌دهد.
+      const chrome = () => {
+        const others = (Array.from(inner.children) as HTMLElement[]).filter(
+          (el) => el !== menu && !el.classList.contains('topnav-hamburger') && el.offsetWidth > 0,
+        )
+        const cs = getComputedStyle(inner)
+        return (
+          others.reduce((sum, el) => sum + el.offsetWidth, 0) +
+          px(cs.paddingInlineStart) +
+          px(cs.paddingInlineEnd) +
+          px(cs.columnGap) * others.length -
+          pill
+        )
+      }
+      const bare = chrome()
+      bar.className = 'topnav topnav--compact'
+      const compactBare = chrome()
 
-      // `chrome` هزینه‌ی نمایی از جست‌وجو را دارد که *همین حالا* در جریان است؛
-      // برداشتنش «نوارِ بدونِ منو، بدونِ همبرگر و بدونِ جست‌وجو» را می‌دهد.
-      const fit = fitBar({
-        bare: chrome - (tight ? icon : pill),
+      bar.className = cls
+      if (scaleVar) bar.style.setProperty('--topnav-scale', scaleVar)
+      else bar.style.removeProperty('--topnav-scale')
+
+      const next = fitBar({
+        bare,
+        compactBare,
         menu: menuForced ? Infinity : menuWidth,
-        hamburger: ham ? px(getComputedStyle(ham).width) : 0,
+        menuFixed,
+        hamburger,
         pill,
         icon,
         avail: inner.clientWidth,
       })
-      setTight(fit.search === 'icon')
-      setCollapsed(fit.menu === 'drawer')
+      setFit((prev) => (sameFit(prev, next) ? prev : next))
     }
 
-    fit()
-    const ro = new ResizeObserver(fit)
+    measure()
+    const ro = new ResizeObserver(measure)
     ro.observe(inner)
+    //: قلمِ وزیرمتن ممکن است بعد از اولین سنجش برسد و پهنای نوشته‌ها را عوض کند.
+    void document.fonts?.ready.then(measure)
     return () => ro.disconnect()
-  }, [collapsed, tight, navKey])
+  }, [navKey])
 
   // کلیک بیرون از نوار → بستنِ منوها. (پنل‌ها stopPropagation ندارند؛ ناوبری خودش می‌بندد.)
   useEffect(() => {
@@ -259,7 +255,9 @@ export function TopNav({
 
   return (
     <header
-      className={`topnav${tight ? ' topnav--tight' : ''}${collapsed ? ' topnav--collapsed' : ''}`}
+      className={`topnav${fit.search === 'icon' ? ' topnav--tight' : ''}${fit.menu === 'drawer' ? ' topnav--collapsed' : ''}${fit.compact ? ' topnav--compact' : ''}`}
+      //: ضریبِ قلم و فاصله‌ی ماژول‌ها (CSS: `.topnav-item`)؛ ۱ یعنی اندازه‌ی استاندارد.
+      style={fit.scale < 1 ? ({ '--topnav-scale': String(fit.scale) } as CSSProperties) : undefined}
       ref={barRef}
     >
       <div className="topnav-inner" ref={innerRef}>
