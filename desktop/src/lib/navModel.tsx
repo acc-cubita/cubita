@@ -44,7 +44,6 @@ import {
   HelpCircle,
   Keyboard,
   KeyRound,
-  Landmark,
   Layers,
   LayoutDashboard,
   ListTree,
@@ -91,7 +90,6 @@ import {
   Megaphone,
   Group,
   Vault,
-  Nfc,
   Sheet,
   DoorOpen,
   Crosshair,
@@ -209,10 +207,9 @@ export type PageKey =
   | 'bankstatement'
   | 'bankreconcile'
   | 'cashbox'
-  | 'cashboxes'
-  | 'bankaccounts'
-  | 'posterminals'
-  | 'checkbooks'
+  //: «حساب‌های نقد و بانک» — پنج برگه‌ی تعریف (صندوق، بانک، کارتخوان، دسته‌چک، تنخواه) در یک صفحه؛ جانشینِ
+  //: `cashboxes`/`bankaccounts`/`posterminals`/`checkbooks` و دو فهرستِ `checkbooklist`/`posterminallist` (`LEGACY_PAGES`).
+  | 'cashbank'
   | 'pettyholder'
   | 'pettyexpense'
   | 'bankledger'
@@ -252,8 +249,6 @@ export type PageKey =
   | 'notelist'
   | 'treasuryledger'
   | 'paymentnoticelist'
-  | 'checkbooklist'
-  | 'posterminallist'
   | 'possettlelist'
   | 'contactsettlelist'
   | 'checkoplist'
@@ -409,14 +404,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'bankstatement', label: 'صورت حساب بانکی', icon: <FileSpreadsheet size={18} />, section: 'بانک، کارتخوان و تنخواه' },
       { key: 'bankreconcile', label: 'مغایرت بانکی', icon: <GitCompareArrows size={18} />, section: 'بانک، کارتخوان و تنخواه' },
       { key: 'possettle', label: 'تسویه کارتخوان', icon: <CreditCard size={18} />, section: 'بانک، کارتخوان و تنخواه' },
+      //: «تنخواه‌دار»ِ قبلی تعریف نبود، شارژِ تنخواه بود — کنارِ صورت‌هزینه‌اش می‌نشیند (۱۴۰۵/۰۷/۰۶).
+      { key: 'pettyholder', label: 'شارژ تنخواه', icon: <Wallet size={18} />, section: 'بانک، کارتخوان و تنخواه' },
       { key: 'pettyexpense', label: 'صورت هزینه تنخواه', icon: <Receipt size={18} />, section: 'بانک، کارتخوان و تنخواه' },
       { key: 'cashbox', label: 'گردش صندوق', icon: <PiggyBank size={18} />, section: 'مرور و گزارش' },
       { key: 'bankledger', label: 'مرور عملیات بانکی', icon: <ListTree size={18} />, section: 'مرور و گزارش' },
-      { key: 'cashboxes', label: 'صندوق‌ها', icon: <Vault size={18} />, section: DEFINITIONS_SECTION },
-      { key: 'bankaccounts', label: 'حساب‌های بانکی', icon: <Landmark size={18} />, section: DEFINITIONS_SECTION },
-      { key: 'posterminals', label: 'دستگاه کارتخوان', icon: <Nfc size={18} />, section: DEFINITIONS_SECTION },
-      { key: 'checkbooks', label: 'دسته چک', icon: <BookMarked size={18} />, section: DEFINITIONS_SECTION },
-      { key: 'pettyholder', label: 'تنخواه‌دار', icon: <Wallet size={18} />, section: DEFINITIONS_SECTION },
+      //: پنج تعریف، یک صفحه با پنج برگه‌ی اکسلی (مرحله‌ی ۲، ۱۴۰۵/۰۷/۰۶) — تب‌هایش زیرِ همین ردیف باز می‌شوند.
+      { key: 'cashbank', label: 'حساب‌های نقد و بانک', icon: <Vault size={18} />, section: DEFINITIONS_SECTION },
     ],
   },
   {
@@ -582,9 +576,9 @@ export const PAGE_MODULE_KEY: Partial<Record<PageKey, string | string[]>> = Obje
 //: هجده عملیاتِ «دریافت و پرداخت» + فهرستش، همگی زیرِ چترِ ماژولِ `banking`.
 for (const key of [
   'payflow', 'receiptvoucher', 'paymentvoucher', 'checkops', 'contactsettle', 'checkreturn',
-  'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox', 'cashboxes',
-  'bankaccounts', 'posterminals', 'checkbooks', 'pettyholder', 'pettyexpense', 'bankledger',
-  'treasuryledger', 'paymentnoticelist', 'checkbooklist', 'posterminallist', 'possettlelist',
+  'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox',
+  'cashbank', 'pettyholder', 'pettyexpense', 'bankledger',
+  'treasuryledger', 'paymentnoticelist', 'possettlelist',
   'checkoplist', 'contactsettlelist',
   'statementlist', 'pettylist',
   //: «تراکنش شریک» از «شرکت» آمد — همان قاعده‌ی حسابداری: بی‌گیت، گروه را تنها زنده نگه می‌داشت.
@@ -907,6 +901,13 @@ export const LEGACY_PAGES: Readonly<Record<string, { page: PageKey; section?: st
   analyticlist: { page: 'analytics' },
   finalizeentries: { page: 'entrycartable' },
   generaldoc: { page: 'balancereport', section: 'general' },
+  //: پنج تعریفِ «دریافت و پرداخت» و دو فهرستِ تکراری‌شان در «حساب‌های نقد و بانک» (۱۴۰۵/۰۷/۰۶).
+  cashboxes: { page: 'cashbank', section: 'cashboxes' },
+  bankaccounts: { page: 'cashbank', section: 'banks' },
+  posterminals: { page: 'cashbank', section: 'pos' },
+  posterminallist: { page: 'cashbank', section: 'pos' },
+  checkbooks: { page: 'cashbank', section: 'checkbooks' },
+  checkbooklist: { page: 'cashbank', section: 'checkbooks' },
 }
 
 /** مقصدِ واقعیِ یک ناوبری — کلیدِ قدیمی به جای تازه‌اش، بقیه همان که بود. */

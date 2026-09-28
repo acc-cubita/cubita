@@ -52,6 +52,10 @@ import {
   RotateCcw,
   Ruler,
   Tag,
+  BookMarked,
+  Nfc,
+  Vault,
+  Wallet,
 } from 'lucide-react'
 import type { PageKey } from './Sidebar'
 
@@ -189,6 +193,14 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
   integration: [
     { key: 'build', label: 'فروشگاهِ کوبیتا', icon: Store },
     { key: 'connect', label: 'اتصال به سایتِ موجود', icon: Link2 },
+  ],
+  //: «حساب‌های نقد و بانک» — پنج برگه‌ی تعریف (`CashBankPage`). همه «عملیات»اند: برگه هم فرم است و هم دفترِ خودش.
+  cashbank: [
+    { key: 'cashboxes', label: 'صندوق‌ها', icon: Vault },
+    { key: 'banks', label: 'حساب‌های بانکی', icon: Landmark },
+    { key: 'pos', label: 'دستگاه‌های کارتخوان', icon: Nfc },
+    { key: 'checkbooks', label: 'دسته‌چک‌ها', icon: BookMarked },
+    { key: 'petty', label: 'صندوق‌های تنخواه', icon: Wallet },
   ],
   calendar: [
     { key: 'reminders', label: 'کارهای امروز', icon: BellRing },

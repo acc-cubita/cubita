@@ -12,6 +12,7 @@ import {
   Upload,
 } from 'lucide-react'
 import {
+  createBankTransaction,
   fetchBankAccountsLive,
   fetchBankTransactions,
   fetchPosPending,
@@ -26,8 +27,6 @@ import { SectionCard } from '../../components/SectionCard'
 import { NumberInput } from '../../components/NumberInput'
 import { JalaliDatePicker } from '../../components/JalaliDatePicker'
 import { Pager, usePagination } from '../../components/Pager'
-import { BankAccountsPanel } from '../../components/BankAccountsPanel'
-import { PosTerminalsPanel } from '../../components/PosTerminalsPanel'
 import { ReconciliationPanel } from '../../components/ReconciliationPanel'
 import { parseCsv, toNumber } from '../../lib/csv'
 import { formatJalali, todayIso } from '../../lib/jalali'
@@ -38,40 +37,11 @@ import { FormField } from '../../components/form/FormKit'
 /**
  * عملیاتِ بانکیِ ماژولِ «دریافت و پرداخت» — صورت‌حساب، مغایرت، کارتخوان و مرورِ گردش.
  *
- * سه صفحه‌ی این فایل (حساب بانکی، دستگاه کارتخوان، مغایرت بانکی) پنلِ موجود را
- * می‌پوشانند نه اینکه از نو بنویسند: همان پنل‌ها پیش‌تر تبِ صفحه‌ی «چک و بانک» بودند و
- * حالا هرکدام از منو صفحه‌ی مستقلِ خودش را دارد. دو نمای یک داده نمی‌سازیم.
+ * تعریفِ حساب‌های بانکی و کارتخوان‌ها از ۱۴۰۵/۰۷/۰۶ برگه‌های «حساب‌های نقد و بانک»اند (`CashBankPage`)؛ ثبتِ
+ * دستیِ واریز/برداشت که لای تعریفِ حساب پنهان بود، این‌جا کنارِ مرورِ همان گردش نشست.
  */
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
-
-// ═══════════════════ ۱۳) حساب بانکی ═══════════════════
-
-export function BankAccountsPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
-  return (
-    <OpsPage
-      icon={Landmark}
-      title="حساب بانکی"
-      description="حساب‌های بانکیِ کسب‌وکار و حسابِ دفترِ کلِ متناظرشان. هر رسید و چکِ بانکی به یکی از این‌ها می‌نشیند."
-    >
-      <BankAccountsPanel token={token} accounts={accounts} />
-    </OpsPage>
-  )
-}
-
-// ═══════════════════ ۱۴) دستگاه کارت خوان ═══════════════════
-
-export function PosTerminalsPage({ token, bankAccounts }: { token: string; bankAccounts: BankAccountCache[] }) {
-  return (
-    <OpsPage
-      icon={CreditCard}
-      title="دستگاه کارتخوان"
-      description="پایانه‌های فروشگاهی و حسابی که واریزشان به آن می‌نشیند."
-    >
-      <PosTerminalsPanel token={token} bankAccounts={bankAccounts} />
-    </OpsPage>
-  )
-}
 
 // ═══════════════════ ۱۱) مغایرت بانکی ═══════════════════
 
@@ -544,7 +514,7 @@ export function PosSettlementPage({ token }: { token: string }) {
 // ═══════════════════ ۱۸) مرور عملیات بانکی ═══════════════════
 
 /** گردشِ هر حسابِ بانکی: واریز، برداشت، و اینکه با صورت‌حساب تطبیق خورده یا نه. */
-export function BankLedgerPage({ token }: { token: string }) {
+export function BankLedgerPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
   const [bankAccountId, setBankAccountId] = useState('')
   const [only, setOnly] = useState<'all' | 'in' | 'out' | 'unmatched'>('all')
 
@@ -610,6 +580,13 @@ export function BankLedgerPage({ token }: { token: string }) {
         </div>
       }
     >
+      <ManualBankTransaction
+        token={token}
+        banks={(banks.data ?? []).map((b) => ({ id: b.id, name: b.name }))}
+        accounts={accounts.filter((a) => !a.is_group)}
+        onDone={txns.reload}
+      />
+
       <SectionCard icon={ListTree} title="گردشِ بانکی" description={`${faInt(rows.length)} ردیف`}>
         <AsyncBlock
           loading={txns.loading}
@@ -659,4 +636,116 @@ const BANK_SOURCE_LABEL: Record<string, string> = {
   check_clear: 'وصولِ چک',
   pos_settlement: 'تسویه‌ی کارتخوان',
   treasury: 'دریافت/پرداخت',
+}
+
+/**
+ * واریز / برداشتِ دستی — جابه‌جاییِ وجه بین بانک و حسابِ مقابل (مثلاً صندوق) که از هیچ رسید، چک یا تسویه‌ای نمی‌آید.
+ *
+ * تا ۱۴۰۵/۰۷/۰۶ زیرِ فرمِ تعریفِ حسابِ بانکی بود — عملیاتی که لای تعریف پنهان مانده بود. جایش کنارِ همان گردشی است
+ * که ثبتش می‌کند؛ ردیفِ ثبت‌شده با منشأ «ثبتِ دستی» همین‌جا در گردش می‌آید.
+ */
+function ManualBankTransaction({
+  token,
+  banks,
+  accounts,
+  onDone,
+}: {
+  token: string
+  banks: { id: string; name: string }[]
+  accounts: AccountCache[]
+  onDone: () => void
+}) {
+  const [bankAccountId, setBankAccountId] = useState('')
+  const [direction, setDirection] = useState<'deposit' | 'withdraw'>('deposit')
+  const [amount, setAmount] = useState('')
+  const [counterAccountId, setCounterAccountId] = useState('')
+  const [description, setDescription] = useState('')
+  const [transactionDate, setTransactionDate] = useState(todayIso())
+  const [msg, setMsg] = useState<Msg>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setMsg(null)
+    if (!bankAccountId || !counterAccountId || Number(amount) <= 0) {
+      setMsg({ text: 'حساب بانکی، حساب مقابل و مبلغ (بزرگ‌تر از صفر) لازم است.', kind: 'err' })
+      return
+    }
+    setBusy(true)
+    try {
+      await createBankTransaction(token, {
+        bank_account_id: bankAccountId,
+        transaction_date: transactionDate,
+        amount: direction === 'deposit' ? Number(amount) : -Number(amount),
+        counter_account_id: counterAccountId,
+        description,
+      })
+      setAmount('')
+      setDescription('')
+      setMsg({ text: 'تراکنشِ بانکی ثبت شد.', kind: 'ok' })
+      onDone()
+    } catch (err) {
+      setMsg({ text: errText(err), kind: 'err' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <SectionCard
+      icon={Save}
+      title="واریز / برداشتِ دستی"
+      description="جابه‌جاییِ وجه بین بانک و حسابِ مقابل (مثلاً صندوق) که از رسید، چک یا تسویه نمی‌آید."
+    >
+      <Note msg={msg} />
+      <form className="invoice-form" onSubmit={submit}>
+        <label>
+          حساب بانکی
+          <SearchSelect value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)}>
+            <option value="">— انتخاب —</option>
+            {banks.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </SearchSelect>
+        </label>
+        <label>
+          نوع
+          <SearchSelect value={direction} onChange={(e) => setDirection(e.target.value as 'deposit' | 'withdraw')}>
+            <option value="deposit">واریز</option>
+            <option value="withdraw">برداشت</option>
+          </SearchSelect>
+        </label>
+        <label>
+          مبلغ
+          <NumberInput value={amount} onChange={setAmount} />
+        </label>
+        <label>
+          حساب مقابل
+          <SearchSelect value={counterAccountId} onChange={(e) => setCounterAccountId(e.target.value)}>
+            <option value="">— انتخاب —</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} — {a.name}
+              </option>
+            ))}
+          </SearchSelect>
+        </label>
+        <label>
+          تاریخ
+          <JalaliDatePicker value={transactionDate} onChange={setTransactionDate} />
+        </label>
+        <label className="form-wide">
+          شرح
+          <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </label>
+        <div className="invoice-form-footer">
+          <button type="submit" className="btn-primary" disabled={busy}>
+            <Save size={14} /> ثبتِ تراکنش
+          </button>
+        </div>
+      </form>
+    </SectionCard>
+  )
 }

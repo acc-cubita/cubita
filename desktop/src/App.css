@@ -14979,3 +14979,48 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .page .ef-table-wrap > table.pcl-sheet > tbody > tr.pcl-latest > td:not(.xl-rowhead) { background: transparent; }
   .pcl-sheet > tbody > tr.pcl-latest { border-color: var(--warning); }
 }
+
+/* ── برگه‌ی تعریف (`DefSheet`): صندوق، حسابِ بانکی، کارتخوان، دسته‌چک، تنخواه ──
+ * همان تمِ اکسلیِ «تفصیلی سایر» (xl-grid)؛ این‌جا فقط آنچه این قطعه تازه دارد. */
+.jg-table col.ds-c-actions { width: 96px; }
+.page .ef-table-wrap > table.ds-sheet td.jg-actions .row-actions { justify-content: flex-end; gap: 2px; }
+/* خانه‌ی قفل (حسابِ دسته‌ای که برگش خرج شده، ارزِ ثبت‌شده): خاکستری و بی‌مکان‌نما، دلیلش در `title`. */
+.page .ef-table-wrap > table.ds-sheet td.ds-locked { background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); cursor: not-allowed; }
+.page .ef-table-wrap > table.ds-sheet td.ds-locked :is(input, button, select) { color: var(--text-muted); cursor: not-allowed; }
+/* ردیفِ جزئیات (برگ‌های خرج‌شده‌ی دسته‌چک) — زیرِ ردیفِ خودش، تمام‌عرض، با ته‌رنگِ سربرگ. */
+.page .ef-table-wrap > table.ds-sheet > tbody > tr.ds-detail > td {
+  padding: var(--sp-2) var(--sp-3);
+  background: color-mix(in srgb, var(--xl-head, var(--surface-2)) 45%, var(--surface));
+  white-space: normal;
+}
+.ds-detail-body { max-inline-size: 100%; overflow-x: auto; }
+/* تاریخِ درونِ خانه یک‌خطی — «انتخاب تاریخ» در ستونِ باریک دو خط می‌شد و ردیف را بلند می‌کرد. */
+.page .ef-table-wrap > table.ds-sheet .jalali-date-trigger { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* برگه‌ی پهن (حسابِ بانکی، کارتخوان): عرضِ صریح = جمعِ ستون‌ها و لغزشِ افقی؛ شماره‌ی ردیف و ستونِ نام میخ‌اند —
+ * همان «ثابت‌کردنِ ستون»ِ اکسل و الگوی بودجه. زمینه‌ی خانه‌ی میخ‌شده مات است، وگرنه ستونِ زیرش پیدا می‌شود. */
+.page .ef-table-wrap > table.ds-sheet--wide { table-layout: fixed; min-inline-size: 100%; }
+.ds-pin { position: sticky; z-index: 1; background: var(--surface); }
+.ds-pin--num { inset-inline-start: 0; }
+.ds-pin--lead { inset-inline-start: 44px; box-shadow: inset 1px 0 0 var(--border-strong); }
+.ds-sheet--wide thead th.ds-pin { z-index: 3; background: var(--xl-head, var(--surface-2)); }
+.page .ef-table-wrap > table.xl-grid.ds-sheet--wide > tbody > tr.is-selected > td.ds-pin:not(.xl-rowhead) {
+  background: linear-gradient(var(--accent-bg), var(--accent-bg)), var(--surface);
+}
+
+/* قابِ باریک (۱۲۰۰ با کارت‌های کناری، تقسیمِ صفحه): ستون‌های کم‌اهمیت با اندازه‌ی **قابِ خودِ برگه** پنهان
+ * می‌شوند نه پنجره — پهنای قاب به کارت‌ها و منوی کناری بستگی دارد. */
+.ds-wrap { container-type: inline-size; container-name: ds; }
+@container ds (max-width: 860px) {
+  .ds-sheet:not(.ds-sheet--wide) .ds-nhide { display: none; }
+}
+
+@media (max-width: 760px) {
+  /* برگه‌ی ویرایشی کارت نمی‌شود؛ ستون‌های کم‌اهمیت کنار می‌روند تا نام و خانه‌های اصلی بی‌لغزش در قاب بمانند.
+   * `col` و خانه‌ها با هم پنهان می‌شوند — پنهان‌کردنِ فقط خانه در `table-layout: fixed` ستون‌ها را جابه‌جا می‌کرد. */
+  .ds-sheet .ds-mhide { display: none; }
+  .page .ef-table-wrap > table.ds-sheet:not(.ds-sheet--wide) { min-inline-size: 520px; }
+  .ds-sheet col.jg-c-num { width: 36px; }
+  .jg-table col.ds-c-actions { width: 72px; }
+  .ds-pin--lead { inset-inline-start: 36px; }
+}

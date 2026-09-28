@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowUpFromLine,
-  BookMarked,
   CreditCard,
   FileSpreadsheet,
   History,
@@ -11,7 +10,6 @@ import {
 } from 'lucide-react'
 import {
   fetchBankAccountsAdmin,
-  fetchCheckbooks,
   fetchContactSettlement,
   fetchContactSettlements,
   fetchPaymentDocuments,
@@ -20,7 +18,6 @@ import {
   fetchCheckOperations,
   fetchPosSettlement,
   fetchPosSettlements,
-  fetchPosTerminals,
   fetchStatementLines,
   voidContactSettlement,
   voidPosSettlement,
@@ -99,174 +96,7 @@ export function PaymentNoticeListPage({ token }: { token: string }) {
 }
 
 // ═══════════════════ دسته‌چک‌ها ═══════════════════
-
-export function CheckbookListPage({ token }: { token: string }) {
-  const [only, setOnly] = useState<'all' | 'open' | 'closed'>('all')
-  const books = useAsync(() => fetchCheckbooks(token), [token])
-
-  const rows = useMemo(() => {
-    return (books.data ?? []).filter((b) =>
-      only === 'open' ? b.is_active : only === 'closed' ? !b.is_active : true,
-    )
-  }, [books.data, only])
-  const pg = usePagination(rows, 15, only)
-
-  const remaining = rows.filter((b) => b.is_active).reduce((s, b) => s + b.remaining_count, 0)
-  const used = rows.reduce((s, b) => s + b.used_count, 0)
-
-  return (
-    <OpsPage
-      icon={BookMarked}
-      title="دسته‌چک‌ها"
-      description="همه‌ی دسته‌چک‌های ثبت‌شده — باز و بسته — با شمارِ برگِ خرج‌شده و باقی‌مانده."
-      head={
-        <div className="cc-head">
-          <div className="cc-toolbar">
-            <div className="cc-presets">
-              {(
-                [
-                  ['all', 'همه'],
-                  ['open', 'باز'],
-                  ['closed', 'بسته'],
-                ] as const
-              ).map(([key, label]) => (
-                <button key={key} type="button" className={only === key ? 'is-active' : ''} onClick={() => setOnly(key)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="cc-summary">
-            <Metric icon={<BookMarked size={14} />} label="دسته‌ها" value={faInt(rows.length)} />
-            <Metric icon={<ScrollText size={14} />} label="برگِ خرج‌شده" value={faInt(used)} tone="out" />
-            <Metric icon={<ScrollText size={14} />} label="برگِ مانده" value={faInt(remaining)} tone="in" hint="در دسته‌های باز" />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard icon={BookMarked} title="دسته‌چک‌ها" description={`${faInt(rows.length)} دسته`}>
-        <AsyncBlock
-          loading={books.loading}
-          error={books.error}
-          empty={rows.length === 0}
-          emptyText="دسته‌چکی با این فیلتر نیست. از عملیاتِ «دسته چک» ثبتش کنید."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>حساب بانکی</th>
-                  <th>سری</th>
-                  <th>از</th>
-                  <th>تا</th>
-                  <th>برگ</th>
-                  <th>خرج‌شده</th>
-                  <th>مانده</th>
-                  <th>دریافت</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((b) => (
-                  <tr key={b.id} className={b.is_active ? '' : 'acc-row--void'}>
-                    <td className="card-title" data-label="حساب بانکی">{b.bank_account_name}</td>
-                    <td data-label="سری">
-                      <span dir="ltr">{b.serial || '—'}</span>
-                      {b.cheque_print_format && (
-                        <div className="entity-sub" dir="ltr">{b.cheque_print_format}</div>
-                      )}
-                    </td>
-                    <td data-label="از"><span dir="ltr">{b.first_number}</span></td>
-                    <td data-label="تا"><span dir="ltr">{b.last_number}</span></td>
-                    <td className="num" data-label="برگ">{faInt(b.leaf_count)}</td>
-                    <td className="num" data-label="خرج‌شده">{faInt(b.used_count)}</td>
-                    <td className="num" data-label="مانده">{faInt(b.remaining_count)}</td>
-                    <td data-label="دریافت">{b.issue_date ? formatJalali(b.issue_date) : '—'}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${b.is_active ? 'tone-success' : ''}`}>
-                        {b.is_active ? 'باز' : 'بسته'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
 // ═══════════════════ دستگاه‌های کارتخوان ═══════════════════
-
-export function PosTerminalListPage({ token }: { token: string }) {
-  const terminals = useAsync(() => fetchPosTerminals(token), [token])
-  const rows = terminals.data ?? []
-  const pg = usePagination(rows, 15)
-  const active = rows.filter((t) => t.is_active).length
-
-  return (
-    <OpsPage
-      icon={CreditCard}
-      title="دستگاه‌های کارتخوان"
-      description="دفترِ پایانه‌های ثبت‌شده و حسابی که واریزشان به آن می‌نشیند."
-      head={
-        <div className="cc-head">
-          <div className="cc-summary">
-            <Metric icon={<CreditCard size={14} />} label="پایانه‌ها" value={faInt(rows.length)} />
-            <Metric icon={<CreditCard size={14} />} label="فعال" value={faInt(active)} tone="in" />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard icon={CreditCard} title="پایانه‌ها" description={`${faInt(rows.length)} دستگاه`}>
-        <AsyncBlock
-          loading={terminals.loading}
-          error={terminals.error}
-          empty={rows.length === 0}
-          emptyText="دستگاهی ثبت نشده. از عملیاتِ «دستگاه کارت خوان» شروع کنید."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>نام</th>
-                  <th>شرکتِ پرداخت</th>
-                  <th>اتصال</th>
-                  <th>پیش‌فرض</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((t) => (
-                  <tr key={t.id} className={t.is_active ? '' : 'acc-row--void'}>
-                    <td className="card-title" data-label="نام">{t.label || '—'}</td>
-                    <td data-label="شرکتِ پرداخت"><span dir="ltr">{t.psp || '—'}</span></td>
-                    <td className="card-wide" data-label="اتصال">
-                      <span dir="ltr">
-                        {t.transport === 'serial' ? t.com_port || '—' : `${t.host || '—'}:${t.port || 0}`}
-                      </span>
-                    </td>
-                    <td data-label="پیش‌فرض">{t.is_default ? 'بله' : '—'}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${t.is_active ? 'tone-success' : ''}`}>
-                        {t.is_active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
 // ═══════════════════ تسویه‌های کارتخوان ═══════════════════
 
 /**
