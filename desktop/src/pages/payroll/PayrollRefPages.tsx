@@ -129,7 +129,7 @@ export function ServiceLocationPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={Building2}
-      title="محل خدمت جدید"
+      title="محل‌های خدمت"
       description="جایی که کارمند واقعاً کار می‌کند: انبار، شعبه‌ی ۳ فروشگاه، دفتر مرکزی."
     >
       <div className="ef-form">
@@ -232,7 +232,7 @@ export function JobTitlePage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={Briefcase}
-      title="شغل جدید"
+      title="مشاغل"
       description="عنوان‌های شغلی و رسته‌شان — همان فهرستی که فرمِ قرارداد از آن انتخاب می‌کند."
     >
       <div className="ef-form">

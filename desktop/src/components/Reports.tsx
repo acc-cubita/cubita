@@ -346,7 +346,7 @@ export function Reports({
         return (
           costCenterReport &&
           (costCenterReport.rows.length === 0 ? (
-            <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «شرکت ← مرکز هزینه» شروع کنید.</p>
+            <p className="hint">هنوز هیچ سندی به مرکز هزینه‌ای برچسب نخورده. از «حسابداری ← مرکز هزینه» شروع کنید.</p>
           ) : (
             <>
               <p className="hint rp-before">

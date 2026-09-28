@@ -19,7 +19,10 @@ import {
   NAV_GROUPS,
   PAGE_MODULE_KEY,
   buildNav,
+  groupBarLabel,
+  groupEntry,
   groupLanding,
+  menuCategories,
   menuEntryVisible,
   navSections,
   orderNavGroups,
@@ -27,7 +30,7 @@ import {
   uniqueNavItems,
   type PageKey,
 } from './navModel'
-import { LIST_MENUS, OPS_LIST_MAP } from '../components/moduleLists'
+import { LIST_MENUS, OPS_LIST_MAP, OPS_MENUS } from '../components/moduleLists'
 import type { ExperienceMode } from './experienceMode'
 
 //: صفحه‌ی عملیاتِ کاری — در `NAV_GROUPS` است، پس با فیلترِ ناوبری سنجیده می‌شود.
@@ -226,7 +229,8 @@ describe('«مجوز نرم‌افزار» فقط در کوبیتا سازمان
 
 describe('بازچینیِ منوهای حسابداری — ۱۴۰۵/۰۷/۰۳', () => {
   const accounting = NAV_GROUPS.find((g) => g.heading === 'حسابداری')!
-  const SECTIONS = ['ساختار و تعریف‌ها', 'ثبت سند', 'بازبینی اسناد', 'اصلاح و تعدیل', 'پایان دوره', 'گزارش و کنترل']
+  //: ترتیبِ دسته‌ها از ۱۴۰۵/۰۷/۰۶: کارِ هرروزه اول، ساختار ته.
+  const SECTIONS = ['ثبت سند', 'بازبینی اسناد', 'گزارش و کنترل', 'اصلاح و تعدیل', 'پایان دوره', 'ساختار و تعریف‌ها']
 
   it('شش دسته به ترتیبِ کار، هر ردیف در یک دسته و ردیف‌های هم‌دسته پشتِ هم', () => {
     expect(accounting.items.every((i) => i.section)).toBe(true)
@@ -279,5 +283,107 @@ describe('navSections', () => {
 
   it('گروهِ بی‌دسته یک دسته‌ی بی‌نام است', () => {
     expect(navSections<{ k: number; section?: string }>([{ k: 1 }, { k: 2 }])).toEqual([{ title: null, items: [{ k: 1 }, { k: 2 }] }])
+  })
+})
+
+describe('مرتب‌سازیِ زیرمنوها — ۱۴۰۵/۰۷/۰۶', () => {
+  const group = (h: string) => NAV_GROUPS.find((g) => g.heading === h)
+  const DEFINITION_TITLES = new Set(['تعریف‌ها', 'ساختار و تعریف‌ها'])
+
+  it('«شرکت» دیگر نیست و هر صفحه‌اش به ماژولِ داده‌ی خودش رفته', () => {
+    expect(group('شرکت')).toBeUndefined()
+    const home: Record<string, PageKey[]> = {
+      'مشتریان و فروش': ['contactnew', 'contactgroup', 'geo', 'installments', 'contactimport'],
+      'دریافت و پرداخت': ['ownertxn'],
+      'حسابداری': ['costcenter', 'openingops', 'yearendops', 'yearendreminder'],
+      'گزارش و ابزار': ['mgmtreports', 'reportbuilder', 'dayactivity', 'usagereport', 'calendar', 'dataexport', 'dataimport'],
+    }
+    for (const [h, pages] of Object.entries(home)) {
+      const keys = group(h)!.items.map((i) => i.key)
+      for (const p of pages) expect(keys, `${p} ← ${h}`).toContain(p)
+    }
+  })
+
+  it('گروهِ بلند (بیش از هشت کار) دسته‌بندی شده، دسته‌ها پشتِ هم و تعریف‌ها همیشه آخر', () => {
+    for (const g of NAV_GROUPS) {
+      const work = g.items.filter((i) => !i.guide)
+      if (work.length <= 8) continue
+      expect(work.every((i) => i.section), g.heading).toBe(true)
+      const titles = navSections(work).map((s) => s.title!)
+      //: پشتِ هم: هر دسته فقط یک بار شروع می‌شود.
+      const starts = work.filter((it, i) => it.section !== work[i - 1]?.section)
+      expect(starts, g.heading).toHaveLength(titles.length)
+      const defs = titles.findIndex((t) => DEFINITION_TITLES.has(t))
+      if (defs !== -1) expect(defs, g.heading).toBe(titles.length - 1)
+    }
+  })
+
+  it('همین قاعده برای منوهای کار‌به‌کار و فهرست', () => {
+    for (const [h, menu] of [...Object.entries(OPS_MENUS), ...Object.entries(LIST_MENUS)]) {
+      if (menu.length <= 8) continue
+      expect(menu.every((e) => e.category), h).toBe(true)
+      const titles = menuCategories(menu).map((c) => c.title!)
+      const starts = menu.filter((e, i) => e.category !== menu[i - 1]?.category)
+      expect(starts, h).toHaveLength(titles.length)
+      const defs = titles.findIndex((t) => DEFINITION_TITLES.has(t))
+      if (defs !== -1) expect(defs, h).toBe(titles.length - 1)
+    }
+  })
+
+  it('در هیچ ماژولی دو ردیف هم‌نام نیست — نه دو عملیات، نه عملیات و دفترش', () => {
+    for (const g of NAV_GROUPS) {
+      //: گروهی که منوی کار‌به‌کار دارد («تامین‌کنندگان و انبار») ردیف‌های صفحه‌اش را نشان نمی‌دهد.
+      const ops = (OPS_MENUS[g.heading] ?? g.items).map((e) => e.label)
+      expect(new Set(ops).size, g.heading).toBe(ops.length)
+      const lists = (LIST_MENUS[g.heading] ?? []).map((e) => e.label)
+      expect(new Set(lists).size, g.heading).toBe(lists.length)
+      //: گروهِ تک‌صفحه‌ای که نامِ خودش را دارد («تولید» ← «تولید») استثناست — آن ردیف تکرارِ سرتیتر است.
+      for (const l of lists) expect(ops, `${g.heading}: «${l}»`).not.toContain(l)
+    }
+  })
+
+  it('در هیچ ماژولی دو ردیف یک آیکن ندارند', () => {
+    const typeOf = (n: unknown) => (n as { type?: unknown })?.type
+    for (const g of NAV_GROUPS) {
+      const items = uniqueNavItems([g])
+      const icons = items.map((i) => typeOf(i.icon))
+      expect(new Set(icons).size, g.heading).toBe(icons.length)
+    }
+    for (const [h, menu] of [...Object.entries(OPS_MENUS), ...Object.entries(LIST_MENUS)]) {
+      const icons = menu.map((e) => e.icon)
+      expect(new Set(icons).size, h).toBe(icons.length)
+    }
+  })
+
+  it('ترجیح‌های شخصی و راهنما در منوی کاربرند، نه در «تنظیمات»', () => {
+    const personal: PageKey[] = ['password', 'theme', 'shortcuts', 'help']
+    const settings = group('تنظیمات')!.items.map((i) => i.key)
+    const { secondary } = nav(BASE)
+    for (const k of personal) {
+      expect(settings, k).not.toContain(k)
+      expect(secondary.map((i) => i.key), k).toContain(k)
+    }
+  })
+
+  it('صفحه‌های آمده به «حسابداری» و «دریافت و پرداخت» گروه را بی ماژولش زنده نگه نمی‌دارند', () => {
+    //: `reports` بیرون است، همان دلیلِ تستِ ترتیب: «گزارش‌ها» ماژولِ خودش را دارد و گروه را زنده نگه می‌دارد.
+    const headings = (modules: string[]) => nav(modules).groups.map((g) => g.heading)
+    expect(headings(['overview', 'contacts', 'banking'])).not.toContain('حسابداری')
+    expect(headings(['overview', 'contacts', 'accounting'])).not.toContain('دریافت و پرداخت')
+  })
+
+  it('کلیک روی نامِ ماژول به اولین کار می‌رود، نه به «مسیرِ کار»', () => {
+    expect(groupEntry(group('مشتریان و فروش')!).key).toBe('salesinvoice')
+    expect(groupEntry(group('دریافت و پرداخت')!).key).toBe('receiptvoucher')
+    expect(groupEntry(group('حقوق و دستمزد')!).key).toBe('payroll')
+  })
+
+  it('نامِ روی نوار: گروهِ ذاتاً تک‌صفحه نامِ صفحه، گروهِ فیلترشده نامِ خودش', () => {
+    expect(groupBarLabel(group('میزکار')!)).toBe('داشبورد')
+    expect(groupBarLabel(group('دارایی ثابت')!)).toBe('دارایی ثابت')
+    //: پیش از تأییدِ قرارداد فقط «درخواست» دیده می‌شود؛ نوار باز هم «حسابرسی» می‌گوید.
+    const assurance = nav(BASE).groups.find((g) => g.heading === 'حسابرسی')!
+    expect(assurance.items).toHaveLength(1)
+    expect(groupBarLabel(assurance)).toBe('حسابرسی')
   })
 })

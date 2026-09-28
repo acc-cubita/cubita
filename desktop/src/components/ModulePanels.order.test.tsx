@@ -108,13 +108,14 @@ describe('جابه‌جاییِ منوهای عملیات و فهرست', () => 
 })
 
 describe('دسته‌های منوی عملیات', () => {
-  it('حسابداری: تیترِ شش دسته به ترتیبِ کار، هرکدام بالای منوهای خودش', () => {
+  const heads = (panel: HTMLElement) => [...panel.querySelectorAll('.mod-section-label .mod-section-title')].map((e) => e.textContent)
+
+  it('حسابداری: کارِ هرروزه اول، ساختار ته — هر تیتر بالای منوهای خودش (۱۴۰۵/۰۷/۰۶)', () => {
     render()
     const [ops] = panels()
-    const heads = [...ops.querySelectorAll('.mod-section-label')].map((e) => e.textContent)
-    expect(heads).toEqual(['ساختار و تعریف‌ها', 'ثبت سند', 'بازبینی اسناد', 'اصلاح و تعدیل', 'پایان دوره', 'گزارش و کنترل'])
+    expect(heads(ops)).toEqual(['ثبت سند', 'بازبینی اسناد', 'گزارش و کنترل', 'اصلاح و تعدیل', 'پایان دوره', 'ساختار و تعریف‌ها'])
     //: تیترِ «ثبت سند» درست پیش از «سند حسابداری» است.
-    const head = [...ops.querySelectorAll('.mod-section-label')][1]
+    const head = ops.querySelector('.mod-section-label')!
     expect(head.nextElementSibling?.textContent).toContain('سند حسابداری')
   })
 
@@ -122,11 +123,87 @@ describe('دسته‌های منوی عملیات', () => {
     render()
     const [ops] = panels()
     expect(arrow(ops, 'سند حسابداری', 'بالا').disabled).toBe(true)
-    expect(arrow(ops, 'بودجه‌بندی', 'پایین').disabled).toBe(true)
+    expect(arrow(ops, 'اسناد تکرارشونده', 'پایین').disabled).toBe(true)
     act(() => arrow(ops, 'مانده اول دوره', 'بالا').click())
     const after = labels(panels()[0])
     expect(after.indexOf('مانده اول دوره')).toBeLessThan(after.indexOf('سند حسابداری'))
-    //: دسته‌ی قبلی سرِ جایش است.
-    expect(after.indexOf('بودجه‌بندی')).toBeLessThan(after.indexOf('مانده اول دوره'))
+    //: دسته‌ی بعدی سرِ جایش است.
+    expect(after.indexOf('کارتابل اسناد موقت')).toBeGreaterThan(after.indexOf('اسناد تکرارشونده'))
+  })
+})
+
+describe('دسته‌ی بازوبسته', () => {
+  const head = (panel: HTMLElement, title: string) =>
+    [...panel.querySelectorAll<HTMLButtonElement>('.mod-section-label')].find((b) => b.querySelector('.mod-section-title')?.textContent === title)!
+
+  it('«ساختار و تعریف‌ها» پیش‌فرض بسته است و تعدادِ ردیف‌هایش را می‌گوید', () => {
+    render()
+    const [ops] = panels()
+    const h = head(ops, 'ساختار و تعریف‌ها')
+    expect(h.getAttribute('aria-expanded')).toBe('false')
+    expect(h.querySelector('.mod-section-count')?.textContent).toBe((6).toLocaleString('fa-IR'))
+    expect(labels(ops)).not.toContain('درختواره حساب‌ها')
+  })
+
+  it('«پایان دوره» هم پیش‌فرض بسته است — کارِ سالانه، نه روزانه', () => {
+    render()
+    expect(head(panels()[0], 'پایان دوره').getAttribute('aria-expanded')).toBe('false')
+    expect(labels(panels()[0])).not.toContain('عملیات پایان سال')
+  })
+
+  it('باز کردن می‌ماند — بعد از سوارشدنِ دوباره هم', () => {
+    render()
+    act(() => head(panels()[0], 'ساختار و تعریف‌ها').click())
+    expect(labels(panels()[0])).toContain('درختواره حساب‌ها')
+    remount()
+    expect(labels(panels()[0])).toContain('درختواره حساب‌ها')
+  })
+
+  it('صفحه‌ی فعال زیرِ دسته‌ی پیش‌فرض‌بسته گم نمی‌شود', () => {
+    act(() =>
+      root.render(
+        createElement(ModulePanels, {
+          page: 'acctchart',
+          section: null,
+          onSelectSection: noop,
+          onNavigate: noop,
+          groups: NAV_GROUPS,
+          token: 't',
+        }),
+      ),
+    )
+    const [ops] = panels()
+    expect(head(ops, 'ساختار و تعریف‌ها').getAttribute('aria-expanded')).toBe('true')
+    expect(labels(ops)).toContain('درختواره حساب‌ها')
+  })
+
+  it('دسته‌ای که کاربر بسته و صفحه‌ی فعال در آن است نشان می‌گیرد', () => {
+    render()
+    act(() => head(panels()[0], 'ثبت سند').click())
+    const h = head(panels()[0], 'ثبت سند')
+    expect(h.getAttribute('aria-expanded')).toBe('false')
+    expect(h.classList.contains('has-current')).toBe(true)
+  })
+})
+
+describe('«مسیرِ کار»', () => {
+  it('پیوندِ کم‌رنگِ بالای کارت است، نه یکی از ردیف‌های جابه‌جاشدنی', () => {
+    act(() =>
+      root.render(
+        createElement(ModulePanels, {
+          page: 'salesinvoice',
+          section: null,
+          onSelectSection: noop,
+          onNavigate: noop,
+          groups: NAV_GROUPS,
+          token: 't',
+        }),
+      ),
+    )
+    const [ops] = panels()
+    const guide = ops.querySelector('.mod-guide')
+    expect(guide?.textContent).toBe('فرآیند فروش')
+    expect(ops.querySelector('.mod-panel-body')?.firstElementChild).toBe(guide)
+    expect(labels(ops)).not.toContain('فرآیند فروش')
   })
 })

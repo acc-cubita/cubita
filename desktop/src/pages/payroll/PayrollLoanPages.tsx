@@ -169,7 +169,7 @@ export function LoanTypePage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={Banknote}
-      title="نوع وام جدید"
+      title="انواع وام"
       description="دسته‌بندیِ وام‌هایی که به کارکنان می‌دهید: وامِ ضروری، وامِ مسکن، مساعده."
     >
       <div className="ef-form">
@@ -342,7 +342,7 @@ export function EmployeeLoanPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={HandCoins}
-      title="تقسیط — وام‌های پرسنلی"
+      title="وام‌های پرسنلی"
       description="وامِ کارکنان و اقساطش. هر قسط که سررسید شود، هنگام صدور فیش از خالصِ حقوق کسر می‌شود."
     >
       <div className="ef-form">
@@ -796,7 +796,7 @@ export function DeploymentInfoPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={UploadCloud}
-      title="اطلاعات استقرار"
+      title="سوابق پیش از کوبیتا"
       description="آنچه پیش از آمدن به کوبیتا اتفاق افتاده: پرداختیِ تجمیعیِ سال، مانده‌ی مرخصی و سابقه."
     >
       <div className="ef-form">

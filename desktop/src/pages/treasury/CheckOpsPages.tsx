@@ -500,7 +500,7 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
   return (
     <OpsPage
       icon={ScrollText}
-      title="عملیات بانکی چک دریافتنی"
+      title="چک دریافتنی"
       description="چکی که از مشتری گرفته‌اید: واگذاری به بانک تا وصول شود، یا خرج کردنش بابتِ بدهیِ خودتان. هر دو راهِ بازگشت دارند."
       head={
         <div className="cc-head">

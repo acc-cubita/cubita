@@ -82,8 +82,16 @@ import {
   Medal,
   PieChart,
   Ticket,
+  Coins,
+  Group,
+  Hourglass,
+  Megaphone,
+  Nfc,
+  Handshake,
+  PhoneCall,
 } from 'lucide-react'
 import { MODULE_SECTIONS } from './moduleSections'
+import { DAILY_SECTION, DEFINITIONS_SECTION } from '../lib/menuSections'
 import type { PageKey } from './Sidebar'
 import { formatJalali } from '../lib/jalali'
 
@@ -121,6 +129,9 @@ export interface ListMenuItem {
   /** تبِ مشخصی از همان صفحه. منوی گروهی که بخش‌هایش تبِ صفحه‌اند نه صفحه‌ی جدا
    *  («تامین‌کنندگان و انبار») با این به تبِ درست می‌رود. */
   section?: string
+  /** دسته‌ی ردیف در منوی بلند — همان تیترِ کوچکِ `NavItem.section` برای ورودی‌های `OPS_MENUS`/`LIST_MENUS`.
+   *  نامش `section` نیست چون `section` این‌جا تبِ صفحه است. */
+  category?: string
 }
 
 /**
@@ -133,31 +144,31 @@ export interface ListMenuItem {
  * می‌کنند؛ این نگاشت فقط ستونِ «عملیات» و کشوی موبایل را می‌سازد.
  */
 export const OPS_MENUS: Record<string, ListMenuItem[]> = {
-  //: ترتیب: شش کارِ اصلیِ انبار که کاربر خواست، بعد کارهای منوهای قدیمیِ «خرید»،
-  //: «انبار» و «اعلامیه بدهکار بستانکار». تعریف‌ها (کالا، انبار، واحد، …) فرم و
-  //: جدولشان یک کار است و در همین ستون می‌مانند.
+  //: چهار دسته، به ترتیبِ کار (۱۴۰۵/۰۷/۰۶): شش کارِ اصلیِ انبار که کاربر خواست در دو دسته‌ی اول
+  //: ماندند (رسید و حواله، انبارگردانی و قیمت‌گذاری)، بعد خرید، و تعریف‌ها — کالا، انبار، واحد،
+  //: لیست قیمت، … — ته و پیش‌فرض بسته.
   'تامین‌کنندگان و انبار': [
-    { key: 'purchases', section: 'receipts', label: 'رسید انبار', icon: PackageCheck },
-    { key: 'inventory', section: 'issues', label: 'حواله انبار', icon: PackageMinus },
-    { key: 'inventory', section: 'transfer', label: 'رسید/حواله انتقال بین انبارها', icon: ArrowLeftRight },
-    { key: 'inventory', section: 'count-tags', label: 'تگ انبارگردانی', icon: Tag },
-    { key: 'inventory', section: 'count', label: 'ثبت مغایرت انبارگردانی', icon: ClipboardCheck },
-    { key: 'inventory', section: 'valuation', label: 'قیمت‌گذاری اسناد انبار', icon: Calculator },
-    { key: 'purchases', section: 'invoices', label: 'فاکتور خرید', icon: PackagePlus },
-    { key: 'purchases', section: 'services', label: 'فاکتور خرید خدمات', icon: Briefcase },
-    { key: 'purchases', section: 'returns', label: 'برگشت از خرید', icon: Undo2 },
-    { key: 'inventory', section: 'issue-returns', label: 'برگشت خروج انبار', icon: RotateCcw },
-    { key: 'inventory', section: 'adjust', label: 'تعدیل دستی', icon: ClipboardList },
-    { key: 'inventory', section: 'unpriced', label: 'قیمت‌گذاری ورودی‌ها', icon: BadgeDollarSign },
-    { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: FileSpreadsheet },
-    { key: 'inventory', section: 'products', label: 'کالاها', icon: Package },
-    { key: 'inventory', section: 'warehouses', label: 'انبارها', icon: Warehouse },
-    { key: 'inventory', section: 'locations', label: 'موقعیت‌های انبار', icon: MapPin },
-    { key: 'inventory', section: 'units', label: 'واحدها', icon: Ruler },
-    { key: 'inventory', section: 'taxonomy', label: 'گروه و مشخصات', icon: FolderTree },
-    { key: 'inventory', section: 'pricelists', label: 'لیست قیمت', icon: Tags },
-    { key: 'purchases', section: 'deductions', label: 'انواع کسورات', icon: Percent },
-    { key: 'inventory', section: 'import', label: 'ورود گروهی کالا', icon: FileUp },
+    { key: 'purchases', section: 'receipts', label: 'رسید انبار', icon: PackageCheck, category: 'رسید و حواله' },
+    { key: 'inventory', section: 'issues', label: 'حواله انبار', icon: PackageMinus, category: 'رسید و حواله' },
+    { key: 'inventory', section: 'transfer', label: 'انتقال بین انبارها', icon: ArrowLeftRight, category: 'رسید و حواله' },
+    { key: 'inventory', section: 'issue-returns', label: 'برگشت خروج انبار', icon: RotateCcw, category: 'رسید و حواله' },
+    { key: 'inventory', section: 'count-tags', label: 'تگ انبارگردانی', icon: Tag, category: 'انبارگردانی و قیمت‌گذاری' },
+    { key: 'inventory', section: 'count', label: 'ثبت مغایرت انبارگردانی', icon: ClipboardCheck, category: 'انبارگردانی و قیمت‌گذاری' },
+    { key: 'inventory', section: 'valuation', label: 'قیمت‌گذاری اسناد انبار', icon: Calculator, category: 'انبارگردانی و قیمت‌گذاری' },
+    { key: 'inventory', section: 'unpriced', label: 'قیمت‌گذاری ورودی‌ها', icon: BadgeDollarSign, category: 'انبارگردانی و قیمت‌گذاری' },
+    { key: 'inventory', section: 'adjust', label: 'تعدیل دستی', icon: ClipboardList, category: 'انبارگردانی و قیمت‌گذاری' },
+    { key: 'purchases', section: 'invoices', label: 'فاکتور خرید', icon: PackagePlus, category: 'خرید' },
+    { key: 'purchases', section: 'services', label: 'فاکتور خرید خدمات', icon: Briefcase, category: 'خرید' },
+    { key: 'purchases', section: 'returns', label: 'برگشت از خرید', icon: Undo2, category: 'خرید' },
+    { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: FileSpreadsheet, category: 'خرید' },
+    { key: 'inventory', section: 'products', label: 'کالاها', icon: Package, category: DEFINITIONS_SECTION },
+    { key: 'inventory', section: 'warehouses', label: 'انبارها', icon: Warehouse, category: DEFINITIONS_SECTION },
+    { key: 'inventory', section: 'locations', label: 'موقعیت‌های انبار', icon: MapPin, category: DEFINITIONS_SECTION },
+    { key: 'inventory', section: 'units', label: 'واحدها', icon: Ruler, category: DEFINITIONS_SECTION },
+    { key: 'inventory', section: 'taxonomy', label: 'گروه و مشخصات', icon: FolderTree, category: DEFINITIONS_SECTION },
+    { key: 'inventory', section: 'pricelists', label: 'لیست قیمت', icon: Tags, category: DEFINITIONS_SECTION },
+    { key: 'purchases', section: 'deductions', label: 'انواع کسورات', icon: Percent, category: DEFINITIONS_SECTION },
+    { key: 'inventory', section: 'import', label: 'ورود گروهی کالا', icon: FileUp, category: DEFINITIONS_SECTION },
   ],
 }
 
@@ -176,101 +187,106 @@ export function menuEntryActive(e: ListMenuItem, page: PageKey, section: string 
  * کارت خودش یک منوی سه‌تایی می‌شود و هر کدام صفحه‌ی همان فهرست را باز می‌کند.
  *
  * کلید، **نامِ گروهِ ناوبری** است نه صفحه — چون این تصمیم به کلِ ماژول تعلق دارد.
+ *
+ * منوی بلند (بیش از هشت ردیف) `category` می‌گیرد، با همان واژگانِ کارتِ «عملیات»: تیترِ کوچک بالای
+ * هر دسته، و «تعریف‌ها» پیش‌فرض بسته. ردیف‌های هم‌دسته پشتِ هم می‌آیند.
  */
 export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   'اتوماسیون اداری': [
     { key: 'letterlist', label: 'دبیرخانه و بایگانی', icon: FileText },
   ],
-  //: «فروش» — دفترِ نظیرِ هر عملیاتِ رکوردساز. «تخفیف‌ها و عوامل» عمداً یک دفترِ
-  //: مشترک است، چون دو منوی عملیات در یک جدول می‌نویسند (استثنای دومِ قاعده‌ی نظیر).
-  //: کلید باید **دقیقاً** `heading`ِ گروهِ ناوبری باشد، نه نامِ ماژول: هم
-  //: `ModulePanels` و هم کشوی موبایل با `group.heading` این نگاشت را می‌خوانند.
-  //: تا امروز این‌جا «فروش» بود در حالی که heading «مشتریان و فروش» است، پس هر
-  //: دوازده صفحه‌ی فهرستِ فروش — از فاکتورهای فروش تا اعلامیه‌های قیمت — از
-  //: هیچ عرضی قابلِ باز کردن نبودند. نه تایپ‌اسکریپت می‌دیدش (کلید `string` است)
-  //: و نه ممیزِ ایستا، چون ثبتشان در `OPS_LIST_MAP` درست بود.
-  //: «تامین‌کنندگان و انبار» — شش دفتری که کاربر خواست، بعد دفترهای منوهای قدیمی.
-  //: بیشترشان تبِ صفحه‌ی «انبار»/«خرید»اند (`section`)؛ «فهرست تامین‌کنندگان» همان
-  //: صفحه‌ی طرف‌حساب‌هاست با نقشِ تأمین‌کننده.
+  //: «تامین‌کنندگان و انبار» — همان سه دسته‌ی کاریِ کارتِ «عملیات». بیشترشان تبِ صفحه‌ی
+  //: «انبار»/«خرید»اند (`section`)؛ «تأمین‌کنندگان» همان صفحه‌ی طرف‌حساب‌هاست با نقشِ تأمین‌کننده.
   'تامین‌کنندگان و انبار': [
-    { key: 'inventory', section: 'documents', label: 'فهرست رسیدها و حواله‌های انبار', icon: FileStack },
-    { key: 'inventory', section: 'kardex', label: 'کاردکس کالا', icon: History },
-    { key: 'inventory', section: 'stock', label: 'مرور انبار / موجودی کالا', icon: PackageSearch },
-    { key: 'supplierlist', label: 'فهرست تامین‌کنندگان', icon: UsersRound },
-    { key: 'inventory', section: 'low', label: 'گزارش نقطه سفارش', icon: AlertTriangle },
-    { key: 'inventory', section: 'count-list', label: 'فهرست انبارگردانی‌ها', icon: ListChecks },
-    { key: 'purchases', section: 'invoice-list', label: 'فاکتورهای خرید', icon: ClipboardList },
-    { key: 'purchases', section: 'service-list', label: 'فاکتورهای خرید خدمات', icon: FileText },
-    { key: 'inventory', section: 'issue-return-list', label: 'برگشت‌های خروج انبار', icon: RotateCcw },
-    { key: 'notelist', label: 'اعلامیه‌های بدهکار و بستانکار', icon: FileSpreadsheet },
-    { key: 'inventory', section: 'serials', label: 'جستجوی سریال', icon: ScanSearch },
-    { key: 'inventory', section: 'batches', label: 'بچ و انقضا', icon: CalendarClock },
+    { key: 'inventory', section: 'documents', label: 'رسیدها و حواله‌های انبار', icon: FileStack, category: 'رسید و حواله' },
+    { key: 'inventory', section: 'issue-return-list', label: 'برگشت‌های خروج انبار', icon: RotateCcw, category: 'رسید و حواله' },
+    { key: 'inventory', section: 'stock', label: 'مرور انبار / موجودی کالا', icon: PackageSearch, category: 'موجودی و انبارگردانی' },
+    { key: 'inventory', section: 'kardex', label: 'کاردکس کالا', icon: History, category: 'موجودی و انبارگردانی' },
+    { key: 'inventory', section: 'low', label: 'گزارش نقطه سفارش', icon: AlertTriangle, category: 'موجودی و انبارگردانی' },
+    { key: 'inventory', section: 'count-list', label: 'انبارگردانی‌ها', icon: ListChecks, category: 'موجودی و انبارگردانی' },
+    { key: 'inventory', section: 'batches', label: 'بچ و انقضا', icon: CalendarClock, category: 'موجودی و انبارگردانی' },
+    { key: 'inventory', section: 'serials', label: 'جست‌وجوی سریال', icon: ScanSearch, category: 'موجودی و انبارگردانی' },
+    { key: 'supplierlist', label: 'تأمین‌کنندگان', icon: UsersRound, category: 'خرید' },
+    { key: 'purchases', section: 'invoice-list', label: 'فاکتورهای خرید', icon: ClipboardList, category: 'خرید' },
+    { key: 'purchases', section: 'service-list', label: 'فاکتورهای خرید خدمات', icon: FileText, category: 'خرید' },
+    { key: 'notelist', label: 'اعلامیه‌های بدهکار و بستانکار', icon: FileSpreadsheet, category: 'خرید' },
   ],
-  //: هشت ردیفِ اول تبِ صفحه‌اند نه صفحه‌ی جدا. بدونِ این‌ها، تبی که `kind: 'list'`
-  //: می‌گیرد از کارتِ «عملیات» بیرون می‌رود و در «فهرست» هم نمی‌آید — چون این گروه
-  //: `LIST_MENUS` دارد و منوی گروه بر `sectionLists` مقدم است. سه تبِ «طرف حساب‌ها»،
-  //: «سنین مطالبات» و «بخش‌بندی» دقیقاً به همین شکل بالای ۱۰۲۴px بی‌راه شدند.
+  //: کلید باید **دقیقاً** `heading`ِ گروهِ ناوبری باشد، نه نامِ ماژول: هم `ModulePanels` و هم
+  //: کشوی موبایل با `group.heading` این نگاشت را می‌خوانند. تا روزی این‌جا «فروش» بود در حالی که
+  //: heading «مشتریان و فروش» است، و هر دوازده صفحه‌ی فهرستِ فروش از هیچ عرضی باز نمی‌شدند.
+  //:
+  //: تب‌های «اشخاص» و «باشگاه» تبِ صفحه‌اند نه صفحه‌ی جدا. بدونِ ردیفشان، تبی که `kind: 'list'`
+  //: می‌گیرد از کارتِ «عملیات» بیرون می‌رود و در «فهرست» هم نمی‌آید — «طرف حساب‌ها»، «سنین
+  //: مطالبات» و «بخش‌بندی» یک بار دقیقاً همین‌طور بالای ۱۰۲۴px بی‌راه شدند (قاعده‌ی R13).
+  //:
+  //: **دو فهرستِ اشخاص، دو نگاه:** «طرف حساب‌ها» شناسنامه است (نقش، گروه، محل، تلفن) و «مانده و
+  //: اعتبار اشخاص» مالی (مانده، سقفِ اعتبار). تا امروز هر دو «طرف حساب‌ها» نام داشتند و در دو کارتِ
+  //: جدا بودند؛ کنارِ هم با یک نام، کاربر نمی‌فهمید کدام را باز کند.
   'مشتریان و فروش': [
-    { key: 'contacts', section: 'contacts', label: 'طرف حساب‌ها', icon: UsersRound },
-    { key: 'contacts', section: 'aging', label: 'سنین مطالبات', icon: CalendarClock },
-    { key: 'crm', section: 'leads', label: 'سرنخ‌ها', icon: Target },
-    { key: 'crm', section: 'activities', label: 'پیگیری‌ها', icon: CalendarClock },
-    { key: 'crm', section: 'segments', label: 'بخش‌بندی', icon: PieChart },
-    { key: 'crm', section: 'tiers', label: 'سطوح باشگاه', icon: Medal },
-    { key: 'crm', section: 'rewards', label: 'جوایز', icon: Ticket },
-    { key: 'crm', section: 'birthdays', label: 'تولدها', icon: Cake },
-    { key: 'saleslist', label: 'فاکتورهای فروش', icon: ClipboardList },
-    { key: 'quotationlist', label: 'پیش‌فاکتورها', icon: FileText },
-    { key: 'returnlist', label: 'فاکتورهای برگشتی', icon: Undo2 },
-    { key: 'notelist', label: 'اعلامیه‌های بدهکار و بستانکار', icon: FileSpreadsheet },
-    { key: 'commissionrulelist', label: 'قواعد پورسانت', icon: Wallet },
-    { key: 'commissionrunlist', label: 'محاسبه‌های پورسانت', icon: Calculator },
-    { key: 'customslist', label: 'اظهارنامه‌های گمرکی', icon: Ship },
-    { key: 'saletypelist', label: 'انواع فروش', icon: Tags },
-    { key: 'priceannouncelist', label: 'اعلامیه‌های قیمت', icon: FileSpreadsheet },
-    { key: 'bundlelist', label: 'بسته‌های محصول', icon: Boxes },
-    { key: 'pricingfactorlist', label: 'تخفیف‌ها و عوامل افزاینده', icon: Percent },
-    { key: 'discountgrouplist', label: 'گروه‌های کالای تخفیف', icon: Layers },
+    { key: 'saleslist', label: 'فاکتورهای فروش', icon: ClipboardList, category: 'اسناد فروش' },
+    { key: 'quotationlist', label: 'پیش‌فاکتورها', icon: FileText, category: 'اسناد فروش' },
+    { key: 'returnlist', label: 'فاکتورهای برگشتی', icon: Undo2, category: 'اسناد فروش' },
+    { key: 'notelist', label: 'اعلامیه‌های بدهکار و بستانکار', icon: FileSpreadsheet, category: 'اسناد فروش' },
+    { key: 'installmentplans', label: 'قراردادهای اقساطی', icon: CalendarClock, category: 'اسناد فروش' },
+    { key: 'allinstallments', label: 'همه اقساط', icon: ListChecks, category: 'اسناد فروش' },
+    { key: 'contactlist', label: 'طرف حساب‌ها', icon: UsersRound, category: 'اشخاص' },
+    { key: 'contacts', section: 'contacts', label: 'مانده و اعتبار اشخاص', icon: Scale, category: 'اشخاص' },
+    { key: 'contacts', section: 'aging', label: 'سنین مطالبات', icon: Hourglass, category: 'اشخاص' },
+    { key: 'relatedpeople', label: 'افراد مرتبط', icon: Contact2, category: 'اشخاص' },
+    { key: 'crm', section: 'leads', label: 'سرنخ‌ها', icon: Target, category: 'باشگاه مشتریان' },
+    { key: 'crm', section: 'activities', label: 'پیگیری‌ها', icon: PhoneCall, category: 'باشگاه مشتریان' },
+    { key: 'crm', section: 'segments', label: 'بخش‌بندی', icon: PieChart, category: 'باشگاه مشتریان' },
+    { key: 'crm', section: 'tiers', label: 'سطوح باشگاه', icon: Medal, category: 'باشگاه مشتریان' },
+    { key: 'crm', section: 'rewards', label: 'جوایز', icon: Ticket, category: 'باشگاه مشتریان' },
+    { key: 'crm', section: 'birthdays', label: 'تولدها', icon: Cake, category: 'باشگاه مشتریان' },
+    { key: 'commissionrulelist', label: 'قواعد پورسانت', icon: Wallet, category: 'پورسانت و گمرک' },
+    { key: 'commissionrunlist', label: 'محاسبه‌های پورسانت', icon: Calculator, category: 'پورسانت و گمرک' },
+    { key: 'customslist', label: 'اظهارنامه‌های گمرکی', icon: Ship, category: 'پورسانت و گمرک' },
+    { key: 'saletypelist', label: 'انواع فروش', icon: Tags, category: DEFINITIONS_SECTION },
+    { key: 'priceannouncelist', label: 'اعلامیه‌های قیمت', icon: Megaphone, category: DEFINITIONS_SECTION },
+    { key: 'bundlelist', label: 'بسته‌های محصول', icon: Boxes, category: DEFINITIONS_SECTION },
+    { key: 'pricingfactorlist', label: 'تخفیف‌ها و عوامل افزاینده', icon: Percent, category: DEFINITIONS_SECTION },
+    { key: 'discountgrouplist', label: 'گروه‌های کالای تخفیف', icon: Layers, category: DEFINITIONS_SECTION },
+    { key: 'contactgrouplist', label: 'گروه‌های طرف حساب', icon: Group, category: DEFINITIONS_SECTION },
+    { key: 'geolist', label: 'محل‌های جغرافیایی', icon: MapPin, category: DEFINITIONS_SECTION },
   ],
+  //: فقط دفترهای سطحِ شرکت. سفارش‌ها و مرجوعی‌های پخش/بازار تا ۱۴۰۵/۰۷/۰۶ این‌جا بودند؛ حالا
+  //: تب‌های فهرستِ صفحه‌ی خودشان‌اند و در کارتِ «فهرست»ِ همان ماژول می‌آیند (`listSections`).
   'تنظیمات': [
-    { key: 'distributor', section: 'orders', label: 'سفارش‌های پخش', icon: ClipboardList },
-    { key: 'distributor', section: 'returns', label: 'مرجوعی‌های پخش', icon: Undo2 },
-    { key: 'distributor', section: 'commission', label: 'کمیسیون پخش', icon: Percent },
-    { key: 'marketplace', section: 'orders', label: 'سفارش‌های من', icon: ClipboardList },
-    { key: 'marketplace', section: 'returns', label: 'مرجوعی‌های من', icon: Undo2 },
     { key: 'backuplist', label: 'نسخه‌های پشتیبانی و بازیابی', icon: DatabaseBackup },
     { key: 'userlist', label: 'کاربران', icon: UsersRound },
     { key: 'fiscalyearlist', label: 'سال‌های مالی', icon: CalendarRange },
     { key: 'numberinglist', label: 'روش‌های شماره‌گذاری', icon: Hash },
   ],
-  //: «حسابداری» — دفترهایی که هیچ صفحه‌ی عملیاتی تمامشان را نشان نمی‌دهد: اسناد و
-  //: دوره‌های بسته‌شده. «فهرست حساب‌ها» و «تفصیلی‌های سایر» در بازچینیِ ۱۴۰۵/۰۷/۰۳ رفتند:
-  //: درختواره و برگه‌ی تفصیلی خودشان دفترِ کاملِ همان داده‌اند (دو نمای یک داده نمی‌سازیم).
+  //: «حسابداری» — دفترهایی که هیچ صفحه‌ی عملیاتی تمامشان را نشان نمی‌دهد: اسناد، دوره‌های
+  //: بسته‌شده، و مراکزِ هزینه (از «شرکت» آمد). «فهرست حساب‌ها» و «تفصیلی‌های سایر» در بازچینیِ
+  //: ۱۴۰۵/۰۷/۰۳ رفتند: درختواره و برگه‌ی تفصیلی خودشان دفترِ کاملِ همان داده‌اند.
   'حسابداری': [
     { key: 'entrylist', label: 'اسناد حسابداری', icon: FileStack },
     { key: 'periodcloselist', label: 'دوره‌های بسته‌شده', icon: Archive },
+    { key: 'costcenterlist', label: 'مراکز هزینه', icon: Target },
   ],
-  //: «دریافت و پرداخت» — دفترِ رسیدها و اعلامیه‌ها. پیش‌تر تبِ ماژولِ «اشخاص» بود؛
-  //: داده‌ی این ماژول در ماژولِ دیگری زندگی می‌کرد.
+  //: «دریافت و پرداخت» — همان دسته‌های کارتِ «عملیات». «تراکنش‌های شریک» از «شرکت» آمد.
   'دریافت و پرداخت': [
-    { key: 'treasuryledger', label: 'دریافت‌ها و پرداخت‌ها', icon: HandCoins },
-    { key: 'paymentnoticelist', label: 'اعلامیه‌های پرداخت', icon: HandCoins },
-    { key: 'checkbooklist', label: 'دسته‌چک‌ها', icon: BookMarked },
-    { key: 'posterminallist', label: 'دستگاه‌های کارتخوان', icon: CreditCard },
-    { key: 'possettlelist', label: 'تسویه‌های کارتخوان', icon: CreditCard },
-    //: «چه عملیاتی کِی روی چه چکی» — نمای دومِ دامنه‌ی چک، در برابرِ
-    //: «جستجوی چک» که می‌گوید الان چه داریم و وضعیتشان چیست.
-    { key: 'checkoplist', label: 'عملیات چک', icon: History },
+    { key: 'treasuryledger', label: 'دریافت‌ها و پرداخت‌ها', icon: HandCoins, category: DAILY_SECTION },
+    { key: 'paymentnoticelist', label: 'اعلامیه‌های پرداخت', icon: Receipt, category: DAILY_SECTION },
     //: تسویه‌ی طرف مقابل رابطه است نه گردشِ پول، پس دفترِ خودش را دارد و در
     //: «دریافت‌ها و پرداخت‌ها» قاطیِ رسیدها نمی‌شود.
-    { key: 'contactsettlelist', label: 'تسویه‌های طرف مقابل', icon: Scale },
-    { key: 'statementlist', label: 'ردیف‌های صورت‌حساب بانکی', icon: FileSpreadsheet },
-    { key: 'pettylist', label: 'گردش تنخواه', icon: Wallet },
+    { key: 'contactsettlelist', label: 'تسویه‌های طرف مقابل', icon: Scale, category: DAILY_SECTION },
+    { key: 'ownertxnlist', label: 'تراکنش‌های شریک', icon: Coins, category: DAILY_SECTION },
+    //: «چه عملیاتی کِی روی چه چکی» — نمای دومِ دامنه‌ی چک، در برابرِ
+    //: «جست‌وجوی چک» که می‌گوید الان چه داریم و وضعیتشان چیست.
+    { key: 'checkoplist', label: 'عملیات چک', icon: History, category: 'چک و بانک' },
+    { key: 'statementlist', label: 'ردیف‌های صورت‌حساب بانکی', icon: FileSpreadsheet, category: 'چک و بانک' },
+    { key: 'possettlelist', label: 'تسویه‌های کارتخوان', icon: CreditCard, category: 'چک و بانک' },
+    { key: 'pettylist', label: 'گردش تنخواه', icon: Wallet, category: 'چک و بانک' },
+    { key: 'checkbooklist', label: 'دسته‌چک‌ها', icon: BookMarked, category: DEFINITIONS_SECTION },
+    { key: 'posterminallist', label: 'دستگاه‌های کارتخوان', icon: Nfc, category: DEFINITIONS_SECTION },
   ],
   //: «سامانه مؤدیان» — فهرستِ خودکارِ قبلی (چند ردیفِ آخرِ ارسال‌ها) جایش را به منو
   //: داد: تاریخچه‌ی ارسال یک دفترِ قانونی است و فیلتر و جست‌وجو و خروجی می‌خواهد،
   //: نه یک پیش‌نمایشِ چندردیفی.
-  //: «حقوق و دستمزد» — دفترِ نظیرِ «قرارداد جدید». بقیه‌ی منوهای این ماژول
+  //: «حقوق و دستمزد» — دفترِ نظیرِ «قرارداد». بقیه‌ی منوهای این ماژول
   //: خودشان فهرستِ خودشان را دارند (نگاهی به OPS_LIST_MAP).
   'حقوق و دستمزد': [
     { key: 'payroll', section: 'staff', label: 'پرسنل و احکام', icon: UsersRound },
@@ -283,7 +299,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
   ],
   //: «پیمانکاری» — هر چهار فهرست، هر پنج فازِ ماژول تمام شد (PROJECT_OVERVIEW §۱۰).
   'پیمانکاری': [
-    { key: 'contractinglist', label: 'پیمان‌ها', icon: FileSignature },
+    { key: 'contractinglist', label: 'پیمان‌ها', icon: Handshake },
     { key: 'contractingamendmentlist', label: 'متمم‌های پیمان', icon: FilePenLine },
     { key: 'contractingstatementlist', label: 'صورت وضعیت‌های دریافتی', icon: Receipt },
     { key: 'contractingsettlementlist', label: 'تسویه‌حساب‌های پیمان', icon: HandCoins },
@@ -294,18 +310,10 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'assurancefindinglist', label: 'یافته‌های حسابرسی', icon: ListChecks },
     { key: 'assurancerunlist', label: 'تاریخچه بررسی‌ها', icon: History },
   ],
-  //: «شرکت» — سه دسته پشتِ‌هم: تبادل و ساختِ گزارش، گزارش‌های آماده، و فهرستِ
-  //: داده‌های پایه. ترتیب همان است که کاربر تعیین کرد.
-  'شرکت': [
+  //: «گزارش و ابزار» (جانشینِ «شرکت») — دفترِ گزارش‌های ساخته‌شده و رویدادهای تقویم. بقیه‌ی
+  //: فهرست‌های «شرکت» به ماژولِ داده‌ی خودشان رفتند.
+  'گزارش و ابزار': [
     { key: 'dynamicreports', label: 'گزارش‌های پویا', icon: LayoutList },
-    { key: 'contactlist', label: 'طرف حساب‌ها', icon: UsersRound },
-    { key: 'ownertxnlist', label: 'تراکنش‌های شریک', icon: HandCoins },
-    { key: 'relatedpeople', label: 'افراد مرتبط', icon: Contact2 },
-    { key: 'installmentplans', label: 'قراردادهای اقساطی', icon: CalendarClock },
-    { key: 'allinstallments', label: 'همه اقساط', icon: ListChecks },
-    { key: 'costcenterlist', label: 'مراکز هزینه', icon: Target },
-    { key: 'geolist', label: 'محل‌های جغرافیایی', icon: MapPin },
-    { key: 'contactgrouplist', label: 'گروه‌های طرف حساب', icon: Tags },
     { key: 'calendarlist', label: 'رویدادهای تقویم', icon: CalendarDays },
   ],
 }
@@ -338,10 +346,10 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   contactsettlelist: 'دریافت و پرداخت',
   statementlist: 'دریافت و پرداخت',
   pettylist: 'دریافت و پرداخت',
-  geolist: 'شرکت',
-  ownertxnlist: 'شرکت',
-  contactgrouplist: 'شرکت',
-  calendarlist: 'شرکت',
+  geolist: 'مشتریان و فروش',
+  ownertxnlist: 'دریافت و پرداخت',
+  contactgrouplist: 'مشتریان و فروش',
+  calendarlist: 'گزارش و ابزار',
   numberinglist: 'تنظیمات',
   contractlist: 'حقوق و دستمزد',
   payslipledger: 'حقوق و دستمزد',
@@ -357,23 +365,23 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   budgetlist: 'حسابداری',
   currencylist: 'حسابداری',
   periodcloselist: 'حسابداری',
+  costcenterlist: 'حسابداری',
   backuplist: 'تنظیمات',
   userlist: 'تنظیمات',
   fiscalyearlist: 'تنظیمات',
-  dataexport: 'شرکت',
-  dataimport: 'شرکت',
-  reportbuilder: 'شرکت',
-  dynamicreports: 'شرکت',
-  dayactivity: 'شرکت',
-  mgmtreports: 'شرکت',
-  usagereport: 'شرکت',
-  contactlist: 'شرکت',
+  dataexport: 'گزارش و ابزار',
+  dataimport: 'گزارش و ابزار',
+  reportbuilder: 'گزارش و ابزار',
+  dynamicreports: 'گزارش و ابزار',
+  dayactivity: 'گزارش و ابزار',
+  mgmtreports: 'گزارش و ابزار',
+  usagereport: 'گزارش و ابزار',
+  contactlist: 'مشتریان و فروش',
   //: همان صفحه‌ی طرف‌حساب‌ها با نقشِ تأمین‌کننده — فهرستِ گروهِ انبار، نه نمای دوم.
   supplierlist: 'تامین‌کنندگان و انبار',
-  relatedpeople: 'شرکت',
-  installmentplans: 'شرکت',
-  allinstallments: 'شرکت',
-  costcenterlist: 'شرکت',
+  relatedpeople: 'مشتریان و فروش',
+  installmentplans: 'مشتریان و فروش',
+  allinstallments: 'مشتریان و فروش',
 }
 
 /**
@@ -452,7 +460,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   integrity: 'view',
   reports: 'view',
 
-  // ── شرکت ──
+  // ── اشخاص، اقساط، مرکز هزینه و ابتدا/پایانِ سال (پیش‌تر ماژولِ «شرکت») ──
   //: «افراد مرتبط» دفترِ دومِ همین عملیات است؛ صاحبِ دیگری ندارد.
   contactnew: ['contactlist', 'relatedpeople'],
   //: الگوی مرجعِ این قاعده. «همه اقساط» نمای ردیف‌به‌ردیفِ همان قراردادهاست.
@@ -465,7 +473,7 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   openingops: 'none', //: راهنمای مسیر
   yearendops: 'none',
 
-  //: نُه گزینه‌ای که با دامنه‌دارشدنِ کارتِ فهرست به «عملیات» آمدند.
+  //: «گزارش و ابزار» — گزینه‌هایی که با دامنه‌دارشدنِ کارتِ فهرست به «عملیات» آمدند.
   dataexport: 'none',
   dataimport: 'none',
   reportbuilder: 'dynamicreports', //: دفترِ همان چیزی که می‌سازد

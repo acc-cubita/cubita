@@ -11,7 +11,8 @@ import {
   type ListMenuItem,
   type ListRow,
 } from './moduleLists'
-import { menuEntryVisible, navSections, type NavGroup } from '../lib/navModel'
+import { menuCategories, menuEntryVisible, navSections, type NavGroup } from '../lib/navModel'
+import { DEFAULT_COLLAPSED_SECTIONS } from '../lib/menuSections'
 import { useMenuOrder, type MenuOrderApi } from '../lib/menuOrder'
 import type { PageKey } from './Sidebar'
 
@@ -32,6 +33,24 @@ import type { PageKey } from './Sidebar'
  */
 
 const COLLAPSE_KEY = 'cubita.modulePanels.collapsed'
+//: بازوبسته‌ی هر دسته، جدا از دو کارت. فقط انتخابِ صریحِ کاربر ذخیره می‌شود؛ نبودنِ کلید یعنی پیش‌فرض
+//: (`DEFAULT_COLLAPSED_SECTIONS`).
+const CATEGORY_KEY = 'cubita.modulePanels.categories'
+
+type CategoryState = Record<string, boolean>
+
+function loadCategories(): CategoryState {
+  try {
+    const raw = localStorage.getItem(CATEGORY_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : null
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === 'boolean')) as CategoryState
+    }
+  } catch {
+    // ترجیحِ خراب نباید منو را بشکند — همان پیش‌فرض.
+  }
+  return {}
+}
 
 /** آیا این صفحه جایی از منوهای این گروه هست — صفحه‌ی گروه، فهرستش، یا ورودیِ عملیاتش؟ */
 const groupHas = (g: NavGroup, page: PageKey) =>
@@ -98,6 +117,7 @@ export function ModulePanels({
   token: string
 }) {
   const [collapsed, setCollapsed] = useState<Collapsed>(loadCollapsed)
+  const [categories, setCategories] = useState<CategoryState>(loadCategories)
   const mo = useMenuOrder()
   const toggle = (which: keyof Collapsed) =>
     setCollapsed((c) => {
@@ -143,6 +163,54 @@ export function ModulePanels({
   //: دامنه‌های ترتیب — هر فهرستی که روی کارت می‌آید یکی. نامِ گروه و نه صفحه، چون همان منوی
   //: گروه از هر صفحه‌ی آن دیده می‌شود و باید یک ترتیب داشته باشد.
   const gk = group?.heading ?? page
+
+  /**
+   * دسته‌ی بازوبسته. بسته‌بودن ترجیح است نه قفل: انتخابِ صریحِ کاربر همیشه می‌برد، و بی آن
+   * «تعریف‌ها» بسته است **مگر** صفحه‌ی فعال داخلش باشد — کسی که از جست‌وجو به «کالاها» رسیده
+   * نباید ردیفِ خودش را زیرِ یک دسته‌ی بسته گم کند. دسته‌ی بسته‌ای که صفحه‌ی فعال را دارد نشان
+   * می‌گیرد (`has-current`)، همان کارِ نقطه‌ی آکاردئونِ کشو.
+   */
+  const category = (card: 'ops' | 'list', title: string | null, count: number, hasCurrent: boolean) => {
+    if (!title) return { collapsed: false, head: null }
+    const id = `${card}:${gk}:${title}`
+    const isCollapsed = categories[id] ?? (DEFAULT_COLLAPSED_SECTIONS.has(title) && !hasCurrent)
+    const head = (
+      <CategoryHead
+        key={`h:${title}`}
+        title={title}
+        count={count}
+        collapsed={isCollapsed}
+        marked={isCollapsed && hasCurrent}
+        onToggle={() =>
+          setCategories((c) => {
+            const next = { ...c, [id]: !isCollapsed }
+            try {
+              localStorage.setItem(CATEGORY_KEY, JSON.stringify(next))
+            } catch {
+              // ذخیره‌نشدنِ ترجیح مهم نیست؛ منو کار می‌کند.
+            }
+            return next
+          })
+        }
+      />
+    )
+    return { collapsed: isCollapsed, head }
+  }
+
+  /** منوی گروه (`OPS_MENUS`/`LIST_MENUS`) دسته‌به‌دسته. منوی بی‌دسته همان فهرستِ یک‌دستِ قبلی است. */
+  const categorizedMenu = (card: 'ops' | 'list', entries: ListMenuItem[], scope: string) => {
+    const cats = menuCategories(entries)
+    return cats.map((cat) => {
+      const hasCurrent = cat.items.some((e) => menuEntryActive(e, page, activeSection))
+      const { collapsed: shut, head } = cats.length > 1 ? category(card, cat.title, cat.items.length, hasCurrent) : { collapsed: false, head: null }
+      return (
+        <Fragment key={cat.title ?? ''}>
+          {head}
+          {!shut && menuButtons(cat.items, page, activeSection, onSelectSection, onNavigate, mo, scope)}
+        </Fragment>
+      )
+    })
+  }
   const secOps = (p: PageKey) => `sec-ops:${p}`
   const opsScopes = opsMenu
     ? [`ops:${gk}`]
@@ -177,19 +245,37 @@ export function ModulePanels({
             <ChevronRight size={15} className="mod-panel-chev" />
           </button>
           <div className="mod-panel-body">
-            {opsMenu && menuButtons(opsMenu, page, activeSection, onSelectSection, onNavigate, mo, `ops:${gk}`)}
+            {opsMenu && categorizedMenu('ops', opsMenu, `ops:${gk}`)}
             {/* صفحه‌های هم‌گروه، و زیرِ صفحه‌ی فعال بخش‌های خودش — همان چیزی که
                 پیش‌تر دراپ‌داونِ نوارِ بالا نشان می‌داد، حالا این‌جا. */}
             {!opsMenu &&
               pageSections.map((sec) => {
-                const pageKeys = sec.items.map((p) => p.key)
+                const pageKeys = sec.items.filter((p) => !p.guide).map((p) => p.key)
+                //: تیترِ دسته فقط وقتی گروه چند دسته دارد؛ گروهِ یک‌دست همان فهرستِ قبلی است.
+                const titled = sec.title !== null && pageSections.filter((s) => s.title !== null).length > 1
+                const { collapsed: shut, head } = titled
+                  ? category('ops', sec.title, sec.items.length, sec.items.some((p) => p.key === page))
+                  : { collapsed: false, head: null }
                 return (
                   <Fragment key={sec.title ?? ''}>
-                    {/* تیترِ دسته فقط وقتی گروه چند دسته دارد؛ گروهِ یک‌دست همان فهرستِ قبلی است. */}
-                    {sec.title && pageSections.length > 1 && (
-                      <div className="mod-section-label">{sec.title}</div>
-                    )}
-                    {sec.items.map((it) => {
+                    {head}
+                    {!shut && sec.items.map((it) => {
+                      //: «مسیرِ کار» ردیفِ هم‌وزنِ کارها نیست؛ پیوندِ کم‌رنگِ بالای کارت است.
+                      if (it.guide) {
+                        const on = it.key === page
+                        return (
+                          <button
+                            key={it.key}
+                            type="button"
+                            className={`mod-guide${on ? ' active' : ''}`}
+                            aria-current={on ? 'page' : undefined}
+                            onClick={() => onNavigate(it.key)}
+                          >
+                            {it.icon}
+                            <span>{it.label}</span>
+                          </button>
+                        )
+                      }
                       // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
                       // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
                       // مستقیم در سطحِ اول می‌نشینند.
@@ -274,7 +360,7 @@ export function ModulePanels({
         <div className="mod-panel-body">
           {listMenu?.length ? (
             // هر ورودی صفحه‌ی همان فهرست را باز می‌کند (یا تبِ آن، اگر `section` دارد).
-            menuButtons(listMenu, page, activeSection, onSelectSection, onNavigate, mo, `list:${gk}`)
+            categorizedMenu('list', listMenu, `list:${gk}`)
           ) : sectionLists.length > 0 ? (
             sectionButtons(sectionLists, activeSection, onSelectSection, mo, `sec-list:${page}`)
           ) : (
@@ -433,6 +519,38 @@ function MenuItem({
         </span>
       )}
     </div>
+  )
+}
+
+/**
+ * تیترِ دسته — دکمه‌ی بازوبسته. بسته که باشد تعدادِ ردیف‌هایش را می‌گوید، تا کاربر بداند زیرش چیزی هست
+ * و چقدر؛ `marked` یعنی صفحه‌ی فعال همین زیر است.
+ */
+function CategoryHead({
+  title,
+  count,
+  collapsed,
+  marked,
+  onToggle,
+}: {
+  title: string
+  count: number
+  collapsed: boolean
+  marked: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className={`mod-section-label${collapsed ? ' collapsed' : ''}${marked ? ' has-current' : ''}`}
+      aria-expanded={!collapsed}
+      title={collapsed ? `بازکردنِ «${title}»` : `جمع‌کردنِ «${title}»`}
+      onClick={onToggle}
+    >
+      <ChevronDown size={13} className="mod-section-chev" aria-hidden="true" />
+      <span className="mod-section-title">{title}</span>
+      {collapsed && <span className="mod-section-count">{count.toLocaleString('fa-IR')}</span>}
+    </button>
   )
 }
 

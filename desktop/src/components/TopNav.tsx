@@ -14,7 +14,17 @@ import {
   CheckCircle2,
   Circle,
 } from 'lucide-react'
-import { buildNav, groupLanding, menuEntryVisible, navSections, orderNavGroups, type PageKey } from '../lib/navModel'
+import {
+  buildNav,
+  groupBarLabel,
+  groupEntry,
+  groupLanding,
+  menuCategories,
+  menuEntryVisible,
+  navSections,
+  orderNavGroups,
+  type PageKey,
+} from '../lib/navModel'
 import { setExperience, useExperienceMode, type ExperienceMode } from '../lib/experienceMode'
 import { updateProfile } from '../api'
 import { LIST_MENUS, OPS_MENUS, menuEntryActive } from './moduleLists'
@@ -280,9 +290,10 @@ export function TopNav({
               در کارتِ «عملیات» باز می‌شوند — یک جا، نه دو جا. */}
           {groups.map((group) => {
             const hasActive = group.items.some((i) => i.key === active)
-            const first = group.items[0]
-            // گروهِ تک‌آیتم نامِ خودِ آیتم را می‌گیرد؛ بقیه نامِ ماژول را.
-            const label = group.items.length === 1 ? first.label : group.heading
+            //: اولین *کار*ِ گروه — صفحه‌ی «مسیرِ کار» مقصدِ کلیک روی نامِ ماژول نیست.
+            const first = groupEntry(group)
+            //: گروهِ ذاتاً تک‌صفحه نامِ همان صفحه را می‌گیرد؛ بقیه نامِ ماژول را (`groupBarLabel`).
+            const label = groupBarLabel(group)
             // نشانِ خوانده‌نشده روی نامِ ماژول می‌نشیند، چون آیتمِ بازار دیگر
             // در نوار دیده نمی‌شود.
             const badgeKey = group.items.find(
@@ -469,19 +480,28 @@ export function TopNav({
                         {lists.length > 0 && <div className="mob-section-label">عملیات</div>}
                         {/* منوی کار‌به‌کار («تامین‌کنندگان و انبار»): هر ردیف یک کار است که
                             ممکن است تبی از صفحه‌ی «خرید» یا «انبار» باشد. */}
-                        {opsMenu?.map((entry) => {
-                          const Icon = entry.icon
-                          return (
-                            <MobileRow
-                              key={`${entry.key}:${entry.section ?? ''}`}
-                              level="item"
-                              icon={<Icon size={18} />}
-                              label={entry.label}
-                              active={menuEntryActive(entry, active, curSection)}
-                              onClick={() => go(entry.key, entry.section)}
-                            />
-                          )
-                        })}
+                        {opsMenu &&
+                          menuCategories(opsMenu).map((cat, _i, all) => (
+                            <Fragment key={cat.title ?? ''}>
+                              {/* همان دسته‌های کارتِ «عملیات»ِ دسکتاپ («رسید و حواله»، «تعریف‌ها»، …). */}
+                              {cat.title && all.length > 1 && (
+                                <div className="mob-section-label mob-section-label--sub">{cat.title}</div>
+                              )}
+                              {cat.items.map((entry) => {
+                                const Icon = entry.icon
+                                return (
+                                  <MobileRow
+                                    key={`${entry.key}:${entry.section ?? ''}`}
+                                    level="item"
+                                    icon={<Icon size={18} />}
+                                    label={entry.label}
+                                    active={menuEntryActive(entry, active, curSection)}
+                                    onClick={() => go(entry.key, entry.section)}
+                                  />
+                                )
+                              })}
+                            </Fragment>
+                          ))}
                         {!opsMenu &&
                           navSections(group.items).map((sec, _i, all) => (
                             <Fragment key={sec.title ?? ''}>
@@ -566,19 +586,26 @@ export function TopNav({
                         {/* منوی «فهرست»ِ همین گروه. کارتِ فهرست زیرِ ۱۰۲۴px پنهان است، پس
                             بدونِ این‌ها صفحه‌های فهرست روی موبایل از هیچ راهی باز نمی‌شدند. */}
                         {lists.length > 0 && <div className="mob-section-label">فهرست</div>}
-                        {lists.map((item) => {
-                          const Icon = item.icon
-                          return (
-                            <MobileRow
-                              key={`${item.key}:${item.section ?? ''}`}
-                              level="item"
-                              icon={<Icon size={16} />}
-                              label={item.label}
-                              active={menuEntryActive(item, active, curSection)}
-                              onClick={() => go(item.key, item.section)}
-                            />
-                          )
-                        })}
+                        {menuCategories(lists).map((cat, _i, all) => (
+                          <Fragment key={cat.title ?? ''}>
+                            {cat.title && all.length > 1 && (
+                              <div className="mob-section-label mob-section-label--sub">{cat.title}</div>
+                            )}
+                            {cat.items.map((item) => {
+                              const Icon = item.icon
+                              return (
+                                <MobileRow
+                                  key={`${item.key}:${item.section ?? ''}`}
+                                  level="item"
+                                  icon={<Icon size={16} />}
+                                  label={item.label}
+                                  active={menuEntryActive(item, active, curSection)}
+                                  onClick={() => go(item.key, item.section)}
+                                />
+                              )
+                            })}
+                          </Fragment>
+                        ))}
                       </div>
                     </div>
                   </div>
