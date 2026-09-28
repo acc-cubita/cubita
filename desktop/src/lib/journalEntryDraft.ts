@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AccountCache } from '../electron.d'
 import {
   ApiError,
@@ -19,6 +19,7 @@ import { usePersistentState } from './usePersistentState'
 //: (`journalLineOps.test.ts`). محیطِ vitest این پروژه `node` است.
 import * as ops from './journalLineOps'
 import { rememberDescriptions } from './descriptionMemory'
+import { checkJournalDate } from './journalDateValidation'
 
 export interface JournalDraftLine {
   accountId: string
@@ -70,6 +71,7 @@ export function useJournalEntryDraft({
   const [lines, setLines] = usePersistentState<JournalDraftLine[]>('cubita.draft.journal.lines', [emptyLine(), emptyLine()])
   const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
   const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.journal.costCenterId', '')
   const [analytics, setAnalytics] = useState<AnalyticAccount[]>([])
@@ -211,6 +213,7 @@ export function useJournalEntryDraft({
   const validLineCount = lines.filter(ops.isPostedLine).length
 
   async function submit(): Promise<boolean> {
+    if (submittingRef.current) return false
     setMessage(null)
 
     //: ردیفِ نیمه‌کاره بی‌صدا حذف نمی‌شود — شماره‌ی گریدش گفته می‌شود تا کاربر
@@ -297,11 +300,19 @@ export function useJournalEntryDraft({
       })),
     }
 
+    // پاسخِ سال مالی یک رفت‌وبرگشت اضافه دارد؛ Ctrl+Sِ دوباره نباید دو ردیفِ صف بسازد.
+    submittingRef.current = true
     setSubmitting(true)
     try {
       if (isElectron) {
+        const connection = await checkJournalDate(token, payload.entry_date)
         await window.cubita.queueJournalEntry(payload)
-        setMessage({ text: 'سند در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.', kind: 'ok' })
+        setMessage({
+          text: connection === 'offline'
+            ? 'سرور در دسترس نیست؛ سند در صف محلی ذخیره شد. تاریخ و سال مالی هنگام «هم‌گام‌سازی» بررسی می‌شود.'
+            : 'سند در صف محلی ذخیره شد؛ با «هم‌گام‌سازی» به سرور ارسال می‌شود.',
+          kind: 'ok',
+        })
       } else {
         await createJournalEntryDirect(token, payload)
         setMessage({
@@ -328,6 +339,7 @@ export function useJournalEntryDraft({
       setMessage({ text: rowText ?? (err instanceof Error ? err.message : 'خطای ناشناخته'), kind: 'err' })
       return false
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
