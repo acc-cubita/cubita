@@ -70,4 +70,5 @@ fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8')
 
 run('npm run build')
 run('npm run rebuild-native')
-run(`npx electron-builder --config "${configPath}" ${process.argv.slice(2).join(' ')}`)
+//: همان پوسته‌ی `npm run dist`: Defender گاهی exeِ تازه را قفل می‌کند و جابه‌جاییِ `win-unpacked.tmp` با EPERM می‌افتد.
+run(`node scripts/builder-win-retry.cjs --config "${configPath}" ${process.argv.slice(2).join(' ')}`)

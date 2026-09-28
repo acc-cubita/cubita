@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/{package.json,package-lock.json,scripts/dist-enterprise.mjs}`، `PROJECT_OVERVIEW.md` | انتشارِ دسکتاپ ۱.۹.۳ (ابری + سازمانی)؛ `dist:enterprise` با پوسته‌ی EPERM | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/src/{components/TopNav.tsx,lib/topnavFit.ts,lib/topnavFit.test.ts,App.css}`، `PROJECT_OVERVIEW.md` | نوارِ ماژول‌ها: همبرگر فقط تبلت/گوشی، کوچک‌شدنِ هم‌نسبتِ منو روی دسکتاپ | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/{package.json,package-lock.json,scripts/gen-brand-assets.mjs,src/components/TitleBar.tsx,src/App.css}`، `mobile/{app.json,assets/splash-icon.png}`، `PROJECT_OVERVIEW.md` | انتشارِ دسکتاپِ ابری ۱.۹.۲ و اندروید ۱.۹.۰ (v10) | ۱۴۰۵/۰۷/۰۶ |
 | Codex | یادداشت استقرار/تاریخچه، `_deploy/enterprise-1.9.1/` و کانال سازمانی؛ ادعای انتشار آزاد شد | پس از مرج #236 و تأیید هماهنگی آرش، کانال امضاشده و لینک پایدار سازمانی ۱.۹.۱ منتشر شدند؛ دانلود کامل عمومی و SHA-256/SHA-512، امضای Ed25519 و blockmap پاس؛ هش کانال ابری و سلامت تولید ثابت، پشتیبان نسخهٔ قبل محفوظ؛ بدون استقرار وب/API، مهاجرت یا اجرای دوبارهٔ تست‌ها | ۱۴۰۵/۰۷/۰۶ |
