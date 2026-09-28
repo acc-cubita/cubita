@@ -1,5 +1,6 @@
 // ساختِ همه‌ی دارایی‌های نشانِ کوبیتا («خانه‌ها») از یک هندسه، با کرومیومِ playwright (بی‌وابستگیِ دیگر):
 //   فاوآیکونِ SVGِ وب‌اپ، ادمین و سایت · build/icon.ico · تصویرهای کنار و سرِ نصاب (BMP) · آیکون‌ها و اسپلشِ اپِ موبایل
+//   (هم mobile/assets برای prebuild، هم منابعِ mipmap/drawableِ پروژه‌ی پیش‌ساخته‌ی android/ اگر روی این دستگاه باشد)
 //
 // اجرا از پوشه‌ی desktop:
 //   node scripts/gen-brand-assets.mjs
@@ -7,6 +8,7 @@
 // نشان: هشت خانه‌ی جدول که حرفِ C را می‌سازند؛ خانه‌ی بنفشِ بالا «خانه‌ی فعالِ برگه» است. هندسه در
 // کاشیِ ۱۲۰واحدی است و با desktop/src/components/BrandMark.tsx، website/src/concept/SiteChrome.tsx و
 // mobile/src/ui/BrandMark.tsx یکی است — تغییرش یعنی تغییرِ هر چهار.
+import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 
@@ -25,6 +27,10 @@ const CELLS = [
   [76, 76],
 ]
 const ACTIVE = [76, 24]
+//: اسپلشِ اندروید ۱۲+ آیکون را در دایره‌ای به قطرِ دوسومِ بوم می‌بُرد؛ قطرِ شبکه‌ی خانه‌ها (۰٫۴۴ × √۲ ≈ ۰٫۶۲)
+//: باید درونِ آن بماند وگرنه گوشه‌ی خانه‌ها بریده می‌شود. فورگراندِ adaptive هم (۰٫۴۲) درونِ دایره‌ی امنِ ۶۶ از ۱۰۸ است.
+const SPLASH_FRAC = 0.44
+const ADAPTIVE_FRAC = 0.42
 
 const cellRects = (fill) => CELLS.map(([x, y]) => `<rect x="${x}" y="${y}" width="20" height="20" rx="5" fill="${fill}" />`)
 
@@ -49,6 +55,11 @@ function cellsSvg(size, frac, { mono = false, bg = null } = {}) {
     ${cellRects(fill).join('')}
     <rect x="${ACTIVE[0]}" y="${ACTIVE[1]}" width="20" height="20" rx="5" fill="${mono ? '#ffffff' : VIOLET}" ${mono ? 'fill-opacity="0.55"' : ''} />
   </svg>`
+}
+
+// نسخه‌ی گردِ آیکونِ لانچر (ic_launcher_round): همان کاشی با دایره؛ گوشه‌ی شبکه (۵۱ واحد از مرکز) درونِ شعاعِ ۶۰ است.
+function roundSvg(size) {
+  return tileSvg(size).replace(`<rect width="120" height="120" rx="28" fill="${INK}" />`, `<circle cx="60" cy="60" r="60" fill="${INK}" />`)
 }
 
 // ICO با ورودی‌های PNG (از ویستا به بعد؛ icon.icoِ پیشین هم همین قالب بود و نصابِ NSIS آن را می‌خورد).
@@ -131,6 +142,24 @@ async function shot(w, h, body, css = '') {
 
 const svgPng = async (svg, size) => (await shot(size, size, svg)).png
 
+// WebP (منابعِ mipmapِ اندروید webp‌اند؛ PNG با همان نام کنارشان «منبعِ تکراری» می‌شود).
+async function svgWebp(svg, size) {
+  const png = await svgPng(svg, size)
+  const page = await browser.newPage()
+  const b64 = await page.evaluate(async (b) => {
+    const img = new Image()
+    img.src = `data:image/png;base64,${b}`
+    await img.decode()
+    const c = document.createElement('canvas')
+    c.width = img.width
+    c.height = img.height
+    c.getContext('2d').drawImage(img, 0, 0)
+    return c.toDataURL('image/webp', 1).split(',')[1]
+  }, png.toString('base64'))
+  await page.close()
+  return Buffer.from(b64, 'base64')
+}
+
 const SIDEBAR_CSS = `
   body{background:#0E0B07;color:#FFF7E0;display:flex;flex-direction:column;align-items:center;position:relative}
   .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,199,44,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,199,44,.07) 1px,transparent 1px);background-size:14px 14px;background-position:-1px 6px;-webkit-mask:radial-gradient(120px 150px at 50% 30%,#000,transparent 75%)}
@@ -173,17 +202,35 @@ try {
     // آیکونِ اصلی: خودِ کاشی
     ['icon.png', tileSvg(1024), 1024],
     // فورگراندِ adaptive (اندروید): فقط خانه‌ها، درونِ ناحیه‌ی امن؛ پس‌زمینه از app.json
-    ['android-icon-foreground.png', cellsSvg(1024, 0.42), 1024],
+    ['android-icon-foreground.png', cellsSvg(1024, ADAPTIVE_FRAC), 1024],
     ['android-icon-background.png', `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024"><rect width="1024" height="1024" fill="${MOBILE_BG}"/></svg>`, 1024],
     // مونوکروم (تمِ پویا): خانه‌های سفید؛ خانه‌ی فعال کم‌رنگ‌تر تا از بقیه جدا بماند
-    ['android-icon-monochrome.png', cellsSvg(1024, 0.42, { mono: true }), 1024],
+    ['android-icon-monochrome.png', cellsSvg(1024, ADAPTIVE_FRAC, { mono: true }), 1024],
     // اسپلش: خانه‌ها روی زمینه‌ی اسپلش (app.json)
-    ['splash-icon.png', cellsSvg(1024, 0.62), 1024],
+    ['splash-icon.png', cellsSvg(1024, SPLASH_FRAC), 1024],
     // فاوآیکونِ وب
     ['favicon.png', tileSvg(96), 96],
   ]
   for (const [name, svg, size] of mobile) {
     await writeFile(new URL(`mobile/assets/${name}`, ROOT), await svgPng(svg, size))
+  }
+
+  // پروژه‌ی android/ پیش‌ساخته و بیرون از گیت است و هرگز prebuild نمی‌شود (کلیدِ امضا)، پس آیکونِ لانچر و اسپلشِ
+  // APK از همین منابع می‌آیند، نه از mobile/assets — بی این گام اپ با نشانِ قدیمی ساخته می‌شود.
+  const res = new URL('mobile/android/app/src/main/res/', ROOT)
+  if (existsSync(res)) {
+    const density = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 }
+    for (const [d, k] of Object.entries(density)) {
+      const icon = 48 * k
+      const fg = 108 * k
+      const mip = (name) => new URL(`mipmap-${d}/${name}`, res)
+      await writeFile(mip('ic_launcher.webp'), await svgWebp(tileSvg(icon), icon))
+      await writeFile(mip('ic_launcher_round.webp'), await svgWebp(roundSvg(icon), icon))
+      await writeFile(mip('ic_launcher_foreground.webp'), await svgWebp(cellsSvg(fg, ADAPTIVE_FRAC), fg))
+      await writeFile(mip('ic_launcher_monochrome.webp'), await svgWebp(cellsSvg(fg, ADAPTIVE_FRAC, { mono: true }), fg))
+      await writeFile(new URL(`drawable-${d}/splashscreen_logo.png`, res), await svgPng(cellsSvg(288 * k, SPLASH_FRAC), 288 * k))
+    }
+    console.log('android res: mipmap + splash for 5 densities')
   }
 } finally {
   await browser.close()
