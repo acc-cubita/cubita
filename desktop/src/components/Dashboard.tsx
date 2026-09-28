@@ -11,6 +11,8 @@ import {
 } from '../api'
 import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseCache } from '../electron.d'
 import { isElectron } from '../platform'
+import { referenceAllowed, referenceSyncMessage, runReferenceSync } from '../lib/referenceSync'
+import { outboxErrorText } from '../lib/outboxError'
 import { Sidebar, type PageKey } from './Sidebar'
 import { buildNav, resolveLegacyPage } from '../lib/navModel'
 import { TopNav } from './TopNav'
@@ -476,6 +478,7 @@ export function Dashboard({
   const [checkOutbox, setCheckOutbox] = useState<OutboxEntry[]>([])
   const [syncStatus, setSyncStatus] = useState<string>('')
   const [syncing, setSyncing] = useState(false)
+  const syncingRef = useRef(false)
   // نگهبانِ اجرای یک‌بارِ همگام‌سازیِ خودکارِ بدو ورود (در برابرِ دوباره‌مانت‌شدن).
   const didAutoSyncRef = useRef(false)
 
@@ -496,52 +499,59 @@ export function Dashboard({
 
   async function refreshFromLocalCache() {
     if (isElectron) {
-      setAccounts(await window.cubita.listCachedAccounts())
-      setWarehouses(await window.cubita.listCachedWarehouses())
-      setItems(await window.cubita.listCachedItems())
-      setBankAccounts(await window.cubita.listCachedBankAccounts())
+      setAccounts(referenceAllowed(me.permissions, 'accounts') ? await window.cubita.listCachedAccounts() : [])
+      setWarehouses(referenceAllowed(me.permissions, 'warehouses') ? await window.cubita.listCachedWarehouses() : [])
+      setItems(referenceAllowed(me.permissions, 'items') ? await window.cubita.listCachedItems() : [])
+      setBankAccounts(referenceAllowed(me.permissions, 'bankAccounts') ? await window.cubita.listCachedBankAccounts() : [])
       setJournalOutbox(await window.cubita.listOutbox())
       setInvoiceOutbox(await window.cubita.listSalesInvoiceOutbox())
       setPurchaseOutbox(await window.cubita.listPurchaseInvoiceOutbox())
       setCheckOutbox(await window.cubita.listCheckOutbox())
     } else {
       // در وب صف آفلاین/کش محلی وجود ندارد؛ همه‌چیز مستقیم و زنده از API خوانده می‌شود
-      const [accs, whs, its, banks] = await Promise.all([
-        fetchAccountsLive(token),
-        fetchWarehousesLive(token),
-        fetchItemsWithPricingLive(token),
-        fetchBankAccountsLive(token),
-      ])
-      setAccounts(accs)
-      setWarehouses(whs)
-      setItems(its)
-      setBankAccounts(banks)
+      return runReferenceSync([
+        { key: 'accounts', run: async () => setAccounts(await fetchAccountsLive(token)), onSkipped: () => setAccounts([]) },
+        { key: 'warehouses', run: async () => setWarehouses(await fetchWarehousesLive(token)), onSkipped: () => setWarehouses([]) },
+        { key: 'items', run: async () => setItems(await fetchItemsWithPricingLive(token)), onSkipped: () => setItems([]) },
+        { key: 'bankAccounts', run: async () => setBankAccounts(await fetchBankAccountsLive(token)), onSkipped: () => setBankAccounts([]) },
+      ], me.permissions)
     }
   }
 
-  // silent=true برای همگام‌سازیِ خودکارِ بدو ورود: بی‌سروصدا (بدونِ متنِ خطا/موفقیت)،
-  // ولی چرخِ نشانگر همچنان می‌چرخد تا کاربر بداند در حالِ بارگیری است.
+  // خودکار: موفقیت بی‌سروصداست، اما خطا پنهان نمی‌شود تا فرمِ خالی دلیل و راهِ اقدام داشته باشد.
   async function handleSync(silent = false) {
+    if (syncingRef.current) return
+    syncingRef.current = true
     setSyncing(true)
     if (!silent) setSyncStatus('در حال هم‌گام‌سازی...')
     try {
-      await window.cubita.pullAll()
+      const report = await window.cubita.pullAll(me.permissions)
       const result = await window.cubita.pushOutbox()
-      await refreshFromLocalCache()
       // نسخه‌ی پشتیبانِ محلیِ خودکار پس از هر همگام‌سازیِ موفق (فقط مالک؛ سرور بقیه را ۴۰۳ می‌کند).
       if (me.permissions?.['*']) window.cubita.backupAuto().catch(() => {})
-      if (!silent) setSyncStatus(`sync کامل شد — ارسال‌شده: ${result.pushed}, ناموفق: ${result.failed}`)
+      if (!silent || report.failed.length > 0 || result.failed > 0) setSyncStatus(referenceSyncMessage(report, result))
     } catch (err) {
-      if (!silent) setSyncStatus(`خطا در sync: ${err instanceof Error ? err.message : String(err)}`)
+      setSyncStatus(`هم‌گام‌سازی کامل نشد: ${outboxErrorText(err instanceof Error ? err.message : String(err))}`)
     } finally {
+      // حتی شکستِ push نباید حساب‌های موفقِ pull را از UI پنهان کند.
+      try {
+        await refreshFromLocalCache()
+      } catch (err) {
+        setSyncStatus(`خواندن اطلاعات محلی انجام نشد: ${outboxErrorText(err instanceof Error ? err.message : String(err))}`)
+      }
+      syncingRef.current = false
       setSyncing(false)
     }
   }
 
   useEffect(() => {
-    void refreshFromLocalCache()
+    void refreshFromLocalCache().then((report) => {
+      if (report?.failed.length) setSyncStatus(referenceSyncMessage(report))
+    }).catch((err: unknown) => {
+      setSyncStatus(`دریافت اطلاعات انجام نشد: ${outboxErrorText(err instanceof Error ? err.message : String(err))}`)
+    })
     // در دسکتاپ یک‌بار خودکار همگام‌سازی کن تا کالا/انبار/چارتِ حساب در کش بیاید و
-    // فرم‌های ویزارد بدونِ زدنِ دستیِ «همگام‌سازی» آماده باشند. آفلاین → بی‌سروصدا رد می‌شود.
+    // فرم‌های ویزارد بدونِ زدنِ دستیِ «همگام‌سازی» آماده باشند؛ خطا در نوارِ وضعیت می‌آید.
     if (isElectron && !didAutoSyncRef.current) {
       didAutoSyncRef.current = true
       void handleSync(true)

@@ -29,16 +29,14 @@ function debugLog(msg: string) {
   }
 }
 import {
-  pullAccounts,
-  pullBankAccounts,
-  pullItems,
-  pullWarehouses,
+  pullAll,
   pushOutbox,
   queueCheck,
   queueJournalEntry,
   queuePurchaseInvoice,
   queueSalesInvoice,
 } from './sync.js'
+import type { SyncPermissions } from '../src/lib/referenceSync.js'
 import {
   autoSnapshot,
   backupStatus,
@@ -299,9 +297,9 @@ ipcMain.handle('auth:clearSession', async () => {
 // switch-tenant بدهد تا سرور آن را باطل و یکی برای مستأجرِ مقصد صادر کند).
 ipcMain.handle('auth:currentRefreshToken', () => currentRefreshToken())
 
-ipcMain.handle('sync:pullAll', async () => {
+ipcMain.handle('sync:pullAll', async (_evt, permissions?: SyncPermissions) => {
   const config = { apiBaseUrl: apiBaseUrl, getToken: () => authToken }
-  await Promise.all([pullAccounts(config), pullWarehouses(config), pullItems(config), pullBankAccounts(config)])
+  return pullAll(config, permissions)
 })
 
 ipcMain.handle('sync:pushOutbox', async () => {
