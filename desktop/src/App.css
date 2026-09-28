@@ -14957,6 +14957,34 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .page .ef-table-wrap > table.mg-doc > tbody > tr.mg-next > td { border: 0; }
 }
 
+/* تنظیم شبکه در تنظیمات و در اولین اتصال، پیش از دسترسی به سرور هم قابل استفاده است. */
+.enterprise-network { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.enterprise-network p { margin: 0; overflow-wrap: anywhere; }
+.enterprise-network-safe { display: flex; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--accent-bg); }
+.enterprise-network-safe svg { flex-shrink: 0; }
+.enterprise-network-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.enterprise-network-fields > label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.enterprise-network-fields :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
+.enterprise-network-check { display: flex; align-items: flex-start; gap: 8px; }
+.enterprise-network-check input { flex-shrink: 0; width: auto; margin-block-start: 4px; }
+.enterprise-network-facts { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.enterprise-network-facts > * { min-width: 0; }
+.enterprise-network-preview { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--accent); border-radius: 10px; }
+.enterprise-network-preview h3 { margin: 0; }
+.enterprise-network-preview ul { margin: 0; padding-inline-start: 22px; }
+.enterprise-network-address { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.enterprise-network-address code { overflow-wrap: anywhere; min-width: 0; }
+.enterprise-network-connect { width: 100%; max-width: 620px; margin-block: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.enterprise-network-connect > summary { cursor: pointer; font-weight: 600; }
+.login-form-panel:has(> .enterprise-network-connect) { flex-direction: column; min-width: 0; }
+.enterprise-network-connect[open] > summary { margin-block-end: 18px; }
+.enterprise-network-connect .section-card-header { flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .enterprise-network-fields { grid-template-columns: minmax(0, 1fr); }
+  .enterprise-network :is(button, input, select) { max-width: 100%; }
+  .enterprise-network button { white-space: normal; }
+}
+
 /* ── «اسناد حسابداری» (تمِ اکسلی): گریدِ فهرست در قابِ لغزشِ خودش با سرستون و «جمعِ بازه»ِ چسبنده ──
  * ستون‌ها همان `xl-grid--list`اند؛ این‌جا فقط کلیک‌به‌سند، ردیفِ فعالِ کیبورد و ارتفاعِ خانه‌های کنش. */
 .el-sheet > tbody > tr.acc-row--clickable { cursor: pointer; }
