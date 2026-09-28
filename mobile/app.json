@@ -3,7 +3,7 @@
     "name": "کوبیتا",
     "slug": "cubita",
     "scheme": "cubita",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "ir.cubita.app",
-      "versionCode": 9,
+      "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0b0b0d",

@@ -45,16 +45,8 @@
 }
 
 .titlebar-mark {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, var(--series-1), var(--accent) 60%, var(--series-2));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: var(--fs-xs);
+  display: block;
+  flex-shrink: 0;
 }
 
 .titlebar-title {
