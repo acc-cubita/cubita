@@ -12,7 +12,8 @@ import {
   type ListRow,
 } from './moduleLists'
 import { menuCategories, menuEntryVisible, navSections, type NavGroup, type NavItem } from '../lib/navModel'
-import { DEFAULT_COLLAPSED_SECTIONS, DEFINITION_TITLES } from '../lib/menuSections'
+import { DEFINITION_TITLES } from '../lib/menuSections'
+import { openCategory, toggleCategory } from '../lib/menuAccordion'
 import { mergeMenu, titledCount } from '../lib/moduleMenu'
 import { useMenuOrder, type MenuOrderApi } from '../lib/menuOrder'
 import type { PageKey } from './Sidebar'
@@ -25,31 +26,18 @@ import type { PageKey } from './Sidebar'
  *    که نوارِ تبِ صفحه باز می‌کرد (همان `setSection`)، پس هیچ صفحه‌ای بازنویسی نشد.
  *  - **فهرست:** کارِ ذخیره‌شده‌ی همان عملیات (فاکتورهای ثبت‌شده، اسناد، چک‌ها، …).
  *
- * هر کارت جداگانه جمع‌شدنی است؛ روی نمایشگرِ کوچک، فضای فرم و جدول مهم‌تر از دیدنِ
- * همیشگیِ این دو ستون است. وضعیتِ جمع‌بودن در localStorage می‌ماند تا هر بار تکرار نشود.
+ * دسته‌های منو آکاردئون‌اند (`lib/menuAccordion`): پیش‌فرض همه بسته، و باز کردنِ یکی بقیه را می‌بندد.
  *
  * **ترتیبِ منوها دستِ کاربر است** (`MenuItem`): فلشِ بالا/پایین روی هر ردیف (با hover یا فوکوس)
  * یا Alt+↑/↓ روی خودِ منو. هر فهرست دامنه‌ی خودش را دارد و جابه‌جایی فقط داخلِ همان فهرست است؛
  * ترتیب روی همین دستگاه می‌ماند (`lib/menuOrder`) و «ترتیبِ پیش‌فرض» ته کارت برش می‌گرداند.
  */
 
-//: بازوبسته‌ی هر دسته، جدا از دو کارت. فقط انتخابِ صریحِ کاربر ذخیره می‌شود؛ نبودنِ کلید یعنی پیش‌فرض
-//: (`DEFAULT_COLLAPSED_SECTIONS`).
-const CATEGORY_KEY = 'cubita.modulePanels.categories'
-
-type CategoryState = Record<string, boolean>
-
-function loadCategories(): CategoryState {
-  try {
-    const raw = localStorage.getItem(CATEGORY_KEY)
-    const parsed: unknown = raw ? JSON.parse(raw) : null
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return Object.fromEntries(Object.entries(parsed).filter(([, v]) => typeof v === 'boolean')) as CategoryState
-    }
-  } catch {
-    // ترجیحِ خراب نباید منو را بشکند — همان پیش‌فرض.
-  }
-  return {}
+//: ترجیحِ بازوبسته‌ی قدیمی (هر دسته جدا، در `localStorage`) دیگر خوانده نمی‌شود؛ پاکش می‌کنیم تا نماند.
+try {
+  localStorage.removeItem('cubita.modulePanels.categories')
+} catch {
+  // دسترسی‌نداشتن به storage مهم نیست.
 }
 
 /** آیا این صفحه جایی از منوهای این گروه هست — صفحه‌ی گروه، فهرستش، یا ورودیِ عملیاتش؟ */
@@ -104,7 +92,8 @@ export function ModulePanels({
   groups: NavGroup[]
   token: string
 }) {
-  const [categories, setCategories] = useState<CategoryState>(loadCategories)
+  //: دسته‌ی باز در `lib/menuAccordion` است (حافظه‌ی همین اجرا)؛ این فقط بعد از هر تغییر دوباره می‌کشد.
+  const [, redraw] = useState(0)
   const mo = useMenuOrder()
 
   const sections = MODULE_SECTIONS[page] ?? []
@@ -137,14 +126,13 @@ export function ModulePanels({
   const gk = group?.heading ?? page
 
   /**
-   * دسته‌ی بازوبسته. بسته‌بودن ترجیح است نه قفل: انتخابِ صریحِ کاربر همیشه می‌برد، و بی آن
-   * «تعریف‌ها» بسته است **مگر** صفحه‌ی فعال داخلش باشد — کسی که از جست‌وجو به «کالاها» رسیده
-   * نباید ردیفِ خودش را زیرِ یک دسته‌ی بسته گم کند. دسته‌ی بسته‌ای که صفحه‌ی فعال را دارد نشان
-   * می‌گیرد (`has-current`)، همان کارِ نقطه‌ی آکاردئونِ کشو.
+   * دسته‌ی آکاردئونی: پیش‌فرض بسته، و باز کردنش دسته‌ی بازِ دیگرِ همین ماژول را می‌بندد. دسته‌ی بسته‌ای که
+   * صفحه‌ی فعال را دارد نشان می‌گیرد (`has-current`)، همان کارِ نقطه‌ی آکاردئونِ کشو — کسی که از جست‌وجو به
+   * «کالاها» رسیده می‌بیند ردیفش زیرِ کدام دسته است.
    */
+  const openTitle = openCategory(gk)
   const category = (title: string, count: number, hasCurrent: boolean) => {
-    const id = `${gk}:${title}`
-    const isCollapsed = categories[id] ?? (DEFAULT_COLLAPSED_SECTIONS.has(title) && !hasCurrent)
+    const isCollapsed = openTitle !== title
     const head = (
       <CategoryHead
         key={`h:${title}`}
@@ -152,17 +140,10 @@ export function ModulePanels({
         count={count}
         collapsed={isCollapsed}
         marked={isCollapsed && hasCurrent}
-        onToggle={() =>
-          setCategories((c) => {
-            const next = { ...c, [id]: !isCollapsed }
-            try {
-              localStorage.setItem(CATEGORY_KEY, JSON.stringify(next))
-            } catch {
-              // ذخیره‌نشدنِ ترجیح مهم نیست؛ منو کار می‌کند.
-            }
-            return next
-          })
-        }
+        onToggle={() => {
+          toggleCategory(gk, title)
+          redraw((n) => n + 1)
+        }}
       />
     )
     return { collapsed: isCollapsed, head }
