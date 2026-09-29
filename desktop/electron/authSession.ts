@@ -29,6 +29,9 @@ interface SessionRow {
   me_json: string
 }
 
+let sessionRevision = 0
+let restoreFlight: { revision: number; url: string; promise: Promise<RestoreResult> } | null = null
+
 function readRow(): StoredSession | null {
   const row = getLocalDb().prepare('SELECT access_token, refresh_token, me_json FROM session WHERE id = 1').get() as
     | SessionRow
@@ -45,6 +48,7 @@ function readRow(): StoredSession | null {
 
 /** بعد از ورود/ثبت‌نام/تعیینِ رمز/سوییچِ کسب‌وکار صدا زده می‌شود — نشستِ کامل. */
 export function persistSession(access: string, refresh: string, me: unknown): void {
+  sessionRevision++
   getLocalDb()
     .prepare(
       `INSERT INTO session (id, access_token, refresh_token, me_json, updated_at)
@@ -66,6 +70,7 @@ function writeTokens(access: string, refresh: string): void {
 }
 
 export function clearSession(): void {
+  sessionRevision++
   getLocalDb().prepare('DELETE FROM session WHERE id = 1').run()
 }
 
@@ -88,6 +93,7 @@ async function tryRefresh(apiBaseUrl: string, refreshToken: string): Promise<Ref
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(10_000),
     })
   } catch {
     // fetch خودش throw می‌کند یعنی درخواست اصلاً به سرور نرسید — قطعیِ شبکه،
@@ -108,7 +114,7 @@ async function tryRefresh(apiBaseUrl: string, refreshToken: string): Promise<Ref
 
 async function fetchMe(apiBaseUrl: string, access: string): Promise<unknown | null> {
   try {
-    const res = await fetch(`${apiBaseUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${access}` } })
+    const res = await fetch(`${apiBaseUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(10_000) })
     if (!res.ok) return null
     return await res.json()
   } catch {
@@ -127,11 +133,29 @@ async function fetchMe(apiBaseUrl: string, access: string): Promise<unknown | nu
  *   نشستِ ذخیره‌شده (یا توکنِ تازه‌ای که تا همین‌جا گرفته شد) برمی‌گردد؛ هیچ‌چیز
  *   پاک نمی‌شود.
  */
-export async function restoreSession(config: SessionConfig): Promise<RestoreResult> {
+export function restoreSession(config: SessionConfig): Promise<RestoreResult> {
+  if (restoreFlight?.revision === sessionRevision && restoreFlight.url === config.apiBaseUrl) return restoreFlight.promise
+  const revision = sessionRevision
+  const promise = restoreAttempt(config, revision).finally(() => {
+    if (restoreFlight?.promise === promise) restoreFlight = null
+  })
+  restoreFlight = { revision, url: config.apiBaseUrl, promise }
+  return promise
+}
+
+function currentOfflineSession(): RestoreResult {
+  const session = readRow()
+  return session ? { session, offline: true } : null
+}
+
+async function restoreAttempt(config: SessionConfig, revision: number): Promise<RestoreResult> {
   const stored = readRow()
   if (!stored) return null
 
   const attempt = await tryRefresh(config.apiBaseUrl, stored.refresh_token)
+  // Logout, a new login, tenant/server switch beats an old asynchronous refresh.
+  // Otherwise reconnect could revive a logged-out session or overwrite another office.
+  if (revision !== sessionRevision) return currentOfflineSession()
   if (!attempt.ok) {
     if (attempt.reason === 'invalid') {
       clearSession()
@@ -145,6 +169,7 @@ export async function restoreSession(config: SessionConfig): Promise<RestoreResu
   writeTokens(attempt.access, attempt.refresh)
 
   const me = await fetchMe(config.apiBaseUrl, attempt.access)
+  if (revision !== sessionRevision) return currentOfflineSession()
   if (me === null) {
     return {
       session: { access_token: attempt.access, refresh_token: attempt.refresh, me: stored.me },
@@ -165,6 +190,7 @@ export async function bestEffortLogout(config: SessionConfig): Promise<void> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refresh }),
+      signal: AbortSignal.timeout(10_000),
     })
   } catch {
     // آفلاین یا هر خطای دیگر — خروجِ محلی مستقل از این ادامه دارد.

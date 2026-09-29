@@ -5,6 +5,7 @@
     cubita-server serve      [--home DIR]         # سرویسِ API (WinSW این را اجرا می‌کند)
     cubita-server migrate    [--home DIR]         # مهاجرت‌ها با نقشِ مالک (آپدیت)
     cubita-server uninstall-services [--home DIR] # حذفِ برنامه؛ داده می‌ماند
+    cubita-server service-recover                # شروع محدودِ محلی، بدون UAC یا خواندن .env
     cubita-server status     [--home DIR]
     cubita-server backup     [--home DIR]         # یک پشتیبانِ کامل همین حالا
     cubita-server diagnostics [--home DIR] [--out FILE]   # زیپِ عیب‌یابی، وقتی API هم بالا نیست
@@ -279,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     common(reset)
     reset.add_argument("--email", default=None)
     sub.add_parser("selftest")
+    sub.add_parser("service-recover")
     for command in ("network-inspect", "network-maintain", "network-disable", "network-resume"):
         sub.add_parser(command)
     for command in ("network-plan", "network-apply"):
@@ -286,6 +288,11 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--payload", required=True)
 
     args = parser.parse_args(argv)
+    if args.cmd == "service-recover":
+        import json
+        from app.onprem.service_recovery import recover_local_services
+        print(json.dumps(recover_local_services(), ensure_ascii=False))
+        return 0
     if args.cmd.startswith("network-"):
         return cmd_network(args)
     return {

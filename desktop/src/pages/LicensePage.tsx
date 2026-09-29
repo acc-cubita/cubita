@@ -15,6 +15,8 @@ import { ServerBackupCard } from '../components/ServerBackupCard'
 import { ServerUpdateCard } from '../components/ServerUpdateCard'
 import { ClientUpdateCard } from '../components/ClientUpdateCard'
 import { EnterpriseNetworkCard } from '../components/EnterpriseNetworkCard'
+import { connectionError } from '../lib/serverConnection'
+import { useServerReconnect } from '../lib/useServerConnection'
 import { formatJalali } from '../lib/jalali'
 import { LICENSE_MODE_LABEL, licenseTone } from '../lib/license'
 
@@ -52,13 +54,14 @@ export function LicensePage({
       setLic(await fetchLicense(token))
       setLoadError(null)
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'وضعیتِ مجوز خوانده نشد.')
+      setLoadError(connectionError(e, 'وضعیتِ مجوز خوانده نشد.'))
     }
   }, [token])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+  useServerReconnect(() => { void refresh() })
 
   async function getCode() {
     setBusy('code')

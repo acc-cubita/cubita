@@ -40,6 +40,7 @@ FunctionEnd
 Section
   !insertmacro customCheckAppRunning
   ${If} $Scenario == "copy-failure"
+  ${OrIf} $Scenario == "previous-blocked-copy-failure"
     SetErrorLevel 2
     Abort
   ${EndIf}
@@ -47,4 +48,8 @@ Section
   StrCpy $CubitaApiRestart "0"
   StrCpy $CubitaPgRestart "0"
   StrCpy $CubitaNetworkRestartTask "0"
+  !ifndef BUILD_UNINSTALLER
+    !insertmacro cubitaRunGuard "maintenance-end" $0
+    StrCpy $CubitaRecoveryPaused "0"
+  !endif
 SectionEnd

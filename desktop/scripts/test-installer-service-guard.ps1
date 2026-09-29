@@ -189,4 +189,15 @@ Assert-Guard ((Invoke-CubitaInstallerAction 'app-running' $script:AppPath) -eq 0
 Assert-GuardThrows { Invoke-CubitaInstallerAction 'close-app' 'C:\QA\postgres.exe' } 'arbitrary exe refused'
 Assert-GuardThrows { Invoke-CubitaInstallerAction 'unknown' $script:AppPath } 'unknown operation refused'
 
+function Set-CubitaRecoveryBlocked([bool]$Blocked) {
+    $prior = $script:Blocked
+    $script:Blocked = [int]$Blocked
+    return $prior
+}
+$script:Blocked = 0
+Assert-Guard ((Invoke-CubitaInstallerAction 'maintenance-begin' $script:AppPath) -eq 0) 'first maintenance begin'
+Assert-Guard ($script:Blocked -eq 1) 'automatic recovery blocked'
+Assert-Guard ((Invoke-CubitaInstallerAction 'maintenance-begin' $script:AppPath) -eq 7) 'interrupted maintenance retained'
+Assert-Guard ((Invoke-CubitaInstallerAction 'maintenance-end' $script:AppPath) -eq 0) 'verified install releases recovery'
+Assert-Guard ($script:Blocked -eq 0) 'automatic recovery enabled'
 Write-Output "PASS: $script:Passed installer guard assertions; all OS commands mocked."

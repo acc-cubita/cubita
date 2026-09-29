@@ -19,25 +19,28 @@ const compiled = spawnSync(compiler, [
 ], { encoding: 'utf8', windowsHide: true })
 assert.equal(compiled.status, 0, compiled.error?.message ?? `${compiled.stdout}\n${compiled.stderr}`)
 
-const queries = ['app-running', 'api-state', 'pg-state', 'network-state']
+const queries = ['app-running', 'maintenance-begin', 'api-state', 'pg-state', 'network-state']
 const prepare = [...queries, 'pause-network', 'stop-api', 'stop-pg']
-const restore = ['start-pg', 'start-api', 'resume-network']
+const restore = ['start-pg', 'start-api', 'resume-network', 'maintenance-end']
 const cases = [
   ['init-cancel', 2, []],
-  ['prepare-success', 0, prepare],
-  ['app-running', 0, ['app-running', 'close-app', ...prepare.slice(1)]],
-  ['all-stopped', 0, [...queries, 'pause-network']],
-  ['all-absent', 0, [...queries, 'pause-network']],
-  ['api-query-failure', 2, queries],
-  ['pg-query-failure', 2, queries],
-  ['task-query-failure', 2, queries],
-  ['client-over-services', 2, queries],
-  ['client-over-stopped-services', 2, queries],
+  ['prepare-success', 0, [...prepare, 'maintenance-end']],
+  ['app-running', 0, ['app-running', 'close-app', ...prepare.slice(1), 'maintenance-end']],
+  ['all-stopped', 0, [...queries, 'pause-network', 'maintenance-end']],
+  ['all-absent', 0, [...queries, 'pause-network', 'maintenance-end']],
+  ['api-query-failure', 2, [...queries, 'maintenance-end']],
+  ['pg-query-failure', 2, [...queries, 'maintenance-end']],
+  ['task-query-failure', 2, [...queries, 'maintenance-end']],
+  ['client-over-services', 2, [...queries, 'maintenance-end']],
+  ['client-over-stopped-services', 2, [...queries, 'maintenance-end']],
   ['pause-failure', 2, [...queries, 'pause-network', ...restore]],
   ['stop-api-failure', 2, [...queries, 'pause-network', 'stop-api', ...restore]],
   ['stop-pg-failure', 2, [...prepare, ...restore]],
   // A partially replaced installation must not restart an unverified backend.
   ['copy-failure', 2, prepare],
+  ['maintenance-failure', 2, ['app-running', 'maintenance-begin']],
+  ['previous-blocked-copy-failure', 2, prepare],
+  ['previous-blocked-stop-failure', 2, [...queries, 'pause-network', 'stop-api', ...restore.slice(0, -1)]],
   ['wrong-directory', 2, ['app-running']],
 ]
 for (const [scenario, exitCode, expected] of cases) {
@@ -63,4 +66,4 @@ const unrun = spawnSync(path.join(output, 'lifecycle-fixture.exe'), ['/S', `/sce
 })
 assert.equal(unrun.status, 0, unrun.error?.message ?? unrun.stderr)
 assert.equal(fs.readFileSync(path.join(output, uninstallScenario, 'actions.log'), 'utf8').trim(), 'app-running')
-console.log(`PASS: 16 NSIS lifecycle scenarios (mock services only). QA artifacts: ${output}`)
+console.log(`PASS: ${cases.length + 1} NSIS lifecycle scenarios (mock services only). QA artifacts: ${output}`)

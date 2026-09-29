@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useServerReconnect } from '../lib/useServerConnection'
 import { RefreshCw, Menu, Users, Store, BarChart3, Link2, Building2 } from 'lucide-react'
 import {
   fetchAccountsLive,
@@ -538,6 +539,9 @@ export function Dashboard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // In-place retry preserves the current form and outbox editing leases.
+  useServerReconnect(() => { if (isElectron) void handleSync(true) })
 
   const pendingOutboxCount = [journalOutbox, invoiceOutbox, purchaseOutbox, checkOutbox]
     .flat()

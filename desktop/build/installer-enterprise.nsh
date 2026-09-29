@@ -26,6 +26,8 @@ Var CubitaPgRestart
 Var CubitaExistingRole
 Var CubitaExistingDirectory
 Var CubitaFilesTouched
+Var CubitaRecoveryPaused
+Var CubitaRecoveryWasBlocked
 
 !macro cubitaRunGuard ACTION RESULT
   InitPluginsDir
@@ -66,14 +68,24 @@ Var CubitaFilesTouched
             SetErrorLevel 2
           ${EndIf}
         ${EndIf}
+        ${If} $CubitaRecoveryPaused == "1"
+        ${AndIf} $CubitaRecoveryWasBlocked == "0"
+          !insertmacro cubitaRunGuard "maintenance-end" $0
+          ${If} $0 != "0"
+            SetErrorLevel 2
+          ${EndIf}
+        ${EndIf}
+        StrCpy $CubitaRecoveryPaused "0"
       ${ElseIf} $CubitaApiRestart == "7"
       ${OrIf} $CubitaPgRestart == "7"
       ${OrIf} $CubitaNetworkRestartTask == "7"
+      ${OrIf} $CubitaRecoveryPaused == "1"
         ; نسخهٔ نیمه‌کپی‌شده یا مهاجرت ناموفق را کورکورانه شروع نکن.
         MessageBox MB_ICONSTOP|MB_OK "نصب سرور کامل نشد و سرویس ممکن است خاموش باشد. نصاب را با نقش و مسیر قبلی دوباره کامل کنید؛ پوشهٔ داده و صف را حذف نکنید." /SD IDOK
         StrCpy $CubitaApiRestart "0"
         StrCpy $CubitaPgRestart "0"
         StrCpy $CubitaNetworkRestartTask "0"
+        StrCpy $CubitaRecoveryPaused "0"
         SetErrorLevel 2
       ${EndIf}
     FunctionEnd
@@ -103,6 +115,8 @@ Var CubitaFilesTouched
   StrCpy $CubitaPgRestart "0"
   StrCpy $CubitaNetworkRestartTask "0"
   StrCpy $CubitaFilesTouched "0"
+  StrCpy $CubitaRecoveryPaused "0"
+  StrCpy $CubitaRecoveryWasBlocked "0"
   ; بازکردن/بستن جادوگر هیچ سرویس یا task را تغییر نمی‌دهد.
   !ifndef CUBITA_HAS_SERVER
     ${If} $CubitaExistingRole == "server"
@@ -135,6 +149,16 @@ Var CubitaFilesTouched
       SetErrorLevel 2
       Quit
     ${EndIf}
+    ; Block recovery BEFORE the state snapshot: a start between snapshot/stop
+    ; would leave a formerly stopped service running while files are copied.
+    !insertmacro cubitaRunGuard "maintenance-begin" $CubitaRecoveryWasBlocked
+    ${If} $CubitaRecoveryWasBlocked != "0"
+    ${AndIf} $CubitaRecoveryWasBlocked != "7"
+      MessageBox MB_ICONSTOP|MB_OK "بازیابی خودکار برای نصب متوقف نشد؛ هیچ فایل یا سرویسی تغییر نکرد. دوباره نصب را اجرا کنید." /SD IDOK
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+    StrCpy $CubitaRecoveryPaused "1"
     !insertmacro cubitaRunGuard "api-state" $CubitaApiRestart
     !insertmacro cubitaRunGuard "pg-state" $CubitaPgRestart
     !insertmacro cubitaRunGuard "network-state" $CubitaNetworkRestartTask
@@ -146,6 +170,7 @@ Var CubitaFilesTouched
       StrCpy $CubitaNetworkRestartTask "0"
       MessageBox MB_ICONSTOP|MB_OK "وضعیت سرویس سرور خوانده نشد؛ پیش از نصب آن را بررسی کنید." /SD IDOK
       SetErrorLevel 2
+      Call CubitaRestorePreparing
       Quit
     ${EndIf}
     ${If} $CubitaPgRestart != "0"
@@ -156,6 +181,7 @@ Var CubitaFilesTouched
       StrCpy $CubitaNetworkRestartTask "0"
       MessageBox MB_ICONSTOP|MB_OK "وضعیت دیتابیس خوانده نشد؛ نصب شروع نشده است. سرویس CubitaPostgres را بررسی کنید." /SD IDOK
       SetErrorLevel 2
+      Call CubitaRestorePreparing
       Quit
     ${EndIf}
     ${If} $CubitaNetworkRestartTask != "0"
@@ -166,6 +192,7 @@ Var CubitaFilesTouched
       StrCpy $CubitaNetworkRestartTask "0"
       MessageBox MB_ICONSTOP|MB_OK "وضعیت نگهداری شبکه خوانده نشد؛ نصب شروع نشده است." /SD IDOK
       SetErrorLevel 2
+      Call CubitaRestorePreparing
       Quit
     ${EndIf}
     ${If} $CubitaRole != "server"
@@ -176,6 +203,7 @@ Var CubitaFilesTouched
         StrCpy $CubitaNetworkRestartTask "0"
         MessageBox MB_ICONSTOP|MB_OK "سرویس سرور روی این رایانه نصب است؛ نقش کلاینت مناسب نیست. نصاب کامل را با نقش سرور و مسیر قبلی اجرا کنید." /SD IDOK
         SetErrorLevel 2
+        Call CubitaRestorePreparing
         Quit
       ${EndIf}
     ${EndIf}
@@ -184,6 +212,7 @@ Var CubitaFilesTouched
         StrCpy $CubitaNetworkRestartTask "0"
         MessageBox MB_ICONSTOP|MB_OK "این رایانه نگهداری شبکه دارد؛ برای حفظ ابزار شبکه، نصاب کامل سازمانی را دریافت کنید، نه فایل فقط‌کلاینت." /SD IDOK
         SetErrorLevel 2
+        Call CubitaRestorePreparing
         Quit
       ${EndIf}
     !endif
@@ -286,10 +315,23 @@ Var CubitaFilesTouched
   StrCpy $CubitaNetworkRestartTask "0"
   !endif
   WriteRegStr HKLM "${CUBITA_REG_KEY}" "Role" "$CubitaRole"
+  !insertmacro cubitaRunGuard "maintenance-end" $0
+  ${If} $0 != "0"
+    SetErrorLevel 2
+    Abort
+  ${EndIf}
+  StrCpy $CubitaRecoveryPaused "0"
 !macroend
 
 !macro customUnInstall
   ${ifNot} ${isUpdated}
+    !insertmacro cubitaRunGuard "maintenance-begin" $1
+    ${If} $1 != "0"
+    ${AndIf} $1 != "7"
+      MessageBox MB_ICONSTOP|MB_OK "بازیابی خودکار متوقف نشد؛ حذف را دوباره اجرا کنید." /SD IDOK
+      SetErrorLevel 2
+      Abort
+    ${EndIf}
     nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "Get-ScheduledTask -TaskName CubitaEnterpriseNetwork -ErrorAction SilentlyContinue | Stop-ScheduledTask"'
     Pop $1
     ${If} ${FileExists} "$INSTDIR\resources\server\cubita-server.exe"

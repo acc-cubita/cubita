@@ -10,11 +10,15 @@ if ($Action -eq 'app-running') {
     if ($scenario -eq 'app-running') { exit 7 }
     exit 0
 }
+if($Action -eq 'maintenance-begin') {
+    if($scenario -eq 'maintenance-failure') { exit 1 }
+    if($scenario -like 'previous-blocked-*') { exit 7 }
+}
 if (($scenario -eq 'api-query-failure' -and $Action -eq 'api-state') -or
     ($scenario -eq 'pg-query-failure' -and $Action -eq 'pg-state') -or
     ($scenario -eq 'task-query-failure' -and $Action -eq 'network-state') -or
     ($scenario -eq 'pause-failure' -and $Action -eq 'pause-network') -or
-    ($scenario -eq 'stop-api-failure' -and $Action -eq 'stop-api') -or
+    ($scenario -in @('stop-api-failure','previous-blocked-stop-failure') -and $Action -eq 'stop-api') -or
     ($scenario -eq 'stop-pg-failure' -and $Action -eq 'stop-pg')) { exit 1 }
 if ($Action -in @('api-state','pg-state','network-state')) { exit 7 }
 exit 0

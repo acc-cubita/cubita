@@ -154,6 +154,9 @@ export interface CubitaBridge {
   serverSave?: (url: string) => Promise<ServerResult>
   /** کوبیتا سازمانی: جست‌وجوی سرور روی همین رایانه و `/24`ِ شبکه‌ی داخلی. */
   serverDiscover?: () => Promise<string[]>
+  serverConnection?: () => Promise<import('./lib/serverConnection').ServerConnection | null>
+  serverRetryConnection?: () => Promise<import('./lib/serverConnection').ServerConnection | null>
+  onServerConnection?: (cb: (status: import('./lib/serverConnection').ServerConnection) => void) => () => void
   networkInspect?: () => Promise<NetworkResult<NetworkInventory>>
   networkPreview?: (config: NetworkConfig) => Promise<NetworkResult<NetworkPlan>>
   networkApply?: (config: NetworkConfig) => Promise<NetworkResult<NetworkState>>

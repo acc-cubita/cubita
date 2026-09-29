@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import subprocess
 import time
 from pathlib import Path
@@ -138,6 +139,62 @@ def _service_exists(name: str) -> bool:
     )
 
 
+def service_start_permission_command(name: str) -> list[str]:
+    """Merge a single minimal ACE; never replace the admin/SYSTEM DACL or grant STOP.
+
+    Windows service rights: QUERY_STATUS=0x4, START=0x10 (Microsoft Learn).
+    Explicit company deny entries remain effective; failed grants fail installation.
+    """
+    if name not in (PG_SERVICE, API_SERVICE):
+        raise ProvisionError("نام سرویس معتبر نیست.")
+    script = f"""
+$ErrorActionPreference='Stop'
+$raw=& "$env:SystemRoot\\System32\\sc.exe" sdshow '{name}'
+if($LASTEXITCODE -ne 0) {{ throw 'Service DACL query failed' }}
+$sddl=($raw | Where-Object {{ $_ -match '^[OGDS]:' }} | Select-Object -First 1).Trim()
+$sd=[System.Security.AccessControl.RawSecurityDescriptor]::new($sddl)
+if($null -eq $sd.DiscretionaryAcl) {{ throw 'Service DACL is missing' }}
+$sid=[System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')
+$allowed=0
+foreach($ace in $sd.DiscretionaryAcl) {{
+  if($ace -is [System.Security.AccessControl.CommonAce] -and $ace.SecurityIdentifier -eq $sid -and $ace.AceQualifier -eq 'AccessAllowed') {{ $allowed=$allowed -bor $ace.AccessMask }}
+}}
+if(($allowed -band 20) -ne 20) {{
+  $ace=[System.Security.AccessControl.CommonAce]::new(0,0,20,$sid,$false,$null)
+  $index=0
+  while($index -lt $sd.DiscretionaryAcl.Count -and $sd.DiscretionaryAcl[$index] -is [System.Security.AccessControl.QualifiedAce] -and $sd.DiscretionaryAcl[$index].AceQualifier -eq 'AccessDenied') {{ $index++ }}
+  $sd.DiscretionaryAcl.InsertAce($index,$ace)
+  $new=$sd.GetSddlForm([System.Security.AccessControl.AccessControlSections]::Access)
+  & "$env:SystemRoot\\System32\\sc.exe" sdset '{name}' $new | Out-Null
+  if($LASTEXITCODE -ne 0) {{ throw 'Service DACL update failed' }}
+}}
+"""
+    return ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+            base64.b64encode(script.encode("utf-16le")).decode("ascii")]
+
+
+def automatic_service_commands() -> list[list[str]]:
+    commands = []
+    for name in (PG_SERVICE, API_SERVICE):
+        commands.extend([
+            ["sc", "config", name, "start=", "delayed-auto" if name == API_SERVICE else "auto"],
+            ["sc", "failure", name, "reset=", "3600", "actions=", "restart/10000/restart/30000/restart/60000"],
+            service_start_permission_command(name),
+        ])
+    return commands
+
+
+def write_recovery_port(api_port: int) -> None:
+    # Public configuration only: ordinary users must never need to read .env/DB secrets.
+    import winreg
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, r"Software\Cubita Enterprise", 0,
+                               winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
+            winreg.SetValueEx(key, "ApiPort", 0, winreg.REG_DWORD, api_port)
+    except OSError as exc:
+        raise ProvisionError("پورتِ بازیابی خودکار ذخیره نشد؛ نصاب را با دسترسی مدیر دوباره اجرا کنید.") from exc
+
+
 def _service_state(name: str) -> int:
     # عددِ ServiceControllerStatus ترجمه نمی‌شود؛ متنِ sc/net در ویندوزهای مختلف فرق دارد.
     if name not in (PG_SERVICE, API_SERVICE):
@@ -229,6 +286,9 @@ def install_services(*, layout: Layout, pg_bin: Path, server_exe: Path, winsw_ex
         run_all([[str(wrapper), "install"]], log=log)
     run_all([["sc", "config", API_SERVICE, "obj=", SERVICE_ACCOUNT, "password=", ""]], log=log)
 
+    log("شروعِ خودکار و مجوز محدودِ بازیابی سرویس‌ها…")
+    run_all(automatic_service_commands(), log=log)
+
     log("فایروال (فقط شبکه‌ی خصوصی و دامنه)…")
     run_all(firewall_commands(api_port), tolerate_first=True, log=log)
 
@@ -236,6 +296,7 @@ def install_services(*, layout: Layout, pg_bin: Path, server_exe: Path, winsw_ex
     _ensure_service_running(PG_SERVICE, log=log)
     _ensure_service_running(API_SERVICE, log=log)
     _wait_api_ready(api_port)
+    write_recovery_port(api_port)
     log("  ✓ سرورِ سازمانی پاسخ سالم می‌دهد")
 
 

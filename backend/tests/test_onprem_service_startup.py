@@ -21,6 +21,7 @@ def no_real_processes(monkeypatch):
 
     monkeypatch.setattr(svc.subprocess, "run", refuse)
     monkeypatch.setattr(svc, "app_version", lambda: "1.9.99")
+    monkeypatch.setattr(svc, "write_recovery_port", lambda port: None)
 
 
 def states(monkeypatch, values):

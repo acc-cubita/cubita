@@ -5,7 +5,8 @@
 param(
     [ValidateSet('app-running', 'close-app', 'api-state', 'stop-api', 'start-api',
                  'pg-state', 'stop-pg', 'start-pg',
-                 'network-state', 'pause-network', 'resume-network')]
+                 'network-state', 'pause-network', 'resume-network',
+                 'maintenance-begin', 'maintenance-end')]
     [string]$Action = 'api-state',
     [string]$AppPath
 )
@@ -36,8 +37,45 @@ function Get-CubitaInstallerTask {
         Where-Object { $_.TaskName -eq 'CubitaEnterpriseNetwork' -and $_.TaskPath -eq '\' }
 }
 
+function Set-CubitaRecoveryBlocked([bool]$Blocked) {
+    $name = 'Global\CubitaEnterpriseServiceOperation'
+    $rights = [System.Security.AccessControl.MutexRights]1048577
+    $mutex = $null
+    $held = $false
+    try {
+        try { $mutex = [System.Threading.Mutex]::OpenExisting($name, $rights) }
+        catch [System.Threading.WaitHandleCannotBeOpenedException] {
+            $acl = [System.Security.AccessControl.MutexSecurity]::new()
+            $acl.SetSecurityDescriptorSddlForm('D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x00100001;;;BU)')
+            $created = $false
+            try { $mutex = [System.Threading.Mutex]::new($false,$name,[ref]$created,$acl) }
+            catch [UnauthorizedAccessException] { $mutex = [System.Threading.Mutex]::OpenExisting($name,$rights) }
+        }
+        try { $held = $mutex.WaitOne([TimeSpan]::FromSeconds(70)) }
+        catch [System.Threading.AbandonedMutexException] { $held = $true }
+        if(-not $held) { throw 'بازیابی سرویس تمام نشد؛ نصب هنوز شروع نشده است.' }
+        # HKLM is protected from ordinary users, including after an interrupted install.
+        $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine','Registry64')
+        try {
+            $key = $base.CreateSubKey('Software\Cubita Enterprise')
+            try {
+                $prior = [int]$key.GetValue('AutomaticStartBlocked',0)
+                $key.SetValue('AutomaticStartBlocked',[int]$Blocked,'DWord')
+                return $prior
+            } finally { $key.Dispose() }
+        } finally { $base.Dispose() }
+    } finally {
+        if($held) { $mutex.ReleaseMutex() }
+        if($mutex) { $mutex.Dispose() }
+    }
+}
+
 function Invoke-CubitaInstallerAction([string]$Operation, [string]$ExpectedAppPath) {
     switch ($Operation) {
+        'maintenance-begin' {
+            if((Set-CubitaRecoveryBlocked $true) -ne 0) { return 7 }
+        }
+        'maintenance-end' { $null = Set-CubitaRecoveryBlocked $false }
         'app-running' {
             if (@(Get-CubitaInstallerAppProcesses $ExpectedAppPath).Count) { return 7 }
         }

@@ -3,6 +3,8 @@ import { AlertTriangle, CheckCircle2, Download, RefreshCw, Server } from 'lucide
 import { checkServerUpdate, fetchServerUpdateStatus, type ServerUpdateStatus } from '../api'
 import { SectionCard } from './SectionCard'
 import { toFaDigits } from '../lib/jalali'
+import { connectionError } from '../lib/serverConnection'
+import { useServerReconnect } from '../lib/useServerConnection'
 
 /** برنامه روی خودِ سرور باز است؟ (نشانیِ سرور این رایانه است) */
 function onServerMachine(): boolean {
@@ -27,19 +29,22 @@ export function ServerUpdateCard({ token }: { token: string }) {
   const [st, setSt] = useState<ServerUpdateStatus | null>(null)
   const [busy, setBusy] = useState<'check' | 'install' | null>(null)
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const local = onServerMachine()
 
   const load = useCallback(async () => {
     try {
       setSt(await fetchServerUpdateStatus(token))
+      setLoadError(null)
     } catch (e) {
-      setMsg({ text: e instanceof Error ? e.message : 'وضعیتِ به‌روزرسانی خوانده نشد.', kind: 'err' })
+      setLoadError(connectionError(e, 'وضعیتِ به‌روزرسانی خوانده نشد.'))
     }
   }, [token])
 
   useEffect(() => {
     void load()
   }, [load])
+  useServerReconnect(() => { void load() })
 
   async function check() {
     setBusy('check')
@@ -53,7 +58,7 @@ export function ServerUpdateCard({ token }: { token: string }) {
           : { text: 'سرور به‌روز است.', kind: 'ok' },
       )
     } catch (e) {
-      setMsg({ text: e instanceof Error ? e.message : 'بررسیِ نسخه‌ی تازه ناموفق بود.', kind: 'err' })
+      setMsg({ text: connectionError(e, 'بررسیِ نسخه‌ی تازه ناموفق بود.'), kind: 'err' })
     } finally {
       setBusy(null)
     }
@@ -89,6 +94,7 @@ export function ServerUpdateCard({ token }: { token: string }) {
         </button>
       }
     >
+      {loadError && <section className="fy-note fy-note--err"><AlertTriangle size={16} /><div>{loadError}</div></section>}
       {msg && (
         <section className={`fy-note ${msg.kind === 'ok' ? 'fy-note--ok' : 'fy-note--err'}`}>
           {msg.kind === 'ok' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
@@ -96,7 +102,7 @@ export function ServerUpdateCard({ token }: { token: string }) {
         </section>
       )}
       {!st ? (
-        <p className="muted">در حال بارگذاری…</p>
+        <p className="muted">{loadError ? 'اطلاعات پس از برقراری اتصال خودکار تازه می‌شود.' : 'در حال بارگذاری…'}</p>
       ) : (
         <dl className="lic-facts">
           <dt>نسخه‌ی سرور</dt>
