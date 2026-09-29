@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/src/{lib/menuAccordion.ts,lib/menuSections.ts,components/{ModulePanels,TopNav}.tsx}` و تست‌هایشان، `.claude/skills/cubita-page/SKILL.md`، `PROJECT_OVERVIEW.md` | منوها آکاردئونی، پیش‌فرض همه بسته | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/src/{components/{DefSheet,ReconciliationPanel,Dashboard,moduleLists,moduleSections}.tsx,lib/{defSheet,navModel,reportCatalog}.ts*,pages/treasury/*,pages/HelpPage.tsx,api.ts,App.css}`، `.claude/skills/cubita-excel-theme/SKILL.md`، `PROJECT_OVERVIEW.md` | مرحله‌ی ۲ِ «دریافت و پرداخت»: «حساب‌های نقد و بانک»، «چک‌ها» و «مغایرت‌گیری بانکی» با تمِ اکسلی | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/src/{lib/moduleMenu.ts,lib/menuSections.ts,lib/navModel.tsx,components/{ModulePanels,TopNav}.tsx,components/moduleLists.tsx,App.css}`، `.claude/skills/cubita-page/SKILL.md`، `PROJECT_OVERVIEW.md` | منوی ماژول یک فهرست؛ «عملیات»/«فهرست» حذف، دفترها زیرِ دسته‌ی کارشان | ۱۴۰۵/۰۷/۰۶ |
 | Codex | شمارهٔ package/lock، بستهٔ سرور/نصاب، QA bootstrap جدا و مستندات؛ منابع ساخت آزاد شدند | پس از مرج #247 و هماهنگی آرش، نامزد کامل ۱.۹.۶ آماده؛ selftest ۶۴۳/۱۸۵، CRCِ ۳۱۳۰ فایل، ۲۹۰۹ فایل سرور + asar از خود نصاب برابر، hash/version/native ABI، ۷ مرتبط و typecheck/build/ممیز صفر پاس. inspect/preview واقعی و گارد Program Files در Electronِ ایزوله پاس، snapshot شبکه ثابت. نصب/DB/UAC/انتشار انجام نشد؛ QA عملیِ گزارش‌شده توسط کاربر منتظر نسخه/نتیجه است و کانال‌ها ۱.۹.۵/۱.۹.۴ باقی‌اند | ۱۴۰۵/۰۷/۰۶ |
