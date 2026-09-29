@@ -21,6 +21,7 @@ import { SectionCard } from '../../components/SectionCard'
 import { ColResizer, SelectionBar } from '../../components/XlGrid'
 import { downloadCsv } from '../../lib/csv'
 import { normalizeFa } from '../../lib/faText'
+import { manualCreatorText } from '../../lib/entryPresentation'
 import { formatJalali } from '../../lib/jalali'
 import type { PageKey } from '../../lib/navModel'
 import { modsOf, useRowSelection } from '../../lib/rowSelection'
@@ -171,7 +172,7 @@ export function EntryListPage({ token, onNavigate }: { token: string; onNavigate
       const all = await fetchAllJournalEntries(token, scope, q || undefined, colFilters)
       downloadCsv(
         `asnad-${range.from ?? 'all'}`,
-        ['شماره', 'عطف', 'فرعی', 'تاریخ', 'شرح', 'منشأ', 'وضعیت', 'ردیف', 'مبلغ'],
+        ['شماره', 'عطف', 'فرعی', 'تاریخ', 'شرح', 'منشأ', 'ثبت‌کننده', 'وضعیت', 'ردیف', 'مبلغ'],
         all.map((e) => [
           e.number ?? '',
           e.atf_number ?? '',
@@ -179,6 +180,7 @@ export function EntryListPage({ token, onNavigate }: { token: string; onNavigate
           formatJalali(e.entry_date),
           e.description,
           sourceText(e),
+          e.created_by_name?.trim() || 'نام در دسترس نیست',
           e.voided_at ? 'باطل' : e.status === 'permanent' ? 'دائم' : 'موقت',
           e.lines.length,
           entryTotal(e),
@@ -592,8 +594,9 @@ function EntryGrid({
                     <td data-label="شرح" className="xl-ellipsis card-wide" title={e.description || undefined}>
                       {e.description || '—'}
                     </td>
-                    <td data-label="منشأ" className="xl-ellipsis">
-                      {sourceText(e)}
+                    <td data-label="منشأ" className="el-origin">
+                      <span className="el-origin-source" title={sourceText(e)}>{sourceText(e)}</span>
+                      {manualCreatorText(e) && <span className="entry-creator">{manualCreatorText(e)}</span>}
                     </td>
                     <td data-label="وضعیت">
                       <StatusChip status={e.status} voided={!!e.voided_at} />

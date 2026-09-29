@@ -788,6 +788,13 @@ export const fetchAnalyticLedger = (token: string, filters: ReportFilters) =>
 export interface JournalEntryLine {
   id: string
   account_id: string
+  /** برچسب‌های خواندنیِ GET جزئیات؛ نام فعلی چارت، نه snapshot یا تغییر سند. */
+  account_code?: string | null
+  account_name?: string | null
+  cost_center_code?: string | null
+  cost_center_name?: string | null
+  analytic_code?: string | null
+  analytic_name?: string | null
   cost_center_id?: string | null
   /** بُعدِ تحلیلیِ آزاد («تفصیلی سایر») — اختیاری، NULL برای ردیف‌های معمولی. */
   analytic_id?: string | null
@@ -823,6 +830,8 @@ export interface JournalEntryRecord {
   entry_date: string
   description: string
   source_type: string
+  /** نام فعلی کاربری که شناسه‌اش هنگام ثبت سند ذخیره شد؛ نقش تاریخی نیست. */
+  created_by_name?: string | null
   /** null = سند عملیاتِ بیرونی ندارد (دستی، تسعیر، اختتامیه). */
   source: EntrySource | null
   /** `temporary` | `permanent` — سندِ دائم دیگر ادغام/بازشماره‌گذاری نمی‌شود. */

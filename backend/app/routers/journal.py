@@ -29,6 +29,7 @@ from app.schemas.accounting import (
 )
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services import entry_source
+from app.services.entry_presentation import fill_line_labels, resolve_creator_names
 from app.services.analytics import resolve_analytic_id
 from app.services.cost_centers import resolve_cost_center_id
 from app.services.period_close import assert_period_open
@@ -193,9 +194,11 @@ def list_entries(
     #: منبعِ هر سند **دسته‌ای** حل می‌شود: یک کوئری به‌ازای هر *نوعِ* منبع، نه
     #: به‌ازای هر سند. صفحه‌ی دویست‌تایی حداکثر به تعدادِ *نوع‌ها* کوئری می‌خورد.
     sources = entry_source.resolve_sources(db, items)
+    creator_names = resolve_creator_names(db, items)
     rows = []
     for entry in items:
         row = JournalEntryOut.model_validate(entry)
+        row.created_by_name = creator_names.get(entry.id)
         found = sources.get(entry.id)
         row.source = EntrySourceOut(**found) if found is not None else None
         rows.append(row)
@@ -254,6 +257,8 @@ def get_entry(
     if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سند یافت نشد")
     row = JournalEntryOut.model_validate(entry)
+    fill_line_labels(db, entry, row)
+    row.created_by_name = resolve_creator_names(db, [entry]).get(entry.id)
     found = entry_source.resolve_source(db, entry)
     row.source = EntrySourceOut(**found) if found is not None else None
     return row

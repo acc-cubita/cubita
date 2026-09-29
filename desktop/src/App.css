@@ -5675,6 +5675,89 @@ button.topnav-org:hover {
 }
 .drawer-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px 28px; }
 
+/* ── برگهٔ مشترکِ سند: فقط خواندنی، جمع در همان گرید، هر سه پوسته ── */
+.journal-entry-panel { width: min(1000px, 100%); min-width: 0; }
+.journal-entry-panel .drawer-head { padding: 16px 24px; }
+.journal-entry-panel .drawer-body { padding: 24px; background: var(--bg); min-height: 0; }
+.journal-entry-panel .drawer-close { width: 36px; height: 36px; border: 1px solid var(--border); }
+.entry-drawer-icon { display: inline-flex; padding: 8px; border-radius: var(--radius-md); background: var(--accent-bg); color: var(--accent-on-tint); }
+.entry-document { min-width: 0; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.entry-document-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.entry-document-eyebrow { font-size: var(--fs-sm); color: var(--text-muted); }
+.entry-document-head h3 { margin: 4px 0 0; font-size: var(--fs-xl); color: var(--text-h); }
+.entry-document-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.entry-reversal { padding: 2px 8px; border-radius: var(--radius-pill); background: var(--accent-bg); color: var(--accent-on-tint); font-size: var(--fs-xs); }
+.entry-document-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border-bottom: 1px solid var(--border); }
+.entry-document-meta > div { padding: 16px 12px; min-width: 0; border-inline-end: 1px solid var(--border); }
+.entry-document-meta > div:first-child { padding-inline-start: 0; }
+.entry-document-meta > div:last-child { border-inline-end: 0; }
+.entry-document-meta dt { color: var(--text-muted); font-size: var(--fs-sm); margin-bottom: 8px; }
+.entry-document-meta dd { margin: 0; color: var(--text-h); font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.entry-creator { display: block; margin-block-start: 3px; color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+.entry-document-description { padding: 16px 0; }
+.entry-document-description p { margin: 8px 0 0; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.entry-document-table-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border: 1px solid var(--border); border-bottom: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; font-weight: 600; color: var(--text-h); }
+.entry-document-grid { border: 1px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); }
+.journal-entry-panel :is(.drawer-close, .entry-document-grid):focus-visible { outline: 2px solid var(--accent-on-tint); outline-offset: 2px; }
+.entry-lines { width: 100%; border-collapse: collapse; margin: 0; font-size: var(--fs-base); }
+.entry-lines caption { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.entry-line-count { margin-inline-start: 8px; font-size: var(--fs-xs); font-weight: 400; color: var(--text-muted); }
+.entry-unit { font-size: var(--fs-xs); font-weight: 400; color: var(--text-muted); }
+.entry-lines > thead > tr > th { padding: 8px 12px; background: var(--xl-head, var(--surface-2)); color: var(--text-h); font-size: var(--fs-sm); text-align: start; white-space: nowrap; }
+.entry-lines > :is(tbody, tfoot) > tr > td { padding: 12px; border-top: 1px solid var(--border); border-inline-end: 1px solid var(--border); vertical-align: top; }
+.entry-lines > :is(tbody, tfoot) > tr > td:last-child { border-inline-end: 0; }
+.entry-lines > tbody > tr:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 35%, var(--surface)); }
+.entry-lines .entry-row-no { width: 44px; text-align: center; color: var(--text-muted); }
+.entry-lines .num { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: end; }
+.entry-lines > thead .num { min-width: 136px; }
+.entry-account { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 112px; overflow-wrap: anywhere; color: var(--text-h); font-weight: 600; }
+.entry-account-code { color: var(--accent-on-tint); font-size: var(--fs-sm); font-weight: 400; }
+.entry-line-description { min-width: 120px; max-width: 240px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.entry-line-details { display: flex; flex-direction: column; gap: 4px; min-width: 100px; overflow-wrap: anywhere; }
+.entry-line-details small { font-size: var(--fs-xs); color: var(--text-muted); }
+.entry-lines .entry-totals { background: var(--xl-head, var(--surface-2)); color: var(--text-h); font-weight: 700; }
+.entry-totals small { font-size: var(--fs-xs); font-weight: 400; color: var(--text-muted); }
+.entry-lines .entry-balance-row > td { padding: 12px; }
+.entry-balance { display: inline-flex; align-items: center; gap: 8px; line-height: 1.7; }
+.entry-balance > svg { flex-shrink: 0; }
+.entry-balance--balanced { color: var(--success); }
+.entry-balance--unbalanced, .entry-balance--unknown { color: var(--danger); }
+.entry-balance--empty { color: var(--text-muted); }
+.entry-empty { color: var(--text-muted); text-align: center; }
+.entry-document-note { margin: 12px 0 0; color: var(--text-muted); font-size: var(--fs-xs); line-height: 1.8; }
+.entry-load-state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); text-align: center; }
+.entry-load-state > svg { color: var(--accent-on-tint); }
+.entry-load-state h3, .entry-load-state p { margin: 0; overflow-wrap: anywhere; }
+.entry-load-state h3 { color: var(--text-h); font-size: var(--fs-lg); }
+.entry-load-error > svg { color: var(--danger); }
+@media (max-width: 760px) {
+  .journal-entry-panel .drawer-head { padding: 12px; }
+  .journal-entry-panel .drawer-body { padding: 12px; }
+  .entry-document { padding: 12px; }
+  .entry-document-head { gap: 8px; }
+  .entry-document-head h3 { font-size: var(--fs-lg); }
+  .entry-document-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .entry-document-meta > div { padding: 12px; }
+  .entry-document-meta > div:nth-child(odd) { padding-inline-start: 0; }
+  .entry-document-meta > div:nth-child(even) { border-inline-end: 0; }
+  .entry-document-meta > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+  .entry-document-grid { border: 0; overflow: visible; }
+  .entry-document-table-head { border: 0; padding: 12px 0; }
+  .entry-lines.cards-on-mobile { min-width: 0; }
+  .entry-lines.cards-on-mobile > tfoot { display: block; }
+  .entry-lines.cards-on-mobile > :is(tbody, tfoot) > tr { margin-bottom: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .entry-lines.cards-on-mobile > :is(tbody, tfoot) > tr > td { width: auto; min-width: 0; max-width: none; padding: 4px 0; border: 0; white-space: normal; text-align: start; }
+  .entry-lines.cards-on-mobile .entry-account { min-width: 0; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .entry-lines.cards-on-mobile .entry-line-details { min-width: 0; }
+  .entry-lines.cards-on-mobile .entry-totals > td:first-child { display: block; }
+  .entry-lines.cards-on-mobile .entry-totals > td:first-child::before,
+  .entry-lines.cards-on-mobile .entry-balance-row > td::before { display: none; }
+  .entry-lines.cards-on-mobile .entry-balance-row > td { display: block; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .journal-entry-panel { animation: none; }
+}
+
 /* ── گفتگوی بازار (کشوی چتِ فروشگاه↔پخش‌کننده) ── توکن‌محور، پس هر سه تم را می‌گیرد */
 .mp-chat-panel { width: min(460px, 100%); }
 .mp-chat-body {
@@ -15086,6 +15169,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 /* ── «اسناد حسابداری» (تمِ اکسلی): گریدِ فهرست در قابِ لغزشِ خودش با سرستون و «جمعِ بازه»ِ چسبنده ──
  * ستون‌ها همان `xl-grid--list`اند؛ این‌جا فقط کلیک‌به‌سند، ردیفِ فعالِ کیبورد و ارتفاعِ خانه‌های کنش. */
 .el-sheet > tbody > tr.acc-row--clickable { cursor: pointer; }
+.el-sheet .el-origin { min-width: 0; }
+.el-sheet .el-origin-source { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page .ef-table-wrap > table.el-sheet td.xl-rowhead { padding: 0; }
 .page .ef-table-wrap > table.el-sheet td.card-actions { padding-block: 0; }
 .page .lr-scroll:focus-within > table.el-sheet > tbody > tr.is-active:not(.is-selected) > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }

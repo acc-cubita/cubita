@@ -259,6 +259,13 @@ class SubNumberIn(BaseModel):
 class JournalLineOut(BaseModel):
     id: UUID
     account_id: UUID
+    # صرفاً برچسبِ فعلی برای نمایش جزئیات؛ ذخیره یا snapshot جدیدی نیست.
+    account_code: str | None = None
+    account_name: str | None = None
+    cost_center_code: str | None = None
+    cost_center_name: str | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
     cost_center_id: UUID | None = None
     analytic_id: UUID | None = None
     debit: Decimal
@@ -300,6 +307,8 @@ class JournalEntryOut(BaseModel):
     entry_date: date
     description: str
     source_type: str
+    #: نامِ فعلیِ صاحبِ created_by_id؛ نقشِ او در لحظهٔ ثبت از قبل ذخیره نشده است.
+    created_by_name: str | None = None
     #: هویتِ عملیاتِ منبع. `None` یعنی سند عملیاتِ بیرونی ندارد — دستی، تسعیر،
     #: اختتامیه. از `journal_entry_id`ِ خودِ ماژول‌ها مشتق می‌شود، نه از ستونی روی
     #: سند؛ توضیحش در `services/entry_source.py`.
