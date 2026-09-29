@@ -22,6 +22,7 @@ import {
   fetchCounterpartyAccounts,
   fetchOpenItems,
   fetchPettyCashBalance,
+  fetchPettyCashFunds,
   fetchPettyCashTransactions,
   fetchTreasuryTransactions,
   type OpenItem,
@@ -96,7 +97,7 @@ function Step({
  * این صفحه ترتیبِ واقعی را نشان می‌دهد و وضعیتِ هر گام را از داده‌ی زنده می‌خواند —
  * نه یک برچسبِ ثابت که هیچ‌وقت سبز نمی‌شود.
  */
-export function PayFlowPage({ token, onNavigate }: { token: string; onNavigate: (page: PageKey) => void }) {
+export function PayFlowPage({ token, onNavigate }: { token: string; onNavigate: (page: PageKey, section?: string | null) => void }) {
   const state = useAsync(
     async () => {
       const [banks, treasury, petty] = await Promise.all([
@@ -141,8 +142,8 @@ export function PayFlowPage({ token, onNavigate }: { token: string; onNavigate: 
                   ? { label: `${faInt(banks.length)} حساب بانکی`, tone: 'ok' }
                   : { label: 'انجام نشده', tone: 'todo' }
               }
-              action="حساب بانکی"
-              onGo={() => onNavigate('bankaccounts')}
+              action="حساب‌های نقد و بانک"
+              onGo={() => onNavigate('cashbank', 'banks')}
             />
             <Step
               index={2}
@@ -173,15 +174,15 @@ export function PayFlowPage({ token, onNavigate }: { token: string; onNavigate: 
               title="چک‌ها"
               description="چکِ دریافتی را واگذار و وصول کنید، چکِ صادرشده را از دسته‌چک بکشید و سررسیدش را پیگیری کنید."
               state={{ label: 'هر وقت چک داشتید', tone: 'warn' }}
-              action="عملیات چک"
-              onGo={() => onNavigate('checkops')}
+              action="چک‌ها"
+              onGo={() => onNavigate('checks', 'receivable')}
             />
             <Step
               index={5}
               title="تطبیق با بانک"
               description="صورت‌حسابِ بانک را وارد کنید و مغایرت‌ها را ببندید — تنها راهِ مطمئن‌شدن از اینکه دفتر با بانک یکی است."
               state={{ label: 'پایانِ هر ماه', tone: 'warn' }}
-              action="مغایرت بانکی"
+              action="مغایرت‌گیری بانکی"
               onGo={() => onNavigate('bankreconcile')}
             />
           </div>
@@ -758,7 +759,37 @@ export function CashBoxPage({ token, onNavigate }: { token: string; onNavigate: 
 // ═══════════════════ ۱۶ و ۱۷) تنخواه‌دار / صورت هزینه تنخواه ═══════════════════
 
 /** شارژِ تنخواه: پول از صندوق یا بانک به دستِ تنخواه‌دار می‌رود. */
+/**
+ * کدام صندوقِ تنخواه — برای شارژ و صورت‌هزینه.
+ *
+ * سرور بی `fund_id` همان تنها صندوقِ فعال را برمی‌دارد و با بیش از یک صندوقِ فعال می‌پرسد «کدام؟». پس: بی صندوقِ
+ * تعریف‌شده انتخاب‌گری نیست (رفتارِ پیش از چندصندوقی)، با یکی همان از پیش انتخاب است، و با چندتا انتخاب لازم است.
+ */
+function usePettyFund(token: string) {
+  const funds = useAsync(() => fetchPettyCashFunds(token).catch(() => []), [token])
+  const active = (funds.data ?? []).filter((f) => f.is_active)
+  const [picked, setPicked] = useState('')
+  const fundId = active.length === 1 ? active[0].id : picked
+  const field =
+    active.length === 0 ? null : (
+      <label>
+        صندوقِ تنخواه
+        <SearchSelect value={fundId} onChange={(e) => setPicked(e.target.value)} required={active.length > 1}>
+          {active.length > 1 && <option value="">— انتخاب صندوق —</option>}
+          {active.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </SearchSelect>
+      </label>
+    )
+  const missing = active.length > 1 && !fundId ? 'چند صندوقِ تنخواه فعال است؛ صندوق را انتخاب کنید.' : null
+  return { fundId: fundId || null, field, missing }
+}
+
 export function PettyHolderPage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
+  const fund = usePettyFund(token)
   const postable = accounts.filter((a) => !a.is_group)
   const [msg, setMsg] = useState<Msg>(null)
   const [busy, setBusy] = useState(false)
@@ -788,6 +819,10 @@ export function PettyHolderPage({ token, accounts }: { token: string; accounts: 
       setMsg({ text: 'حسابِ تأمینِ وجه را انتخاب کنید (صندوق یا بانک).', kind: 'err' })
       return
     }
+    if (fund.missing) {
+      setMsg({ text: fund.missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     try {
       await createPettyCashCharge(token, {
@@ -795,6 +830,7 @@ export function PettyHolderPage({ token, accounts }: { token: string; accounts: 
         amount: Number(amount || 0),
         source_account_id: sourceId,
         description,
+        fund_id: fund.fundId,
       })
       setMsg({ text: 'تنخواه شارژ شد.', kind: 'ok' })
       setAmount('')
@@ -810,8 +846,8 @@ export function PettyHolderPage({ token, accounts }: { token: string; accounts: 
   return (
     <OpsPage
       icon={Wallet}
-      title="تنخواه‌دار"
-      description="شارژِ تنخواه‌گردان و ماندهٔ در اختیارِ تنخواه‌دار."
+      title="شارژ تنخواه"
+      description="پولی که از صندوق یا بانک به تنخواه‌دار داده می‌شود، و ماندهٔ در اختیارِ او. خودِ صندوق‌های تنخواه در «حساب‌های نقد و بانک» تعریف می‌شوند."
       head={
         <div className="cc-head">
           <div className="cc-summary">
@@ -831,6 +867,7 @@ export function PettyHolderPage({ token, accounts }: { token: string; accounts: 
       <div className="workspace-split">
         <SectionCard icon={Wallet} title="شارژِ تنخواه" description="پول از صندوق یا بانک به تنخواه‌دار داده می‌شود.">
           <form className="invoice-form form-full" onSubmit={submit}>
+            {fund.field}
             <label>
               تاریخ
               <JalaliDatePicker value={date} onChange={setDate} />
@@ -899,6 +936,7 @@ export function PettyHolderPage({ token, accounts }: { token: string; accounts: 
 
 /** صورتِ هزینه: تنخواه‌دار خرج کرده و حالا فاکتورهایش را ثبت می‌کند. */
 export function PettyExpensePage({ token, accounts }: { token: string; accounts: AccountCache[] }) {
+  const fund = usePettyFund(token)
   const expenseAccounts = accounts.filter((a) => !a.is_group && a.type === 'expense')
   const [msg, setMsg] = useState<Msg>(null)
   const [busy, setBusy] = useState(false)
@@ -929,6 +967,10 @@ export function PettyExpensePage({ token, accounts }: { token: string; accounts:
       setMsg({ text: 'حسابِ هزینه را انتخاب کنید.', kind: 'err' })
       return
     }
+    if (fund.missing) {
+      setMsg({ text: fund.missing, kind: 'err' })
+      return
+    }
     setBusy(true)
     try {
       await createPettyCashExpense(token, {
@@ -936,6 +978,7 @@ export function PettyExpensePage({ token, accounts }: { token: string; accounts:
         amount: Number(amount || 0),
         expense_account_id: expenseId,
         description,
+        fund_id: fund.fundId,
       })
       setMsg({ text: 'هزینهٔ تنخواه ثبت شد.', kind: 'ok' })
       setAmount('')
@@ -967,6 +1010,7 @@ export function PettyExpensePage({ token, accounts }: { token: string; accounts:
       <div className="workspace-split">
         <SectionCard icon={Receipt} title="ثبتِ هزینه" description="هر قلم را به حسابِ هزینه‌ی خودش ببرید.">
           <form className="invoice-form form-full" onSubmit={submit}>
+            {fund.field}
             <label>
               تاریخ
               <JalaliDatePicker value={date} onChange={setDate} />

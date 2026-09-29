@@ -1056,15 +1056,46 @@ export const fetchPettyCashTransactions = (token: string) => authedGetAll<PettyC
 export const fetchPettyCashBalance = (token: string) =>
   authedGet<{ balance: string }>(token, '/api/petty-cash/balance')
 
+//: `fund_id` تهی = صندوقِ پیش‌فرض (تنها صندوقِ فعال). با بیش از یک صندوقِ فعال، سرور صندوق را می‌خواهد.
 export const createPettyCashCharge = (
   token: string,
-  data: { transaction_date: string; amount: number; source_account_id: string; description: string },
+  data: { transaction_date: string; amount: number; source_account_id: string; description: string; fund_id?: string | null },
 ) => authedSend<PettyCashRecord>(token, 'POST', '/api/petty-cash/charge', data)
 
 export const createPettyCashExpense = (
   token: string,
-  data: { transaction_date: string; amount: number; expense_account_id: string; description: string },
+  data: { transaction_date: string; amount: number; expense_account_id: string; description: string; fund_id?: string | null },
 ) => authedSend<PettyCashRecord>(token, 'POST', '/api/petty-cash/expense', data)
+
+/** صندوقِ تنخواه — تنخواه‌دار طرف‌حساب است نه کاربر. سرور حذفش را ندارد؛ غیرفعال می‌شود. */
+export interface PettyCashFundRecord {
+  id: string
+  name: string
+  custodian_contact_id: string | null
+  location: string
+  /** ۰ = بی‌سقف. هشدار است نه گارد. */
+  spending_limit: string
+  is_active: boolean
+  notes: string
+}
+
+export interface PettyCashFundInput {
+  name?: string
+  custodian_contact_id?: string | null
+  location?: string
+  spending_limit?: number
+  is_active?: boolean
+  notes?: string
+}
+
+export const fetchPettyCashFunds = (token: string) => authedGet<PettyCashFundRecord[]>(token, '/api/petty-cash-funds')
+export const createPettyCashFund = (token: string, data: PettyCashFundInput) =>
+  authedSend<PettyCashFundRecord>(token, 'POST', '/api/petty-cash-funds', data)
+export const updatePettyCashFund = (token: string, id: string, data: PettyCashFundInput) =>
+  authedSend<PettyCashFundRecord>(token, 'PATCH', `/api/petty-cash-funds/${id}`, data)
+/** مانده‌ی یک صندوق — مشتق از رویدادها. */
+export const fetchPettyCashFundBalance = (token: string, id: string) =>
+  authedGet<{ balance: string }>(token, `/api/petty-cash-funds/${id}/balance`)
 
 export const createBankTransaction = (
   token: string,

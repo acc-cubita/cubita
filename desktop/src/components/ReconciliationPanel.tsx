@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ScanLine, Upload, Wand2, Link2, Unlink } from 'lucide-react'
+import { ClipboardPaste, ScanLine, Upload, Wand2, Link2, Unlink } from 'lucide-react'
 import type { BankAccountCache } from '../electron.d'
 import {
   autoMatchStatement,
@@ -78,6 +78,11 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
   const [selectedLineId, setSelectedLineId] = useState('')
   const [selectedTxnId, setSelectedTxnId] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  //: چسباندنِ متن — جانشینِ صفحه‌ی جدای «صورت حساب بانکی» (۱۴۰۵/۰۷/۰۶). همان خواننده‌ی فایل، پس گاردِ مرجع و
+  //: تکرار برای هر دو راه یکی است؛ آن صفحه خواننده‌ی شل‌ترِ خودش را داشت که ستونِ مرجع را نمی‌شناخت.
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasted, setPasted] = useState('')
+  const [busy, setBusy] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const effectiveBankAccountId = bankAccountId || bankAccounts[0]?.id || ''
@@ -102,17 +107,17 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
     setSelectedTxnId('')
   }, [effectiveBankAccountId])
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !effectiveBankAccountId) return
+  /** ورودِ ردیف‌ها از متنِ CSV — مشترکِ فایل و چسباندن. `true` یعنی چیزی ساخته شد. */
+  async function importText(text: string, source: 'فایل' | 'متن'): Promise<boolean> {
+    if (!effectiveBankAccountId) return false
     setMessage(null)
+    const lines = parseStatementCsv(text)
+    if (lines.length === 0) {
+      setMessage(`هیچ ردیف معتبری در ${source} پیدا نشد. فرمت مورد انتظار: تاریخ (YYYY-MM-DD)، مبلغ، شرح`)
+      return false
+    }
+    setBusy(true)
     try {
-      const text = await file.text()
-      const lines = parseStatementCsv(text)
-      if (lines.length === 0) {
-        setMessage('هیچ ردیف معتبری در فایل پیدا نشد. فرمت مورد انتظار: تاریخ (YYYY-MM-DD)، مبلغ، شرح')
-        return
-      }
       // **تعدادِ ساخته‌شده گفته می‌شود، نه تعدادِ ارسالی.** سرور حالا ردیفِ تکراری
       // را رد می‌کند، پس این دو عدد می‌توانند فرق کنند. پیامِ قبلی همیشه تعدادِ
       // فرستاده‌شده را می‌گفت، پس کسی که یک فایل را دوبار وارد می‌کرد «۱۰ ردیف
@@ -125,10 +130,29 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
           : `${created.length.toLocaleString('fa-IR')} ردیف از صورت‌حساب وارد شد.`,
       )
       await refresh()
+      return created.length > 0
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      await importText(await file.text(), 'فایل')
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  async function handlePaste() {
+    if (await importText(pasted, 'متن')) {
+      setPasted('')
+      setPasteOpen(false)
     }
   }
 
@@ -177,10 +201,15 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
       title="تطبیق بانکی"
       description="صورت‌حساب رسمی بانک را وارد کنید (فایل CSV با ستون‌های تاریخ، مبلغ، شرح) و با تراکنش‌های ثبت‌شده در سیستم تطبیق دهید."
       actions={
-        <label className="btn-file">
-          <Upload size={13} /> وارد کردن صورت‌حساب (CSV)
-          <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={(e) => void handleFileChange(e)} hidden />
-        </label>
+        <>
+          <button type="button" aria-expanded={pasteOpen} onClick={() => setPasteOpen((v) => !v)} disabled={bankAccounts.length === 0}>
+            <ClipboardPaste size={13} /> چسباندنِ متن
+          </button>
+          <label className="btn-file">
+            <Upload size={13} /> وارد کردن صورت‌حساب (CSV)
+            <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={(e) => void handleFileChange(e)} hidden />
+          </label>
+        </>
       }
     >
       {bankAccounts.length === 0 ? (
@@ -197,6 +226,29 @@ export function ReconciliationPanel({ token, bankAccounts }: { token: string; ba
               ))}
             </SearchSelect>
           </label>
+
+          {pasteOpen && (
+            <div className="invoice-form form-full rc-paste">
+              <label>
+                ردیف‌های صورت‌حساب (یک ردیف در هر خط: تاریخ، مبلغ، شرح — مبلغِ منفی یعنی برداشت)
+                <textarea
+                  rows={6}
+                  dir="ltr"
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                  placeholder="2026-08-28,15000000,cash deposit"
+                />
+              </label>
+              <div className="invoice-form-footer">
+                <button type="button" onClick={() => setPasteOpen(false)}>
+                  انصراف
+                </button>
+                <button type="button" className="btn-primary" disabled={busy || !pasted.trim()} onClick={() => void handlePaste()}>
+                  <Upload size={13} /> ورودِ ردیف‌ها
+                </button>
+              </div>
+            </div>
+          )}
 
           {summary && (
             <>

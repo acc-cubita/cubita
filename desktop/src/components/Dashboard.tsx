@@ -115,7 +115,7 @@ import {
   SalesInvoicePage,
   SalesReturnPage,
 } from '../pages/sales/SalesDocumentPages'
-import { CashboxesPage } from '../pages/treasury/CashboxPages'
+import { CashBankPage } from '../pages/treasury/CashBankPage'
 import { PosPage } from '../pages/PosPage'
 import { PurchasesPage } from '../pages/PurchasesPage'
 import { InventoryPage } from '../pages/InventoryPage'
@@ -131,21 +131,13 @@ import {
   ReceiptVoucherPage,
   TreasuryLedgerPage,
 } from '../pages/treasury/TreasuryOpsPages'
+import { ChecksPage } from '../pages/treasury/CheckOpsPages'
 import {
-  CheckPayableClearPage,
-  CheckReceivableOpsPage,
-  CheckReturnPage,
-  CheckSearchPage,
-  CheckbooksPage,
-} from '../pages/treasury/CheckOpsPages'
-import {
-  CheckbookListPage,
   PaymentNoticeListPage,
   PettyCashListPage,
   CheckOperationListPage,
   ContactSettlementListPage,
   PosSettlementListPage,
-  PosTerminalListPage,
   StatementListPage,
 } from '../pages/treasury/TreasuryListPages'
 import {
@@ -155,12 +147,9 @@ import {
   NumberingListPage,
 } from '../pages/ledgers/ModuleListPages'
 import {
-  BankAccountsPage,
   BankLedgerPage,
   BankReconcilePage,
-  BankStatementPage,
   PosSettlementPage,
-  PosTerminalsPage,
 } from '../pages/treasury/BankOpsPages'
 import { HelpPage } from '../pages/HelpPage'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -275,26 +264,17 @@ const PAGE_TITLES: Record<PageKey, string> = {
   payflow: 'فرآیند دریافت و پرداخت',
   receiptvoucher: 'رسید دریافت',
   paymentvoucher: 'اعلامیه پرداخت',
-  checkops: 'چک دریافتنی',
   contactsettle: 'تسویه حساب طرف مقابل',
-  checkreturn: 'استرداد چک',
-  checkpayclear: 'وصول چک پرداختنی',
-  checksearch: 'جست‌وجوی چک',
+  checks: 'چک‌ها',
   possettle: 'تسویه کارتخوان',
-  bankstatement: 'صورت حساب بانکی',
-  bankreconcile: 'مغایرت بانکی',
+  bankreconcile: 'مغایرت‌گیری بانکی',
   cashbox: 'گردش صندوق',
-  cashboxes: 'صندوق‌ها',
-  bankaccounts: 'حساب‌های بانکی',
-  posterminals: 'دستگاه کارتخوان',
-  checkbooks: 'دسته چک',
-  pettyholder: 'تنخواه‌دار',
+  cashbank: 'حساب‌های نقد و بانک',
+  pettyholder: 'شارژ تنخواه',
   pettyexpense: 'صورت هزینه تنخواه',
   bankledger: 'مرور عملیات بانکی',
   treasuryledger: 'دریافت‌ها و پرداخت‌ها',
   paymentnoticelist: 'اعلامیه‌های پرداخت',
-  checkbooklist: 'دسته‌چک‌ها',
-  posterminallist: 'دستگاه‌های کارتخوان',
   possettlelist: 'تسویه‌های کارتخوان',
   checkoplist: 'عملیات چک',
   contactsettlelist: 'تسویه‌های طرف مقابل',
@@ -751,27 +731,18 @@ export function Dashboard({
           {page === 'payflow' && <PayFlowPage token={token} onNavigate={navigate} />}
           {page === 'receiptvoucher' && <ReceiptVoucherPage token={token} />}
           {page === 'paymentvoucher' && <PaymentVoucherPage token={token} />}
-          {page === 'checkops' && <CheckReceivableOpsPage token={token} />}
           {page === 'contactsettle' && <ContactSettlementPage token={token} />}
-          {page === 'checkreturn' && <CheckReturnPage token={token} />}
-          {page === 'checkpayclear' && <CheckPayableClearPage token={token} />}
-          {page === 'checksearch' && <CheckSearchPage token={token} onNavigate={setPage} />}
+          {page === 'checks' && <ChecksPage token={token} onNavigate={navigate} />}
           {page === 'possettle' && <PosSettlementPage token={token} />}
-          {page === 'bankstatement' && <BankStatementPage token={token} />}
           {page === 'bankreconcile' && <BankReconcilePage token={token} bankAccounts={bankAccounts} />}
           {page === 'cashbox' && <CashBoxPage token={token} onNavigate={navigate} />}
-          {page === 'cashboxes' && <CashboxesPage token={token} />}
-          {page === 'bankaccounts' && <BankAccountsPage token={token} accounts={accounts} />}
-          {page === 'posterminals' && <PosTerminalsPage token={token} bankAccounts={bankAccounts} />}
-          {page === 'checkbooks' && <CheckbooksPage token={token} />}
+          {page === 'cashbank' && <CashBankPage token={token} />}
           {page === 'pettyholder' && <PettyHolderPage token={token} accounts={accounts} />}
           {page === 'pettyexpense' && <PettyExpensePage token={token} accounts={accounts} />}
-          {page === 'bankledger' && <BankLedgerPage token={token} />}
+          {page === 'bankledger' && <BankLedgerPage token={token} accounts={accounts} />}
           {page === 'treasuryledger' && <TreasuryLedgerPage token={token} />}
           {page === 'paymentnoticelist' && <PaymentNoticeListPage token={token} />}
           {/* ── دفترهای نظیر (قاعده‌ی «هر عملیاتِ رکوردساز، یک فهرست») ── */}
-          {page === 'checkbooklist' && <CheckbookListPage token={token} />}
-          {page === 'posterminallist' && <PosTerminalListPage token={token} />}
           {page === 'possettlelist' && <PosSettlementListPage token={token} />}
           {page === 'checkoplist' && <CheckOperationListPage token={token} />}
           {page === 'contactsettlelist' && <ContactSettlementListPage token={token} />}

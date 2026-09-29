@@ -26,7 +26,6 @@ import {
 } from '../api'
 import {
   Archive,
-  BookMarked,
   CalendarClock,
   CalendarDays,
   CalendarRange,
@@ -86,7 +85,6 @@ import {
   Group,
   Hourglass,
   Megaphone,
-  Nfc,
   Handshake,
   PhoneCall,
 } from 'lucide-react'
@@ -280,8 +278,7 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'statementlist', label: 'ردیف‌های صورت‌حساب بانکی', icon: FileSpreadsheet, category: 'بانک، کارتخوان و تنخواه' },
     { key: 'possettlelist', label: 'تسویه‌های کارتخوان', icon: CreditCard, category: 'بانک، کارتخوان و تنخواه' },
     { key: 'pettylist', label: 'گردش تنخواه', icon: Wallet, category: 'بانک، کارتخوان و تنخواه' },
-    { key: 'checkbooklist', label: 'دسته‌چک‌ها', icon: BookMarked, category: DEFINITIONS_SECTION },
-    { key: 'posterminallist', label: 'دستگاه‌های کارتخوان', icon: Nfc, category: DEFINITIONS_SECTION },
+    //: «دسته‌چک‌ها» و «دستگاه‌های کارتخوان» رفتند: برگه‌های «حساب‌های نقد و بانک» خودشان دفترِ کاملِ همان داده‌اند.
   ],
   //: «سامانه مؤدیان» — فهرستِ خودکارِ قبلی (چند ردیفِ آخرِ ارسال‌ها) جایش را به منو
   //: داد: تاریخچه‌ی ارسال یک دفترِ قانونی است و فیلتر و جست‌وجو و خروجی می‌خواهد،
@@ -339,8 +336,6 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   discountgrouplist: 'مشتریان و فروش',
   treasuryledger: 'دریافت و پرداخت',
   paymentnoticelist: 'دریافت و پرداخت',
-  checkbooklist: 'دریافت و پرداخت',
-  posterminallist: 'دریافت و پرداخت',
   possettlelist: 'دریافت و پرداخت',
   checkoplist: 'دریافت و پرداخت',
   contactsettlelist: 'دریافت و پرداخت',
@@ -414,25 +409,16 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   receiptvoucher: 'treasuryledger', //: سه عملیات، یک دفترِ مشترک با فیلتر
   paymentvoucher: 'paymentnoticelist',
   contactsettle: 'contactsettlelist',
-  //: دفترِ چک‌ها همان «جستجوی چک» است — کاربر صریحاً آن را در کارتِ عملیات خواست،
-  //: و فهرستِ دومِ چک یعنی دو نمای یک داده.
-  checkops: 'checksearch',
-  checkbooks: 'checkbooklist',
-  checkreturn: 'checkoplist',
-  checkpayclear: 'checkoplist',
-  bankreconcile: 'state',
-  checksearch: 'view',
+  //: «چک‌ها» (چهار برگه) — دفترِ گذرهایش «عملیات چک» است؛ برگه‌ی «جست‌وجو» خودش دفترِ برگ‌هاست.
+  checks: 'checkoplist',
+  //: صورت‌حساب همین‌جا وارد می‌شود، پس رکورد می‌سازد و دفترش «ردیف‌های صورت‌حساب بانکی» است.
+  bankreconcile: 'statementlist',
   bankledger: 'view',
   cashbox: 'view',
   possettle: 'possettlelist',
-  bankstatement: 'statementlist',
-  //: «تعریف صندوق» خودش هم فرم است و هم دفترِ صندوق‌ها با مانده‌شان — همان
-  //: الگوی «حساب بانکی». فهرستِ نظیرِ جدا یعنی دو نمای یک داده.
-  cashboxes: 'view',
-  //: «حساب بانکی» خودش هم فرم است و هم دفترِ حساب‌ها با مانده‌شان — همان
-  //: الگوی «تعریف صندوق». فهرستِ نظیرِ جدا یعنی دو نمای یک داده.
-  bankaccounts: 'view',
-  posterminals: 'posterminallist',
+  //: پنج برگه‌ی اکسلیِ تعریف — هر برگه هم فرم است و هم دفترِ کاملِ همان رکوردها با مانده‌شان (الگوی «ب»ِ تمِ
+  //: اکسلی). فهرستِ نظیرِ جدا دو نمای یک داده بود و رفت.
+  cashbank: 'view',
   pettyholder: 'pettylist', //: شارژ و هزینه، یک دفترِ مشترک
   pettyexpense: 'pettylist',
 
@@ -856,6 +842,19 @@ export const SECTION_LIST_MAP: Record<string, readonly ListTarget[]> = {
   'moadian/send': ['moadianhistory'],
   'moadian/status': [],
   'moadian/settings': [],
+
+  // ── «حساب‌های نقد و بانک»: هر برگه دفترِ خودش است ──
+  'cashbank/cashboxes': [],
+  'cashbank/banks': [],
+  'cashbank/pos': [],
+  'cashbank/checkbooks': [],
+  'cashbank/petty': [],
+
+  // ── «چک‌ها»: هر گذر در «عملیات چک» ثبت می‌شود؛ جست‌وجو خودش دفترِ برگ‌هاست ──
+  'checks/receivable': ['checkoplist'],
+  'checks/payable': ['checkoplist'],
+  'checks/return': ['checkoplist'],
+  'checks/search': [],
 
   // ── ماژول‌هایی که دفتری ندارند ──
   'integration/build': [],

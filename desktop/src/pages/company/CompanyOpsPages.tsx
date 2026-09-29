@@ -243,7 +243,7 @@ export function YearEndOpsPage({
             title="تطبیقِ بانک و صندوق"
             description="مانده‌ی دفترها با صورت‌حسابِ بانکی و شمارشِ صندوق یکی شود."
             state={{ label: 'پیش‌نیاز', tone: 'warn' }}
-            action="مغایرت بانکی"
+            action="مغایرت‌گیری بانکی"
             //: `banking` صفحه نبود (کلیدِ ماژول است) و این دکمه صفحه‌ی خالی باز می‌کرد.
             onGo={() => onNavigate('bankreconcile')}
           />

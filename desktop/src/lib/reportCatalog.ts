@@ -95,7 +95,7 @@ export const REPORT_GROUPS: { key: ReportGroupKey; heading: string; entries: Ent
   {
     key: 'treasury',
     heading: 'بانک و صندوق',
-    entries: [{ id: 'bankledger' }, { id: 'checksearch' }, { id: 'cashbox' }],
+    entries: [{ id: 'bankledger' }, { id: 'checks/search' }, { id: 'cashbox' }],
   },
   {
     key: 'inventory',
