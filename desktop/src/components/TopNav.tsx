@@ -251,20 +251,19 @@ export function TopNav({
     setMobileOpen(false)
   }
 
-  //: با هر بار باز شدنِ کشو، گروهی که صفحه‌ی فعال در آن است باز می‌شود. بدونِ این،
-  //: آکاردئونِ تماماً بسته کاربر را گم می‌کند: «الان کجای منو هستم؟» جوابی ندارد.
-  const activeGroupHeading =
-    groups.find(
-      (g) =>
-        g.items.some((i) => i.key === active) ||
-        (LIST_MENUS[g.heading] ?? []).some((i) => i.key === active),
-    )?.heading ?? null
+  //: **پیش‌فرض همه بسته** (۱۴۰۵/۰۷/۰۶، خواستِ آرش): هر بار که کشو باز می‌شود هیچ گروهی باز نیست، و باز کردنِ یک
+  //: گروه گروهِ بازِ قبلی را می‌بندد (`toggleGroup`). پیش از این گروه و ماژولِ صفحه‌ی فعال خودکار باز می‌شدند؛
+  //: حالا فقط نقطه‌ی روی ردیفِ بسته جای صفحه‌ی فعال را نشان می‌دهد.
   useEffect(() => {
     if (!mobileOpen) return
-    setOpenGroup(activeGroupHeading)
-    //: ماژولِ فعالِ تب‌دار هم باز می‌شود تا بخشِ انتخاب‌شده بدونِ ضربه‌ی اضافه دیده شود.
-    setOpenModule(MODULE_SECTIONS[active] ? active : null)
-  }, [mobileOpen, activeGroupHeading, active])
+    setOpenGroup(null)
+    setOpenModule(null)
+  }, [mobileOpen])
+  /** آکاردئون: گروهِ باز را می‌بندد، وگرنه این را باز و بقیه را می‌بندد — با ماژولِ تب‌دارِ بازِ درونشان. */
+  const toggleGroup = (heading: string) => {
+    setOpenGroup((h) => (h === heading ? null : heading))
+    setOpenModule(null)
+  }
 
   return (
     <header
@@ -586,7 +585,7 @@ export function TopNav({
                       label={group.heading}
                       expanded={isOpen}
                       marked={hasActive && !isOpen}
-                      onClick={() => setOpenGroup((h) => (h === group.heading ? null : group.heading))}
+                      onClick={() => toggleGroup(group.heading)}
                     />
                     <div className="topnav-mobile-panel">
                       <div className="mob-inner">
@@ -613,7 +612,7 @@ export function TopNav({
                   label={ACCOUNT_GROUP}
                   expanded={openGroup === ACCOUNT_GROUP}
                   marked={secondary.some((i) => i.key === active) && openGroup !== ACCOUNT_GROUP}
-                  onClick={() => setOpenGroup((h) => (h === ACCOUNT_GROUP ? null : ACCOUNT_GROUP))}
+                  onClick={() => toggleGroup(ACCOUNT_GROUP)}
                 />
                 <div className="topnav-mobile-panel">
                   <div className="mob-inner">
