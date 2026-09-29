@@ -4227,7 +4227,7 @@ button.topnav-org:hover {
   height: 16px;
 }
 
-/* تیترِ داخلیِ «عملیات»/«فهرست» — کوچک‌تر، کم‌رنگ و بی‌کنش، تا با لینک‌ها قاطی نشود.
+/* تیترِ دسته در کشو — کوچک‌تر، کم‌رنگ و بی‌کنش، تا با لینک‌ها قاطی نشود.
    فاصله‌ی حرفی نمی‌گیرد: letter-spacing پیوستگیِ حروفِ فارسی را می‌شکند. */
 .mob-section-label {
   padding: 10px 12px 4px;
@@ -4239,11 +4239,16 @@ button.topnav-org:hover {
 .mob-section-label:first-child {
   padding-top: 4px;
 }
-/* دسته‌ی منوها درونِ «عملیات» — یک پله فرعی‌تر از تیترِ «عملیات»/«فهرست». */
+/* دسته‌ی منوهای ماژول («ثبت سند»، «چک»، …) — کارها و دفترهایش زیرش، بی تیترِ «عملیات»/«فهرست». */
 .mob-section-label--sub {
   padding-inline-start: 16px;
   font-weight: 500;
   opacity: 0.85;
+}
+/* جداکننده‌ی بی‌عنوان: دفترهای ماژولِ بی‌دسته، و تب‌های دفترِ ماژولِ تب‌دار بعد از تب‌های کار. */
+.mob-divider {
+  margin: 6px 12px;
+  border-block-start: 1px solid color-mix(in srgb, var(--topnav-muted) 30%, transparent);
 }
 
 /* ── حالت‌ها ─────────────────────────────────────────────────────────────
@@ -8453,59 +8458,15 @@ button.mp-item:focus-visible {
 }
 .mod-panels > .mod-panel:last-child { border-block-end: none; }
 
-/* تیترِ کارت («عملیات»/«فهرست») — **برچسبِ دسته، نه لینک**: کوچک‌تر، کم‌رنگ و بی‌پس‌زمینه.
-   پیش از این هم‌اندازه‌ی لینک‌ها بود (۱۲px) و با رنگِ `--text-h` حتی از آن‌ها پررنگ‌تر
-   (کنتراستِ ۱۳٫۸ در برابرِ ۹٫۵) — یعنی چشم اول به برچسب می‌رفت نه به خودِ عملیات.
-   فاصله‌ی حرفی نمی‌گیرد: letter-spacing پیوستگیِ حروفِ فارسی را می‌شکند.
-
-   هم‌ترازی: بدنه ۶px، ردیف ۱px قاب + ۱۰px فاصله ⇒ ستونِ آیکونِ هر ردیف ۱۷px از لبه
-   است؛ سرتیتر هم دقیقاً ۱۷px می‌گیرد تا آیکونِ تیتر و آیکونِ ردیف‌ها زیرِ هم بنشینند
-   (پیش از این ۸px جابه‌جا بودند). */
-.mod-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-shrink: 0;
-  width: 100%;
-  padding: 10px 17px 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  font-family: inherit;
-  line-height: 1.4;
-  text-align: start;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-/* هر آیکونِ ستون (تیتر، فلش، ردیف) جعبه‌ی ۱۶px دارد؛ نقشِ تیتر ۱۴px داخلِ همان جعبه
-   وسط‌چین می‌شود تا کنارِ متنِ ۱۱px سنگین نباشد ولی ستون به‌هم نخورد. */
-.mod-panel-head > svg {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 14px;
-}
-.mod-panel-title { flex: 1; min-width: 0; white-space: nowrap; }
-/* باز = چورون رو به پایین، جمع = رو به کنار (آکاردئونِ عمودی). */
-.mod-panel-chev { transition: transform 0.18s ease; transform: rotate(90deg); }
-.mod-panel.collapsed .mod-panel-chev { transform: rotate(0deg); }
-/* تودار زیرِ `.mod-panels` تا از `button:hover:not(:disabled)` (۰،۲،۱) که رنگ و قاب را
-   accent می‌کند بالاتر بماند. */
-.mod-panels .mod-panel-head:hover,
-.mod-panels .mod-panel-head:focus-visible {
-  color: var(--text);
-  background: var(--surface-hover);
-  border-color: transparent;
-}
-
-/* جمع‌شده: سرتیتر می‌ماند (جای افقی هست) و فقط بدنه پنهان می‌شود. */
-.mod-panel.collapsed .mod-panel-body { display: none; }
-.mod-panel.collapsed .mod-panel-head { padding-bottom: 10px; }
-
+/* منوی ماژول **یک فهرست** است (۱۴۰۵/۰۷/۰۶): تیترِ «عملیات»/«فهرست» و بازوبسته‌ی کلِ کارت رفتند؛ دسته‌ها
+   خودشان بازوبسته‌اند. بدنه از لبه‌ی بالا با همان فاصله‌ی ردیف‌ها شروع می‌شود. */
 .mod-panel-body {
-  padding: 2px 6px 8px;
+  padding: 8px 6px 8px;
+}
+/* جداکننده‌ی بی‌عنوان: دفترهای ماژولِ بی‌دسته (پیمانکاری، تنظیمات) بعد از کارهایش. */
+.mod-panels .mod-divider {
+  margin: 8px 10px;
+  border-block-start: 1px solid var(--border);
 }
 
 /* — عملیات — */
@@ -8595,7 +8556,6 @@ button.mp-item:focus-visible {
   font-size: var(--fs-xs);
   cursor: pointer;
 }
-.mod-panel.collapsed .mod-order-reset { display: none; }
 .mod-panels .mod-order-reset:hover { background: var(--surface-hover); color: var(--text-h); }
 
 /* صفحه‌ای که بخش‌هایش زیرش باز است: والد — پررنگ، بی‌ته‌رنگ. هایلایت مالِ بخشِ
