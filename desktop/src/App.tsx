@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { fetchMe, fetchSetupStatus, type MeResponse } from './api'
 import { loadStoredToken, storeToken } from './lib/session'
@@ -14,6 +14,9 @@ import { ServerConnectScreen } from './components/ServerConnectScreen'
 import { EnterpriseSetupScreen } from './components/EnterpriseSetupScreen'
 import { UpdateBanner } from './components/UpdateBanner'
 import { OfflineBanner } from './components/OfflineBanner'
+import { ServerConnectionBanner } from './components/ServerConnectionBanner'
+import { useServerConnection } from './lib/useServerConnection'
+import { CONNECTION_EVENT } from './lib/serverConnection'
 import { SubscriptionBanner } from './components/SubscriptionBanner'
 import { TrialBanner } from './components/TrialBanner'
 import { TrialExpiredScreen } from './components/TrialExpiredScreen'
@@ -54,6 +57,9 @@ function wantsSignup(): boolean {
 }
 
 export default function App() {
+  const connection = useServerConnection()
+  const reconnecting = useRef(false)
+  const announcedConnection = useRef(false)
   // مقدار اولیه با تابع داده می‌شود تا *قبل از* اولین رندر خوانده شود؛ با useEffect
   // صفحه‌ی ورود یک لحظه ظاهر می‌شد و بعد جایش عوض می‌شد.
   const [pending, setPending] = useState<PendingAction | null>(readPendingAction)
@@ -160,6 +166,38 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- عمداً یک‌بار؛ forceAuthScreen مقدارِ لحظه‌ی mount را می‌گیرد، هم‌الگو با مقداردهیِ اولیه‌ی token در وب.
   }, [])
 
+  // Keep the cached session mounted while services start. Never overlap the
+  // initial restore: rotating refresh tokens must not be consumed twice.
+  useEffect(() => {
+    if (!isEnterprise || restoring || !offline || connection?.state !== 'ready') return
+    let cancelled = false
+    const renew = async () => {
+      if (reconnecting.current) return
+      reconnecting.current = true
+      try {
+        const result = await window.cubita.restoreSession()
+        if (cancelled) return
+        if (result) {
+          setToken(result.session.access_token)
+          setMe(result.session.me as MeResponse)
+          setOffline(result.offline)
+        } else {
+          setToken(null); setMe(null); setOffline(false)
+        }
+      } finally { reconnecting.current = false }
+    }
+    void renew().catch(() => {})
+    const timer = window.setInterval(() => { void renew().catch(() => {}) }, 10_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [restoring, offline, connection?.state])
+
+  useEffect(() => {
+    if (connection?.state !== 'ready') { announcedConnection.current = false; return }
+    if (restoring || offline || announcedConnection.current) return
+    announcedConnection.current = true
+    window.dispatchEvent(new Event(CONNECTION_EVENT))
+  }, [connection?.state, restoring, offline, token])
+
   // سازمانی: پیش از صفحه‌ی ورود بپرس سرور راه‌اندازی شده یا نه. خطا (سرور خاموش)
   // عمداً نادیده گرفته می‌شود — صفحه‌ی ورود همان خطا را روشن‌تر نشان می‌دهد.
   useEffect(() => {
@@ -173,7 +211,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [token, restoring])
+  }, [token, restoring, connection?.state])
 
   function handleAuthenticated(newToken: string, newMe: MeResponse) {
     setToken(newToken)
@@ -202,6 +240,7 @@ export default function App() {
     <div className="app-window">
       {isElectron && <TitleBar />}
       {isElectron && <UpdateBanner />}
+      {isEnterprise && <ServerConnectionBanner status={connection} />}
       <div className="app-window-body">
         {isEnterprise && serverView ? (
           <ServerConnectScreen
@@ -250,7 +289,7 @@ export default function App() {
           <TrialExpiredScreen onLogout={handleLogout} />
         ) : (
           <>
-            {isElectron && offline && <OfflineBanner />}
+            {isElectron && offline && (!isEnterprise || connection?.state === 'ready' || !connection) && <OfflineBanner />}
             {/* برای حسابِ آزمایشی فقط نوارِ ترایال؛ نوارِ عمومیِ اشتراک تکراری و گیج‌کننده بود. */}
             {/* سازمانی اشتراکِ ابری ندارد؛ وضعیتِ مجوزش نوارِ خودش را می‌گیرد (M2). */}
             {isEnterprise ? null : me.is_trial ? <TrialBanner me={me} /> : <SubscriptionBanner token={token} />}

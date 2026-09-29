@@ -15129,6 +15129,16 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 /* تاریخِ درونِ خانه یک‌خطی — «انتخاب تاریخ» در ستونِ باریک دو خط می‌شد و ردیف را بلند می‌کرد. */
 .page .ef-table-wrap > table.ds-sheet .jalali-date-trigger { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* اتصال دوباره نباید فرم را unmount کند؛ اعلان مستقل از صفحه و در قاب باریک چندخطی است. */
+.server-connection-banner { display: flex; align-items: center; gap: 10px; padding: 10px 18px; background: var(--accent-bg); color: var(--text); flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.server-connection-banner > svg { flex-shrink: 0; }
+.server-connection-banner > span { flex: 1; overflow-wrap: anywhere; }
+.server-connection-banner .btn-secondary { flex-shrink: 0; }
+@media (max-width: 760px) {
+  .server-connection-banner { flex-wrap: wrap; padding: 8px 12px; }
+  .server-connection-banner .btn-secondary { margin-inline-start: auto; }
+}
+
 /* برگه‌ی پهن (حسابِ بانکی، کارتخوان): عرضِ صریح = جمعِ ستون‌ها و لغزشِ افقی؛ شماره‌ی ردیف و ستونِ نام میخ‌اند —
  * همان «ثابت‌کردنِ ستون»ِ اکسل و الگوی بودجه. زمینه‌ی خانه‌ی میخ‌شده مات است، وگرنه ستونِ زیرش پیدا می‌شود. */
 .page .ef-table-wrap > table.ds-sheet--wide { table-layout: fixed; min-inline-size: 100%; }

@@ -53,6 +53,13 @@ contextBridge.exposeInMainWorld('cubita', {
   serverProbe: (url: string) => ipcRenderer.invoke('server:probe', url),
   serverSave: (url: string) => ipcRenderer.invoke('server:save', url),
   serverDiscover: () => ipcRenderer.invoke('server:discover'),
+  serverConnection: () => ipcRenderer.invoke('server:connection'),
+  serverRetryConnection: () => ipcRenderer.invoke('server:retryConnection'),
+  onServerConnection: (cb: (status: unknown) => void) => {
+    const listener = (_event: unknown, status: unknown) => cb(status)
+    ipcRenderer.on('server:connection', listener)
+    return () => ipcRenderer.removeListener('server:connection', listener)
+  },
   networkInspect: () => ipcRenderer.invoke('network:inspect'),
   networkPreview: (config: unknown) => ipcRenderer.invoke('network:preview', config),
   networkApply: (config: unknown) => ipcRenderer.invoke('network:apply', config),

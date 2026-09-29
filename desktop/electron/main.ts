@@ -60,6 +60,8 @@ import { TRUSTED_UPDATE_KEYS } from './updateKeys.js'
 import { beginJournalEdit, saveJournalEdit, cancelJournalEdit, clearJournalEditors } from './journalOutbox.js'
 import { normalizeServerUrl } from './serverAddress.js'
 import { applyNetwork, disableNetwork, inspectNetwork, previewNetwork } from './enterpriseNetwork.js'
+import { ServerConnectionMonitor } from './serverConnection.js'
+import { isLocalServerUrl, recoverLocalServer } from './localServerRecovery.js'
 import { driverFor, listSerialPorts } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
 
@@ -71,6 +73,13 @@ let apiBaseUrl = currentServerUrl() ?? ''
 
 let mainWindow: BrowserWindow | null = null
 let authToken: string | null = null
+const serverConnection = new ServerConnectionMonitor({
+  url: () => apiBaseUrl || null,
+  probe: (url) => probeServer(url, 2500),
+  local: (url) => EDITION === 'enterprise' && app.isPackaged && isLocalServerUrl(url),
+  recover: recoverLocalServer,
+  emit: (status) => { mainWindow?.webContents.send('server:connection', status) },
+})
 
 function configureUpdater() {
   if (EDITION === 'cloud') setupAutoUpdate(() => mainWindow, debugLog)
@@ -169,6 +178,7 @@ app.whenReady().then(() => {
     // ابری: فیدِ acc.cubita.ir. سازمانی: فیدِ سرورِ خودِ شرکت با سنجشِ امضا پیش از نصب
     // (ENTERPRISE_PLAN.md، M5). سازمانیِ هنوز وصل‌نشده فیدی ندارد.
     configureUpdater()
+    if (EDITION === 'enterprise') serverConnection.start()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -181,6 +191,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  serverConnection.stop()
   if (process.platform !== 'darwin') app.quit()
 })
 
@@ -216,6 +227,14 @@ ipcMain.on('server:config', (evt) => {
 ipcMain.handle('server:probe', (_evt, input: string) => probeServer(String(input ?? '')))
 
 ipcMain.handle('server:discover', () => discoverServers())
+ipcMain.handle('server:connection', (event) => {
+  if (EDITION !== 'enterprise' || event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) return null
+  return serverConnection.snapshot()
+})
+ipcMain.handle('server:retryConnection', (event) => {
+  if (EDITION !== 'enterprise' || event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) return null
+  return serverConnection.check(true)
+})
 
 // Privileged configuration is local to the installed app, never available over HTTP.
 for (const [channel, action] of Object.entries({
@@ -313,9 +332,10 @@ ipcMain.handle('auth:restoreSession', async (): Promise<RestoreResult> => {
 ipcMain.handle('auth:clearSession', async () => {
   clearJournalEditors()
   // بهترین‌تلاش: خروجِ سمتِ سرور نباید مانعِ خروجِ محلی شود (مثلاً آفلاین).
-  await bestEffortLogout({ apiBaseUrl: apiBaseUrl })
+  const logout = bestEffortLogout({ apiBaseUrl: apiBaseUrl })
   clearStoredSession()
   authToken = null
+  await logout
 })
 
 // رفرشِ فعلی — فقط برای سوییچِ کسب‌وکار (TenantSwitcher باید رفرشِ قبلی را به

@@ -173,6 +173,52 @@ describe('authSession — نشستِ آفلاینِ دسکتاپ', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('بازیابی‌های همزمان یک رفرش چرخشی را فقط یک بار مصرف می‌کنند', async () => {
+    persistSession('old', 'ref', { tenant_name: 'دفتر' })
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ access_token: 'new', refresh_token: 'next' }))
+      .mockResolvedValueOnce(jsonResponse({ tenant_name: 'دفتر' }))
+    const first = restoreSession({ apiBaseUrl: API })
+    const second = restoreSession({ apiBaseUrl: API })
+    expect(first).toBe(second)
+    await first
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(currentRefreshToken()).toBe('next')
+  })
+
+  it.each([200, 401])('خروج هنگام رفرش با پاسخ %s دوباره نشست را زنده نمی‌کند', async (status) => {
+    persistSession('old', 'ref', { tenant_name: 'دفتر قدیم' })
+    let finish!: (response: Response) => void
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const pending = restoreSession({ apiBaseUrl: API })
+    clearSession()
+    finish(jsonResponse({ access_token: 'late', refresh_token: 'late-ref' }, status))
+    expect(await pending).toBeNull()
+    expect(currentRefreshToken()).toBeNull()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('ورود/تعویض کسب‌وکار هنگام رفرش، پاسخ دیررس دفتر قبلی را کنار می‌گذارد', async () => {
+    persistSession('old', 'old-ref', { tenant_name: 'قدیم' })
+    let finish!: (response: Response) => void
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const pending = restoreSession({ apiBaseUrl: API })
+    persistSession('other', 'other-ref', { tenant_name: 'جدید' })
+    finish(jsonResponse({}, 401))
+    expect((await pending)?.session.access_token).toBe('other')
+    expect(currentRefreshToken()).toBe('other-ref')
+  })
+
+  it('خروج پس از چرخش و در انتظار me اجازهٔ نوشتن پاسخ دیررس را نمی‌دهد', async () => {
+    persistSession('old', 'old-ref', { tenant_name: 'قدیم' })
+    let finish!: (response: Response) => void
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ access_token: 'next', refresh_token: 'next-ref' }))
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const pending = restoreSession({ apiBaseUrl: API })
+    while (!finish) await Promise.resolve()
+    clearSession(); finish(jsonResponse({ tenant_name: 'نباید برگردد' }))
+    expect(await pending).toBeNull(); expect(currentRefreshToken()).toBeNull()
+  })
+
   it('bestEffortLogout با نشست، رفرشِ فعلی را به /logout می‌فرستد', async () => {
     persistSession('acc-1', 'ref-1', { tenant_name: 'الف' })
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }))
