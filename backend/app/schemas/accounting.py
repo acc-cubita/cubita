@@ -259,6 +259,13 @@ class SubNumberIn(BaseModel):
 class JournalLineOut(BaseModel):
     id: UUID
     account_id: UUID
+    # صرفاً برچسبِ فعلی برای نمایش جزئیات؛ ذخیره یا snapshot جدیدی نیست.
+    account_code: str | None = None
+    account_name: str | None = None
+    cost_center_code: str | None = None
+    cost_center_name: str | None = None
+    analytic_code: str | None = None
+    analytic_name: str | None = None
     cost_center_id: UUID | None = None
     analytic_id: UUID | None = None
     debit: Decimal

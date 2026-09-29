@@ -788,6 +788,13 @@ export const fetchAnalyticLedger = (token: string, filters: ReportFilters) =>
 export interface JournalEntryLine {
   id: string
   account_id: string
+  /** برچسب‌های خواندنیِ GET جزئیات؛ نام فعلی چارت، نه snapshot یا تغییر سند. */
+  account_code?: string | null
+  account_name?: string | null
+  cost_center_code?: string | null
+  cost_center_name?: string | null
+  analytic_code?: string | null
+  analytic_name?: string | null
   cost_center_id?: string | null
   /** بُعدِ تحلیلیِ آزاد («تفصیلی سایر») — اختیاری، NULL برای ردیف‌های معمولی. */
   analytic_id?: string | null
