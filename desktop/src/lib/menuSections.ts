@@ -13,6 +13,8 @@
  */
 export const DAILY_SECTION = 'کار روزانه'
 export const DEFINITIONS_SECTION = 'تعریف‌ها'
+/** دسته‌های تعریف — همیشه ته‌ِ منوی ماژول، حتی وقتی دسته‌ای که فقط دفتر دارد بعدشان تعریف شده باشد (`mergeMenu`). */
+export const DEFINITION_TITLES: ReadonlySet<string> = new Set([DEFINITIONS_SECTION, 'ساختار و تعریف‌ها'])
 export const DEFAULT_COLLAPSED_SECTIONS: ReadonlySet<string> = new Set([
   DEFINITIONS_SECTION,
   'ساختار و تعریف‌ها',

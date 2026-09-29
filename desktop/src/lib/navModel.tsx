@@ -338,9 +338,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'salesreturn', label: 'فاکتور برگشتی', icon: <Undo2 size={18} />, section: DAILY_SECTION },
       { key: 'pos', label: 'صندوق فروشگاهی', icon: <ScanLine size={18} />, section: DAILY_SECTION },
       { key: 'installments', label: 'فروش اقساطی', icon: <CalendarClock size={18} />, section: DAILY_SECTION },
-      { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} />, section: 'اشخاص و باشگاه' },
-      { key: 'contactnew', label: 'ثبت طرف حساب', icon: <UserPlus size={18} />, section: 'اشخاص و باشگاه' },
-      { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} />, section: 'اشخاص و باشگاه' },
+      { key: 'contacts', label: 'اشخاص', icon: <UsersRound size={18} />, section: 'اشخاص' },
+      { key: 'contactnew', label: 'ثبت طرف حساب', icon: <UserPlus size={18} />, section: 'اشخاص' },
+      //: دسته‌ی جدا: شش دفترِ باشگاه (سرنخ، پیگیری، …) کنارِ همین صفحه می‌نشینند (`mergeMenu`).
+      { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} />, section: 'باشگاه مشتریان' },
       { key: 'invoiceclose', label: 'بستن فاکتور', icon: <Lock size={18} />, section: 'اصلاح و بستن' },
       { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: <FileSpreadsheet size={18} />, section: 'اصلاح و بستن' },
       { key: 'commission', label: 'قاعده پورسانت', icon: <Wallet size={18} />, section: 'پورسانت و گمرک' },

@@ -117,6 +117,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `desktop/src/{lib/moduleMenu.ts,lib/menuSections.ts,lib/navModel.tsx,components/{ModulePanels,TopNav}.tsx,components/moduleLists.tsx,App.css}`، `.claude/skills/cubita-page/SKILL.md`، `PROJECT_OVERVIEW.md` | منوی ماژول یک فهرست؛ «عملیات»/«فهرست» حذف، دفترها زیرِ دسته‌ی کارشان | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/{package.json,package-lock.json}`، `DEPLOY_NOTES.md`، `PROJECT_OVERVIEW.md` | استقرارِ وب (#243 + #241) و انتشارِ دسکتاپ ۱.۹.۴ روی هر دو کانال؛ هشدارِ منتشرنکردنِ نصابِ محلیِ ۱.۹.۲ | ۱۴۰۵/۰۷/۰۶ |
 | Claude Code (آرش) | `desktop/src/{lib/navModel.tsx,lib/menuSections.ts,components/moduleLists.tsx,components/moduleSections.tsx,components/ModulePanels.tsx,components/TopNav.tsx,App.css}`، سرصفحه‌ها و راهنما، `.claude/skills/cubita-page/SKILL.md`، `PROJECT_OVERVIEW.md` | مرتب‌سازیِ زیرمنوها (مرحله‌ی ۱): دسته‌ها، انحلالِ «شرکت»، منوی کاربر، نام‌ها | ۱۴۰۵/۰۷/۰۶ |
 | Codex | یادداشت/تاریخچه، خروجی نصاب/سرور و `_deploy/enterprise-1.9.2/`؛ بیلد و QA آزاد شدند | نصاب کامل ۱.۹.۲ از مرج #241 آماده؛ ۹۰۸ دسکتاپ، selftest و provision با ۱۶۴ RLS، main/preload بسته‌بندی‌شده با SQLite واقعی و پیش‌بررسی تاریخ/حفظ صف/ارسال بدون تکرار، اتوماسیون با فایل پاس؛ ۲۹۰۹ فایل سرور برابر و CRC نصاب سالم. QA متوقف، نصب‌های واقعی و دادهٔ کاربر دست‌نخورده؛ انتشار عمومی انجام نشد چون HTTPS/SSH میزبان تایم‌اوت است | ۱۴۰۵/۰۷/۰۶ |

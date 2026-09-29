@@ -32,6 +32,8 @@ import {
 } from './navModel'
 import { LIST_MENUS, OPS_LIST_MAP, OPS_MENUS } from '../components/moduleLists'
 import type { ExperienceMode } from './experienceMode'
+import { DEFINITION_TITLES } from './menuSections'
+import { mergeMenu } from './moduleMenu'
 
 //: صفحه‌ی عملیاتِ کاری — در `NAV_GROUPS` است، پس با فیلترِ ناوبری سنجیده می‌شود.
 const WORK_OPS: PageKey = 'assurancehealth'
@@ -385,5 +387,40 @@ describe('مرتب‌سازیِ زیرمنوها — ۱۴۰۵/۰۷/۰۶', () => 
     const assurance = nav(BASE).groups.find((g) => g.heading === 'حسابرسی')!
     expect(assurance.items).toHaveLength(1)
     expect(groupBarLabel(assurance)).toBe('حسابرسی')
+  })
+})
+
+describe('منوی یک‌فهرستیِ ماژول — دفتر زیرِ دسته‌ی کارش (۱۴۰۵/۰۷/۰۶)', () => {
+  //: دسته‌ای که فقط دفتر دارد عمدی است و این‌جا نام برده می‌شود؛ غلطِ تایپی در `category` بی‌صدا دسته‌ی تازه می‌ساخت.
+  const LIST_ONLY: Record<string, string[]> = { 'تامین‌کنندگان و انبار': ['موجودی'] }
+  const merged = (heading: string) => {
+    const g = NAV_GROUPS.find((x) => x.heading === heading)!
+    const ops: { title: string | null; items: unknown[] }[] = OPS_MENUS[heading]
+      ? menuCategories(OPS_MENUS[heading])
+      : navSections(g.items)
+    return mergeMenu(ops, menuCategories(LIST_MENUS[heading] ?? []), (t) => DEFINITION_TITLES.has(t))
+  }
+
+  it('در ماژولِ دسته‌دار هر دفتر دسته دارد، دسته‌ی فقط-دفتر همان فهرستِ عمدی است، و تعریف‌ها ته‌اند', () => {
+    for (const g of NAV_GROUPS) {
+      const lists = LIST_MENUS[g.heading] ?? []
+      const ops = OPS_MENUS[g.heading] ? menuCategories(OPS_MENUS[g.heading]) : navSections(g.items)
+      if (lists.length === 0 || ops.every((c) => c.title === null)) continue
+      expect(lists.every((e) => e.category), g.heading).toBe(true)
+      const m = merged(g.heading)
+      expect(m.filter((c) => c.title && c.ops.length === 0).map((c) => c.title), g.heading).toEqual(LIST_ONLY[g.heading] ?? [])
+      const titles = m.map((c) => c.title ?? '')
+      const defs = titles.findIndex((t) => DEFINITION_TITLES.has(t))
+      if (defs !== -1) expect(titles.slice(defs).every((t) => DEFINITION_TITLES.has(t)), g.heading).toBe(true)
+    }
+  })
+
+  it('نمونه‌ها: «اسناد حسابداری» زیرِ «ثبت سند»، «عملیات چک» زیرِ «چک»، «فاکتورهای فروش» زیرِ «کار روزانه»', () => {
+    const where = (heading: string, label: string) =>
+      merged(heading).find((c) => c.lists.some((e) => e.label === label))?.title
+    expect(where('حسابداری', 'اسناد حسابداری')).toBe('ثبت سند')
+    expect(where('دریافت و پرداخت', 'عملیات چک')).toBe('چک')
+    expect(where('مشتریان و فروش', 'فاکتورهای فروش')).toBe('کار روزانه')
+    expect(where('مشتریان و فروش', 'سرنخ‌ها')).toBe('باشگاه مشتریان')
   })
 })

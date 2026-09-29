@@ -3,7 +3,8 @@
  * جابه‌جاییِ منوهای کارت‌های «عملیات» و «فهرست» — فلشِ بالا/پایین روی هر ردیف و Alt+↑/↓.
  *
  * * ترتیب روی دستگاه می‌ماند (بعد از سوارشدنِ دوباره هم).
- * * هر کارت فهرستِ خودش است: جابه‌جایی در «عملیات» به «فهرست» دست نمی‌زند.
+ * * منو یک فهرست است (بی تیترِ «عملیات»/«فهرست»)؛ درونِ هر دسته اول کارها، بعد دفترها، و جابه‌جاییِ یک
+ *   کار از مرزِ دفترها رد نمی‌شود.
  * * با صفحه‌کلید، فوکوس روی همان منو می‌ماند.
  * * «ترتیبِ پیش‌فرض» فقط وقتی ترتیب عوض شده پیدا می‌شود و برش می‌گرداند.
  */
@@ -73,12 +74,19 @@ describe('جابه‌جاییِ منوهای عملیات و فهرست', () => 
     expect(labels(panels()[0]).slice(0, 2)).toEqual([before[1], before[0]])
   })
 
-  it('هر کارت فهرستِ خودش: جابه‌جایی در عملیات به فهرست دست نمی‌زند', () => {
+  it('یک منو، بی تیترِ «عملیات»/«فهرست»؛ دفتر ته دسته‌ی کارش و جابه‌جاییِ کار به آن نمی‌رسد', () => {
     render()
-    const listBefore = labels(panels()[1])
-    const opsBefore = labels(panels()[0])
-    act(() => arrow(panels()[0], opsBefore[1]!, 'بالا').click())
-    expect(labels(panels()[1])).toEqual(listBefore)
+    expect(panels()).toHaveLength(1)
+    expect(container.querySelector('.mod-panel-head')).toBeNull()
+    expect(container.textContent).not.toMatch(/^عملیات|فهرست$/)
+    const [menu] = panels()
+    //: «ثبت سند»: سه کار، بعد دفترش.
+    expect(labels(menu).slice(0, 4)).toEqual(['سند حسابداری', 'مانده اول دوره', 'اسناد تکرارشونده', 'اسناد حسابداری'])
+    //: آخرین کار پایین نمی‌رود (دفتر دامنه‌ی خودش را دارد) و تنها دفترِ دسته جابه‌جا نمی‌شود.
+    expect(arrow(menu, 'اسناد تکرارشونده', 'پایین').disabled).toBe(true)
+    expect(menu.querySelector(`[aria-label="بالا بردنِ «اسناد حسابداری»"]`)).toBeNull()
+    act(() => arrow(menu, 'مانده اول دوره', 'بالا').click())
+    expect(labels(panels()[0]).slice(0, 4)).toEqual(['مانده اول دوره', 'سند حسابداری', 'اسناد تکرارشونده', 'اسناد حسابداری'])
   })
 
   it('Alt+↑/↓ روی خودِ منو، و فوکوس روی همان منو می‌ماند', async () => {
@@ -96,13 +104,13 @@ describe('جابه‌جاییِ منوهای عملیات و فهرست', () => 
 
   it('«ترتیبِ پیش‌فرض» فقط بعد از تغییر پیدا می‌شود و برمی‌گرداند', () => {
     render()
-    const reset = () => panels()[1].querySelector<HTMLButtonElement>('.mod-order-reset')
-    const listBefore = labels(panels()[1])
+    const reset = () => panels()[0].querySelector<HTMLButtonElement>('.mod-order-reset')
+    const before = labels(panels()[0])
     expect(reset()).toBeNull()
-    act(() => arrow(panels()[1], listBefore[0]!, 'پایین').click())
-    expect(labels(panels()[1])).not.toEqual(listBefore)
+    act(() => arrow(panels()[0], before[0]!, 'پایین').click())
+    expect(labels(panels()[0])).not.toEqual(before)
     act(() => reset()!.click())
-    expect(labels(panels()[1])).toEqual(listBefore)
+    expect(labels(panels()[0])).toEqual(before)
     expect(reset()).toBeNull()
   })
 })
@@ -136,12 +144,12 @@ describe('دسته‌ی بازوبسته', () => {
   const head = (panel: HTMLElement, title: string) =>
     [...panel.querySelectorAll<HTMLButtonElement>('.mod-section-label')].find((b) => b.querySelector('.mod-section-title')?.textContent === title)!
 
-  it('«ساختار و تعریف‌ها» پیش‌فرض بسته است و تعدادِ ردیف‌هایش را می‌گوید', () => {
+  it('«ساختار و تعریف‌ها» پیش‌فرض بسته است و تعدادِ ردیف‌هایش را می‌گوید — شش کار و دفترِ «مراکز هزینه»', () => {
     render()
     const [ops] = panels()
     const h = head(ops, 'ساختار و تعریف‌ها')
     expect(h.getAttribute('aria-expanded')).toBe('false')
-    expect(h.querySelector('.mod-section-count')?.textContent).toBe((6).toLocaleString('fa-IR'))
+    expect(h.querySelector('.mod-section-count')?.textContent).toBe((7).toLocaleString('fa-IR'))
     expect(labels(ops)).not.toContain('درختواره حساب‌ها')
   })
 
