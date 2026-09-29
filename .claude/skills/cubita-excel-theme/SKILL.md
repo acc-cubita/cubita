@@ -18,7 +18,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | صفحه | PR | الگو (بخشِ ۱) | فایلِ مرجع |
 |---|---|---|---|
 | سند حسابداری | #205؛ اصلاح صف در ۱۴۰۵/۰۷/۰۶ | الف: سند؛ همان فرم برای ویرایش صف، بدون صفحهٔ تازه یا تغییر گرید | [JournalEntryForm.tsx](../../../desktop/src/components/JournalEntryForm.tsx) |
-| نمایش سند ثبت‌شده | `feat/journal-entry-presentation`؛ ۱۴۰۵/۰۷/۰۷ | د: برگهٔ مشترکِ فقط‌خواندنی در کشو، مشخصات/شرح، حساب‌های خوانا، جمع دقیق و توازن در `tfoot` همان ستون‌ها؛ سه پوسته، کارت در موبایل، دریافت دوباره و فوکوس | [EntryCard.tsx](../../../desktop/src/components/EntryCard.tsx) + [JournalEntryDrawer.tsx](../../../desktop/src/components/JournalEntryDrawer.tsx) |
+| نمایش سند ثبت‌شده | #255؛ ۱۴۰۵/۰۷/۰۷ | د: برگهٔ مشترکِ فقط‌خواندنی در کشو، مشخصات/شرح، حساب‌های خوانا، جمع دقیق و توازن در `tfoot` همان ستون‌ها؛ سه پوسته، کارت در موبایل، دریافت دوباره و فوکوس | [EntryCard.tsx](../../../desktop/src/components/EntryCard.tsx) + [JournalEntryDrawer.tsx](../../../desktop/src/components/JournalEntryDrawer.tsx) |
 | مانده اول دوره | #206 | الف: سند، به‌اضافه‌ی برگه‌ی کالا | [OpeningBalancePage.tsx](../../../desktop/src/pages/accounting/OpeningBalancePage.tsx) |
 | تفصیلی سایر | #207 | ب: برگه‌ی ویرایشِ درجا | [AnalyticsPage.tsx](../../../desktop/src/pages/accounting/AnalyticsPage.tsx) |
 | صدور سند تسعیر ارز | #208 | ج: پیش‌نمایشِ سندِ خودکار | [FxRevaluationPage.tsx](../../../desktop/src/pages/accounting/FxRevaluationPage.tsx) |
