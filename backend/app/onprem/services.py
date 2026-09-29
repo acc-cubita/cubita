@@ -12,16 +12,21 @@
 قاعده‌ی فایروال فقط برای شبکه‌ی **خصوصی و دامنه** است — هرگز Public: لپ‌تاپی که سرور
 شده و در کافه به وای‌فای وصل می‌شود نباید دفترِ شرکت را روی شبکه‌ی عمومی باز کند.
 
-همه‌ی فرمان‌ها به‌صورتِ فهرستِ آرگومان ساخته می‌شوند (تست‌پذیر) و فقط `run_all` اجرا می‌کند.
+فرمان‌ها به‌صورتِ فهرستِ آرگومان ساخته می‌شوند؛ موفقیتِ نصب علاوه بر خروجیِ فرمان،
+به وضعیتِ واقعیِ سرویس و پاسخِ سالمِ API وابسته است.
 """
 
 from __future__ import annotations
 
+import json
 import subprocess
+import time
 from pathlib import Path
+from urllib.request import ProxyHandler, build_opener
 from xml.sax.saxutils import escape
 
 from app.onprem.provision import Layout, ProvisionError
+from app.version import app_version
 
 PG_SERVICE = "CubitaPostgres"
 API_SERVICE = "CubitaApi"
@@ -133,6 +138,78 @@ def _service_exists(name: str) -> bool:
     )
 
 
+def _service_state(name: str) -> int:
+    # عددِ ServiceControllerStatus ترجمه نمی‌شود؛ متنِ sc/net در ویندوزهای مختلف فرق دارد.
+    if name not in (PG_SERVICE, API_SERVICE):
+        raise ProvisionError("نام سرویسِ سازمانی معتبر نیست.")
+    try:
+        proc = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+             f"$ErrorActionPreference='Stop'; [int](Get-Service -Name '{name}' -ErrorAction Stop).Status"],
+            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if proc.returncode == 0:
+            state = int(proc.stdout.strip())
+            if 1 <= state <= 7:
+                return state
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    raise ProvisionError(f"وضعیتِ سرویس {name} خوانده نشد؛ دسترسیِ مدیر و Services را بررسی کنید.")
+
+
+def _wait_service_state(name: str, target: int, *, timeout: float = 30) -> None:
+    deadline = time.monotonic() + timeout
+    while _service_state(name) != target:
+        if time.monotonic() >= deadline:
+            raise ProvisionError(f"سرویس {name} به وضعیتِ مورد انتظار نرسید؛ Services و پوشهٔ logs را بررسی کنید.")
+        time.sleep(0.5)
+
+
+def _ensure_service_running(name: str, *, log=print) -> None:
+    state = _service_state(name)
+    if state == 3:  # StopPending: شروعِ سرویس پیش از پایانِ توقف ممکن نیست.
+        _wait_service_state(name, 1)
+        state = 1
+    if state not in (1, 2, 4):
+        raise ProvisionError(f"سرویس {name} متوقف یا در حال اجرا نیست؛ وضعیت آن را در Services بررسی کنید.")
+    if state == 1:
+        try:
+            proc = subprocess.run(
+                ["net", "start", name], capture_output=True, text=True,
+                stdin=subprocess.DEVNULL, timeout=60,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ProvisionError(f"راه‌اندازیِ سرویس {name} انجام نشد؛ Services و پوشهٔ logs را بررسی کنید.") from exc
+        # فقط رقابتِ «سرویس هم‌زمان روشن شد» بی‌خطر است؛ خطاهای واقعی نباید سبز گزارش شوند.
+        if proc.returncode != 0 and _service_state(name) not in (2, 4):
+            raise ProvisionError(f"راه‌اندازیِ سرویس {name} شکست خورد؛ Services و پوشهٔ logs را بررسی کنید.")
+    _wait_service_state(name, 4)
+    log(f"  ✓ {name} در حال اجراست")
+
+
+def _wait_api_ready(api_port: int, *, timeout: float = 45) -> None:
+    if not 1 <= api_port <= 65535:
+        raise ProvisionError("پورتِ سرور معتبر نیست.")
+    # localhost نباید به پراکسی/VPNِ اینترنت فرستاده شود. Running بودنِ WinSW کافی نیست.
+    opener = build_opener(ProxyHandler({}))
+    expected_version = app_version()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with opener.open(f"http://127.0.0.1:{api_port}/api/health", timeout=min(3, max(0.1, deadline - time.monotonic()))) as response:
+                data = json.loads(response.read(16384))
+                if (response.status == 200 and isinstance(data, dict)
+                        and data.get("status") == "ok" and data.get("edition") == "enterprise"
+                        and data.get("version") == expected_version):
+                    return
+        except (OSError, ValueError):
+            pass
+        time.sleep(0.5)
+    raise ProvisionError("سرویس روشن شد ولی سرورِ هم‌نسخه پاسخ سالم نداد؛ پوشهٔ logs، نسخه و پورتِ API را بررسی کنید. نصب هنوز کامل نیست.")
+
+
 def install_services(*, layout: Layout, pg_bin: Path, server_exe: Path, winsw_exe: Path, api_port: int, log=print) -> None:
     """ACL، دو سرویس، فایروال و راه‌اندازی. نیاز به مدیر دارد. بی‌خطر برای اجرای دوباره."""
     log("دسترسیِ پوشه‌ی داده…")
@@ -156,8 +233,10 @@ def install_services(*, layout: Layout, pg_bin: Path, server_exe: Path, winsw_ex
     run_all(firewall_commands(api_port), tolerate_first=True, log=log)
 
     log("راه‌اندازیِ سرویس‌ها…")
-    run_all([["net", "start", PG_SERVICE]], tolerate_first=True, log=log)
-    run_all([["net", "start", API_SERVICE]], tolerate_first=True, log=log)
+    _ensure_service_running(PG_SERVICE, log=log)
+    _ensure_service_running(API_SERVICE, log=log)
+    _wait_api_ready(api_port)
+    log("  ✓ سرورِ سازمانی پاسخ سالم می‌دهد")
 
 
 def uninstall_services(*, layout: Layout, pg_bin: Path, log=print) -> None:

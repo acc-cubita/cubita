@@ -40,6 +40,11 @@ fs.writeFileSync(
     fs.readFileSync(path.join(root, 'build', 'installer-enterprise.nsh'), 'utf8'),
   'utf8',
 )
+// The include resolves this embedded guard relative to its own generated location.
+fs.copyFileSync(
+  path.join(root, 'build', 'installer-service-guard.ps1'),
+  path.join(root, OUT_DIR, 'installer-service-guard.ps1'),
+)
 
 const config = {
   ...pkg.build,
