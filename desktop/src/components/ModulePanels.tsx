@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, ChevronUp, ListChecks, Loader2, Play, Inbox, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, Inbox, RotateCcw } from 'lucide-react'
 import { MODULE_SECTIONS, listSections, opsSections, type SectionDef } from './moduleSections'
 import {
   LIST_MENUS,
@@ -11,8 +11,9 @@ import {
   type ListMenuItem,
   type ListRow,
 } from './moduleLists'
-import { menuCategories, menuEntryVisible, navSections, type NavGroup } from '../lib/navModel'
-import { DEFAULT_COLLAPSED_SECTIONS } from '../lib/menuSections'
+import { menuCategories, menuEntryVisible, navSections, type NavGroup, type NavItem } from '../lib/navModel'
+import { DEFAULT_COLLAPSED_SECTIONS, DEFINITION_TITLES } from '../lib/menuSections'
+import { mergeMenu, titledCount } from '../lib/moduleMenu'
 import { useMenuOrder, type MenuOrderApi } from '../lib/menuOrder'
 import type { PageKey } from './Sidebar'
 
@@ -32,7 +33,6 @@ import type { PageKey } from './Sidebar'
  * ترتیب روی همین دستگاه می‌ماند (`lib/menuOrder`) و «ترتیبِ پیش‌فرض» ته کارت برش می‌گرداند.
  */
 
-const COLLAPSE_KEY = 'cubita.modulePanels.collapsed'
 //: بازوبسته‌ی هر دسته، جدا از دو کارت. فقط انتخابِ صریحِ کاربر ذخیره می‌شود؛ نبودنِ کلید یعنی پیش‌فرض
 //: (`DEFAULT_COLLAPSED_SECTIONS`).
 const CATEGORY_KEY = 'cubita.modulePanels.categories'
@@ -89,18 +89,6 @@ export function hasModulePanels(page: PageKey, groups: NavGroup[]): boolean {
   )
 }
 
-type Collapsed = { ops: boolean; list: boolean }
-
-function loadCollapsed(): Collapsed {
-  try {
-    const raw = localStorage.getItem(COLLAPSE_KEY)
-    if (raw) return { ops: false, list: false, ...(JSON.parse(raw) as Partial<Collapsed>) }
-  } catch {
-    // خواندنِ ناموفق نباید چیدمان را بشکند — پیش‌فرضِ باز.
-  }
-  return { ops: false, list: false }
-}
-
 export function ModulePanels({
   page,
   section,
@@ -116,19 +104,8 @@ export function ModulePanels({
   groups: NavGroup[]
   token: string
 }) {
-  const [collapsed, setCollapsed] = useState<Collapsed>(loadCollapsed)
   const [categories, setCategories] = useState<CategoryState>(loadCategories)
   const mo = useMenuOrder()
-  const toggle = (which: keyof Collapsed) =>
-    setCollapsed((c) => {
-      const next = { ...c, [which]: !c[which] }
-      try {
-        localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next))
-      } catch {
-        // ذخیره‌نشدنِ ترجیح مهم نیست؛ چیدمان باید کار کند.
-      }
-      return next
-    })
 
   const sections = MODULE_SECTIONS[page] ?? []
   const activeSection = section ?? sections[0]?.key ?? null
@@ -149,16 +126,11 @@ export function ModulePanels({
   const reachable = <T extends { key: PageKey }>(menu: T[]) => menu.filter((e) => menuEntryVisible(e.key, groups))
   //: گروهی که منوی «عملیات»ش کار‌به‌کار است نه صفحه‌به‌صفحه («تامین‌کنندگان و انبار»).
   const opsMenu = group && OPS_MENUS[group.heading] ? reachable(OPS_MENUS[group.heading]) : undefined
-  //: کارتِ «فهرست» منوی کاملِ فهرستِ همان ماژول است — همان ردیف‌هایی که کاربر برای هر
-  //: ماژول تعریف کرد (دارایی ثابت پنج‌تا، تولید پنج‌تا، تامین‌کنندگان و انبار دوازده‌تا).
-  //: #۱۲۴ آن را به یکی‌دوتا ردیفِ «مالِ همین عملیات» محدود کرده بود؛ کاربر گفت
-  //: «تمام زیرمنوهای فهرست که تعریف کرده بودیم حذف شده» و برگشت.
+  //: دفترهای ماژول کامل می‌آیند — همان ردیف‌هایی که کاربر برای هر ماژول تعریف کرد. #۱۲۴ آن‌ها را به
+  //: یکی‌دوتا ردیفِ «مالِ همین عملیات» محدود کرده بود؛ کاربر گفت «تمام زیرمنوهای فهرست حذف شده» و برگشت.
   const listMenu = group && LIST_MENUS[group.heading] ? reachable(LIST_MENUS[group.heading]) : undefined
   //: ماژولِ تب‌داری که منوی گروهی ندارد: دفترهایش خودشان تب‌اند (`kind: 'list'`).
   const sectionLists = listSections(sections)
-  //: کارتِ همیشه‌خالی فقط عرض می‌گیرد و چیزی نمی‌گوید؛ فقط وقتی نه منو هست، نه تبِ
-  //: دفتری، نه رکوردِ زنده، کارت نمی‌آید.
-  const hasList = Boolean(listMenu?.length) || sectionLists.length > 0 || listDefFor(page, activeSection) !== null
 
   //: دامنه‌های ترتیب — هر فهرستی که روی کارت می‌آید یکی. نامِ گروه و نه صفحه، چون همان منوی
   //: گروه از هر صفحه‌ی آن دیده می‌شود و باید یک ترتیب داشته باشد.
@@ -170,9 +142,8 @@ export function ModulePanels({
    * نباید ردیفِ خودش را زیرِ یک دسته‌ی بسته گم کند. دسته‌ی بسته‌ای که صفحه‌ی فعال را دارد نشان
    * می‌گیرد (`has-current`)، همان کارِ نقطه‌ی آکاردئونِ کشو.
    */
-  const category = (card: 'ops' | 'list', title: string | null, count: number, hasCurrent: boolean) => {
-    if (!title) return { collapsed: false, head: null }
-    const id = `${card}:${gk}:${title}`
+  const category = (title: string, count: number, hasCurrent: boolean) => {
+    const id = `${gk}:${title}`
     const isCollapsed = categories[id] ?? (DEFAULT_COLLAPSED_SECTIONS.has(title) && !hasCurrent)
     const head = (
       <CategoryHead
@@ -197,20 +168,6 @@ export function ModulePanels({
     return { collapsed: isCollapsed, head }
   }
 
-  /** منوی گروه (`OPS_MENUS`/`LIST_MENUS`) دسته‌به‌دسته. منوی بی‌دسته همان فهرستِ یک‌دستِ قبلی است. */
-  const categorizedMenu = (card: 'ops' | 'list', entries: ListMenuItem[], scope: string) => {
-    const cats = menuCategories(entries)
-    return cats.map((cat) => {
-      const hasCurrent = cat.items.some((e) => menuEntryActive(e, page, activeSection))
-      const { collapsed: shut, head } = cats.length > 1 ? category(card, cat.title, cat.items.length, hasCurrent) : { collapsed: false, head: null }
-      return (
-        <Fragment key={cat.title ?? ''}>
-          {head}
-          {!shut && menuButtons(cat.items, page, activeSection, onSelectSection, onNavigate, mo, scope)}
-        </Fragment>
-      )
-    })
-  }
   const secOps = (p: PageKey) => `sec-ops:${p}`
   const opsScopes = opsMenu
     ? [`ops:${gk}`]
@@ -218,159 +175,174 @@ export function ModulePanels({
       ? [`pages:${gk}`, ...pages.map((p) => secOps(p.key))]
       : [secOps(page)]
   const listScopes = listMenu?.length ? [`list:${gk}`] : sectionLists.length > 0 ? [`sec-list:${page}`] : []
-  //: دسته‌های گروه («ساختار و تعریف‌ها»، «ثبت سند»، …) ترتیبِ ثابتِ `NAV_GROUPS` را دارند؛ ترتیبِ
+  const scopes = [...opsScopes, ...listScopes]
+  //: دسته‌های گروه («ثبت سند»، «پایان دوره»، …) ترتیبِ ثابتِ `NAV_GROUPS` را دارند؛ ترتیبِ
   //: دلخواهِ کاربر فقط *درونِ* هر دسته است — وگرنه جابه‌جاییِ یک منو دسته‌ای را دو تکه می‌کرد.
   const pageSections = navSections(pages).map((sec) => ({
     ...sec,
     items: mo.sort(`pages:${gk}`, sec.items, (p) => p.key),
   }))
 
-  // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون‌ها را
+  //: کارها و دفترها، هر کدام دسته‌به‌دسته — بعد یکی می‌شوند (`mergeMenu`): دفتر زیرِ همان دسته‌ی کارش.
+  type OpsRow = { kind: 'page'; it: NavItem; keys: string[] } | { kind: 'entry'; e: ListMenuItem } | { kind: 'sec'; s: SectionDef }
+  type ListRowItem = { kind: 'entry'; e: ListMenuItem } | { kind: 'sec'; s: SectionDef }
+  const opsCats: { title: string | null; items: OpsRow[] }[] = opsMenu
+    ? menuCategories(opsMenu).map((c) => ({ title: c.title, items: c.items.map((e): OpsRow => ({ kind: 'entry', e })) }))
+    : pages.length > 0
+      ? pageSections.map((sec) => {
+          const keys = sec.items.filter((p) => !p.guide).map((p) => p.key)
+          return { title: sec.title, items: sec.items.map((it): OpsRow => ({ kind: 'page', it, keys })) }
+        })
+      : [{ title: null, items: ops.map((s): OpsRow => ({ kind: 'sec', s })) }]
+  const listCats: { title: string | null; items: ListRowItem[] }[] = listMenu?.length
+    ? menuCategories(listMenu).map((c) => ({ title: c.title, items: c.items.map((e): ListRowItem => ({ kind: 'entry', e })) }))
+    : sectionLists.length > 0
+      ? [{ title: null, items: sectionLists.map((s): ListRowItem => ({ kind: 'sec', s })) }]
+      : []
+  const merged = mergeMenu(opsCats, listCats, (t) => DEFINITION_TITLES.has(t))
+  const showTitles = titledCount(merged) > 1
+  //: ماژولی که دفترِ جدا ندارد ولی رکوردِ زنده دارد: چند رکوردِ آخرِ همین عملیات، ته منو.
+  const live = listCats.length === 0 && listDefFor(page, activeSection) !== null
+
+  const isCurrent = (r: OpsRow | ListRowItem) =>
+    r.kind === 'page' ? r.it.key === page : r.kind === 'entry' ? menuEntryActive(r.e, page, activeSection) : activeSection === r.s.key
+
+  /** یک ردیفِ صفحه در دسته — «مسیرِ کار»، صفحه‌ی هم‌نامِ ماژول (بخش‌هایش مستقیم)، یا صفحه‌ای که بخش‌هایش زیرش باز است. */
+  const pageRow = (it: NavItem, pageKeys: string[]) => {
+    //: «مسیرِ کار» ردیفِ هم‌وزنِ کارها نیست؛ پیوندِ کم‌رنگِ بالای منو است.
+    if (it.guide) {
+      const on = it.key === page
+      return (
+        <button
+          key={it.key}
+          type="button"
+          className={`mod-guide${on ? ' active' : ''}`}
+          aria-current={on ? 'page' : undefined}
+          onClick={() => onNavigate(it.key)}
+        >
+          {it.icon}
+          <span>{it.label}</span>
+        </button>
+      )
+    }
+    // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
+    // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
+    // مستقیم در سطحِ اول می‌نشینند.
+    const redundant = it.label === group?.heading
+    const own = mo.sort(secOps(it.key), opsSections(MODULE_SECTIONS[it.key] ?? []), (x) => x.key)
+    if (redundant && own.length > 0) {
+      const ownKeys = own.map((x) => x.key)
+      return (
+        <Fragment key={it.key}>
+          {own.map((s) => {
+            const Icon = s.icon
+            const on = it.key === page && activeSection === s.key
+            return (
+              <MenuItem
+                key={s.key}
+                mo={mo}
+                scope={secOps(it.key)}
+                keys={ownKeys}
+                itemKey={s.key}
+                label={s.label}
+                icon={<Icon size={16} />}
+                className={`mod-op${on ? ' active' : ''}`}
+                current={on}
+                onClick={() => (it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key))}
+              />
+            )
+          })}
+        </Fragment>
+      )
+    }
+    const current = it.key === page
+    const expanded = current && own.length > 0
+    return (
+      <Fragment key={it.key}>
+        <MenuItem
+          mo={mo}
+          scope={`pages:${gk}`}
+          keys={pageKeys}
+          itemKey={it.key}
+          label={it.label}
+          icon={it.icon}
+          //: صفحه‌ای که بخش‌هایش زیرش باز است «والد» است نه «فعال»: هایلایت
+          //: مالِ بخشِ انتخاب‌شده است. اگر هر دو یک‌جور برجسته شوند، دیگر
+          //: پیدا نیست کاربر دقیقاً روی کدام زیرمنو ایستاده.
+          className={`mod-op${expanded ? ' mod-op--parent' : current ? ' active' : ''}`}
+          current={current && !expanded}
+          onClick={() => onNavigate(it.key)}
+        />
+        {expanded && (
+          <div className="mod-sub">
+            {sectionButtons(own, activeSection, onSelectSection, mo, secOps(it.key))}
+          </div>
+        )}
+      </Fragment>
+    )
+  }
+
+  const opsRows = (rows: OpsRow[]) => {
+    const entries = rows.flatMap((r) => (r.kind === 'entry' ? [r.e] : []))
+    const secs = rows.flatMap((r) => (r.kind === 'sec' ? [r.s] : []))
+    return (
+      <>
+        {rows.map((r) => (r.kind === 'page' ? pageRow(r.it, r.keys) : null))}
+        {entries.length > 0 && menuButtons(entries, page, activeSection, onSelectSection, onNavigate, mo, `ops:${gk}`)}
+        {secs.length > 0 && sectionButtons(secs, activeSection, onSelectSection, mo, secOps(page))}
+      </>
+    )
+  }
+  const listRows = (rows: ListRowItem[]) => {
+    const entries = rows.flatMap((r) => (r.kind === 'entry' ? [r.e] : []))
+    const secs = rows.flatMap((r) => (r.kind === 'sec' ? [r.s] : []))
+    return (
+      <>
+        {/* هر ورودی صفحه‌ی همان دفتر را باز می‌کند (یا تبِ آن، اگر `section` دارد). */}
+        {entries.length > 0 && menuButtons(entries, page, activeSection, onSelectSection, onNavigate, mo, `list:${gk}`)}
+        {secs.length > 0 && sectionButtons(secs, activeSection, onSelectSection, mo, `sec-list:${page}`)}
+      </>
+    )
+  }
+
+  // ماژولی که نه عملیاتِ چندگانه دارد و نه فهرست (داشبورد، راهنما، …) این ستون را
   // اصلاً نمی‌گیرد تا فضای محتوا هدر نرود.
   if (!hasModulePanels(page, groups)) return null
 
   return (
     <div className="mod-panels">
-      {(opsMenu || ops.length > 0 || pages.length > 0) && (
-        <section className={`mod-panel${collapsed.ops ? ' collapsed' : ''}`}>
-          <button
-            type="button"
-            className="mod-panel-head"
-            onClick={() => toggle('ops')}
-            aria-expanded={!collapsed.ops}
-            title={collapsed.ops ? 'بازکردنِ عملیات' : 'جمع‌کردنِ عملیات'}
-          >
-            <Play size={15} />
-            <span className="mod-panel-title">عملیات</span>
-            <ChevronRight size={15} className="mod-panel-chev" />
-          </button>
-          <div className="mod-panel-body">
-            {opsMenu && categorizedMenu('ops', opsMenu, `ops:${gk}`)}
-            {/* صفحه‌های هم‌گروه، و زیرِ صفحه‌ی فعال بخش‌های خودش — همان چیزی که
-                پیش‌تر دراپ‌داونِ نوارِ بالا نشان می‌داد، حالا این‌جا. */}
-            {!opsMenu &&
-              pageSections.map((sec) => {
-                const pageKeys = sec.items.filter((p) => !p.guide).map((p) => p.key)
-                //: تیترِ دسته فقط وقتی گروه چند دسته دارد؛ گروهِ یک‌دست همان فهرستِ قبلی است.
-                const titled = sec.title !== null && pageSections.filter((s) => s.title !== null).length > 1
-                const { collapsed: shut, head } = titled
-                  ? category('ops', sec.title, sec.items.length, sec.items.some((p) => p.key === page))
-                  : { collapsed: false, head: null }
-                return (
-                  <Fragment key={sec.title ?? ''}>
-                    {head}
-                    {!shut && sec.items.map((it) => {
-                      //: «مسیرِ کار» ردیفِ هم‌وزنِ کارها نیست؛ پیوندِ کم‌رنگِ بالای کارت است.
-                      if (it.guide) {
-                        const on = it.key === page
-                        return (
-                          <button
-                            key={it.key}
-                            type="button"
-                            className={`mod-guide${on ? ' active' : ''}`}
-                            aria-current={on ? 'page' : undefined}
-                            onClick={() => onNavigate(it.key)}
-                          >
-                            {it.icon}
-                            <span>{it.label}</span>
-                          </button>
-                        )
-                      }
-                      // صفحه‌ای که هم‌نامِ خودِ ماژول است یک سطحِ تکراری می‌سازد
-                      // («حسابداری ← حسابداری ← ثبت سند»). به‌جای ردیفِ بی‌فایده، بخش‌هایش
-                      // مستقیم در سطحِ اول می‌نشینند.
-                      const redundant = it.label === group?.heading
-                      const own = mo.sort(secOps(it.key), opsSections(MODULE_SECTIONS[it.key] ?? []), (x) => x.key)
-                      if (redundant && own.length > 0) {
-                        const ownKeys = own.map((x) => x.key)
-                        return (
-                          <Fragment key={it.key}>
-                            {own.map((s) => {
-                              const Icon = s.icon
-                              const on = it.key === page && activeSection === s.key
-                              return (
-                                <MenuItem
-                                  key={s.key}
-                                  mo={mo}
-                                  scope={secOps(it.key)}
-                                  keys={ownKeys}
-                                  itemKey={s.key}
-                                  label={s.label}
-                                  icon={<Icon size={16} />}
-                                  className={`mod-op${on ? ' active' : ''}`}
-                                  current={on}
-                                  onClick={() => (it.key === page ? onSelectSection(s.key) : onNavigate(it.key, s.key))}
-                                />
-                              )
-                            })}
-                          </Fragment>
-                        )
-                      }
-                      const current = it.key === page
-                      const expanded = current && own.length > 0
-                      return (
-                        <Fragment key={it.key}>
-                          <MenuItem
-                            mo={mo}
-                            scope={`pages:${gk}`}
-                            keys={pageKeys}
-                            itemKey={it.key}
-                            label={it.label}
-                            icon={it.icon}
-                            //: صفحه‌ای که بخش‌هایش زیرش باز است «والد» است نه «فعال»: هایلایت
-                            //: مالِ بخشِ انتخاب‌شده است. اگر هر دو یک‌جور برجسته شوند، دیگر
-                            //: پیدا نیست کاربر دقیقاً روی کدام زیرمنو ایستاده.
-                            className={`mod-op${expanded ? ' mod-op--parent' : current ? ' active' : ''}`}
-                            current={current && !expanded}
-                            onClick={() => onNavigate(it.key)}
-                          />
-                          {expanded && (
-                            <div className="mod-sub">
-                              {sectionButtons(own, activeSection, onSelectSection, mo, secOps(it.key))}
-                            </div>
-                          )}
-                        </Fragment>
-                      )
-                    })}
-                  </Fragment>
-                )
-              })}
-            {/* ماژولِ تک‌صفحه‌ای (تولید، دارایی ثابت، …) ردیفی با نامِ خودش نمی‌گیرد: نامش
-                همین حالا در نوارِ بالا هست و تکرارش در «عملیات» یک زیرمنوی بی‌معناست. */}
-            {!opsMenu && pages.length === 0 && sectionButtons(ops, activeSection, onSelectSection, mo, secOps(page))}
-          </div>
-          {/* بیرون از بدنه‌ی اسکرول‌خور تا همیشه دیده شود و روی منوی آخر ننشیند. */}
-          {mo.customized(opsScopes) && <ResetOrder onReset={() => mo.reset(opsScopes)} />}
-        </section>
-      )}
-
-      {hasList && (
-      <section className={`mod-panel mod-panel--list${collapsed.list ? ' collapsed' : ''}`}>
-        <button
-          type="button"
-          className="mod-panel-head"
-          onClick={() => toggle('list')}
-          aria-expanded={!collapsed.list}
-          title={collapsed.list ? 'بازکردنِ فهرست' : 'جمع‌کردنِ فهرست'}
-        >
-          <ListChecks size={15} />
-          <span className="mod-panel-title">فهرست</span>
-          <ChevronRight size={15} className="mod-panel-chev" />
-        </button>
+      {/* **یک منو، بی تیترِ «عملیات» و «فهرست»** (۱۴۰۵/۰۷/۰۶): کارها و دفترهای ماژول زیرِ همان دسته‌ها؛
+          درونِ هر دسته اول کارها، بعد دفترها. ماژولِ بی‌دسته دفترهایش را بعد از یک خطِ جداکننده دارد. */}
+      <nav className="mod-panel" aria-label={`زیرمنوهای ${gk}`}>
         <div className="mod-panel-body">
-          {listMenu?.length ? (
-            // هر ورودی صفحه‌ی همان فهرست را باز می‌کند (یا تبِ آن، اگر `section` دارد).
-            categorizedMenu('list', listMenu, `list:${gk}`)
-          ) : sectionLists.length > 0 ? (
-            sectionButtons(sectionLists, activeSection, onSelectSection, mo, `sec-list:${page}`)
-          ) : (
-            // دفترِ جدا ندارد: چند رکوردِ آخرِ همین عملیات، زنده.
-            <ListPanel token={token} page={page} section={activeSection} />
+          {merged.map((cat, ci) => {
+            const hasCurrent = [...cat.ops, ...cat.lists].some(isCurrent)
+            const { collapsed: shut, head } =
+              showTitles && cat.title
+                ? category(cat.title, cat.ops.length + cat.lists.length, hasCurrent)
+                : { collapsed: false, head: null }
+            return (
+              <Fragment key={`${ci}:${cat.title ?? ''}`}>
+                {cat.trailing && ci > 0 && <div className="mod-divider" role="separator" />}
+                {head}
+                {!shut && (
+                  <>
+                    {opsRows(cat.ops)}
+                    {listRows(cat.lists)}
+                  </>
+                )}
+              </Fragment>
+            )
+          })}
+          {live && (
+            <>
+              {merged.length > 0 && <div className="mod-divider" role="separator" />}
+              <ListPanel token={token} page={page} section={activeSection} />
+            </>
           )}
         </div>
-        {mo.customized(listScopes) && <ResetOrder onReset={() => mo.reset(listScopes)} />}
-      </section>
-      )}
+        {mo.customized(scopes) && <ResetOrder onReset={() => mo.reset(scopes)} />}
+      </nav>
     </div>
   )
 }

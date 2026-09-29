@@ -3,6 +3,7 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
+from starlette.requests import Request
 
 from app.models.tenant import Tenant
 from app.routers.journal import JournalLineInputError, create_entry
@@ -82,7 +83,7 @@ def test_line_error_is_raised_not_returned_so_the_transaction_rolls_back(db, use
     payload["lines"][1]["tracking_no"] = "R-1"
 
     with pytest.raises(JournalLineInputError) as caught:
-        create_entry(data=JournalEntryIn(**payload), db=db, user=user)
+        create_entry(data=JournalEntryIn(**payload), request=Request({"type": "http", "headers": []}), db=db, user=user)
 
     assert caught.value.status_code == 400
     assert caught.value.line_errors == [

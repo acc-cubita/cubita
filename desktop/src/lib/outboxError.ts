@@ -1,8 +1,8 @@
-import { formatJalali } from './jalali'
+import { formatErrorDates } from './jalali'
 
 /** صف‌های قدیمی هم متنِ خامِ HTTP را دارند؛ فقط نمایش را عوض می‌کنیم، نه ردیف یا payload را. */
 export function outboxErrorText(raw: string): string {
-  let message = raw.trim()
+  let message = raw.trim().replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, '')
   try {
     const body: unknown = JSON.parse(message)
     const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : body
@@ -28,10 +28,7 @@ export function outboxErrorText(raw: string): string {
   if (!message || /^\s*</.test(message)) {
     return 'سرور پاسخ خطای خوانا نداد؛ اتصال و وضعیت سرور را بررسی کنید و دوباره «هم‌گام‌سازی» را بزنید.'
   }
-  message = message.replace(/^(?:Error|TypeError):\s*/, '').replace(/\b\d{4}-\d{2}-\d{2}\b/g, (date) => {
-    const parsed = new Date(`${date}T00:00:00Z`)
-    return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date ? date : formatJalali(date)
-  })
+  message = formatErrorDates(message.replace(/^(?:Error|TypeError):\s*/, ''))
   if (/در هیچ سال مالی|سال مالی تعریف‌شده/.test(message)) {
     message += ' — مدیر از «تنظیمات ← سال مالی» بازهٔ این تاریخ را بررسی کند. سند در صف حفظ شده؛ دوباره ثبتش نکنید.'
   } else if (/سال مالی.*بسته/.test(message)) {

@@ -26,6 +26,7 @@ from app.models.user import User
 from app.schemas.fiscal_year import FiscalYearIn, FiscalYearUpdate
 from app.services.common import make_journal_entry
 from app.services.reports import get_income_statement
+from app.services.printing import format_jalali
 
 #: بلندترین دوره‌ی مالیِ پذیرفتنی. سالِ مالی معمولاً ۱۲ ماه است، ولی اولین دوره‌ی یک
 #: شرکتِ تازه می‌تواند تا ۱۸ ماه باشد؛ بیشتر از آن قطعاً اشتباهِ ورودی است.
@@ -101,7 +102,7 @@ def _validate_range(db: Session, start: date, end: date, exclude_id=None) -> Non
     if clash is not None:
         raise HTTPException(
             http_status.HTTP_400_BAD_REQUEST,
-            f"این بازه با «{clash.title}» ({clash.start_date} تا {clash.end_date}) هم‌پوشانی دارد",
+            f"این بازه با «{clash.title}» ({format_jalali(clash.start_date)} تا {format_jalali(clash.end_date)}) هم‌پوشانی دارد",
         )
 
 
@@ -119,12 +120,12 @@ def assert_within_fiscal_year(db: Session, entry_date: date) -> None:
     if match is None:
         raise HTTPException(
             http_status.HTTP_400_BAD_REQUEST,
-            f"تاریخ {entry_date} در هیچ سال مالی تعریف‌شده‌ای نیست؛ ابتدا سال مالی مربوطه را بسازید",
+            f"تاریخ {format_jalali(entry_date)} در هیچ سال مالی تعریف‌شده‌ای نیست؛ تاریخ سند را اصلاح کنید یا سال مالی مربوطه را بسازید",
         )
     if match.status == STATUS_CLOSED:
         raise HTTPException(
             http_status.HTTP_400_BAD_REQUEST,
-            f"سال مالی «{match.title}» بسته شده؛ ثبت سند با تاریخ {entry_date} مجاز نیست",
+            f"سال مالی «{match.title}» بسته شده؛ ثبت سند با تاریخ {format_jalali(entry_date)} مجاز نیست",
         )
 
 

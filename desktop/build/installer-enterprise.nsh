@@ -19,6 +19,19 @@
 Var CubitaRole
 Var CubitaRadioServer
 Var CubitaRadioClient
+Var CubitaNetworkRestartTask
+
+!macro customHeader
+  !ifndef BUILD_UNINSTALLER
+    Function .onGUIEnd
+      ; انصراف قبل از کپی نباید نگهداریِ قبلاً فعال را برای همیشه خاموش کند.
+      ${If} $CubitaNetworkRestartTask == "7"
+        nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "Get-ScheduledTask -TaskName CubitaEnterpriseNetwork -ErrorAction SilentlyContinue | Enable-ScheduledTask"'
+        Pop $0
+      ${EndIf}
+    FunctionEnd
+  !endif
+!macroend
 
 !macro cubitaReadRole
   ReadRegStr $CubitaRole HKLM "${CUBITA_REG_KEY}" "Role"
@@ -29,6 +42,9 @@ Var CubitaRadioClient
 
 !macro customInit
   !insertmacro cubitaReadRole
+  ; taskِ شبکه هم exe را کوتاه‌مدت قفل می‌کند؛ تا پایان کپی اجرا نشود.
+  nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "$$t=Get-ScheduledTask -TaskName CubitaEnterpriseNetwork -ErrorAction SilentlyContinue; if($$t){$$restart=$$t.Settings.Enabled; $$t | Disable-ScheduledTask; $$t | Stop-ScheduledTask; if($$restart){exit 7}}"'
+  Pop $CubitaNetworkRestartTask
   ; آپدیتِ سرور: exeِ سرویسِ API قفل است و کپیِ فایل‌ها بدونِ توقفش شکست می‌خورد.
   ${If} $CubitaRole == "server"
     nsExec::Exec 'net stop CubitaApi'
@@ -93,11 +109,21 @@ Var CubitaRadioClient
       SetShellVarContext all
     ${EndIf}
   ${EndIf}
+  ; مسیر exeِ task پس از جابه‌جایی/آپدیت هم دوباره به نصبِ معتبر گره بخورد.
+  StrCpy $CubitaNetworkRestartTask "0"
+  nsExec::ExecToLog '"$INSTDIR\resources\server\cubita-server.exe" network-resume'
+  Pop $0
   !endif
 !macroend
 
 !macro customUnInstall
   ${ifNot} ${isUpdated}
+    nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "Get-ScheduledTask -TaskName CubitaEnterpriseNetwork -ErrorAction SilentlyContinue | Stop-ScheduledTask"'
+    Pop $1
+    ${If} ${FileExists} "$INSTDIR\resources\server\cubita-server.exe"
+      nsExec::ExecToLog '"$INSTDIR\resources\server\cubita-server.exe" network-disable'
+      Pop $1
+    ${EndIf}
     ReadRegStr $0 HKLM "${CUBITA_REG_KEY}" "Role"
     ${If} $0 == "server"
     ${AndIf} ${FileExists} "$INSTDIR\resources\server\cubita-server.exe"

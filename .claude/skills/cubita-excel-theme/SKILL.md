@@ -17,7 +17,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 
 | صفحه | PR | الگو (بخشِ ۱) | فایلِ مرجع |
 |---|---|---|---|
-| سند حسابداری | #205 | الف: سند | [JournalEntryForm.tsx](../../../desktop/src/components/JournalEntryForm.tsx) |
+| سند حسابداری | #205؛ اصلاح صف در ۱۴۰۵/۰۷/۰۶ | الف: سند؛ همان فرم برای ویرایش صف، بدون صفحهٔ تازه یا تغییر گرید | [JournalEntryForm.tsx](../../../desktop/src/components/JournalEntryForm.tsx) |
 | مانده اول دوره | #206 | الف: سند، به‌اضافه‌ی برگه‌ی کالا | [OpeningBalancePage.tsx](../../../desktop/src/pages/accounting/OpeningBalancePage.tsx) |
 | تفصیلی سایر | #207 | ب: برگه‌ی ویرایشِ درجا | [AnalyticsPage.tsx](../../../desktop/src/pages/accounting/AnalyticsPage.tsx) |
 | صدور سند تسعیر ارز | #208 | ج: پیش‌نمایشِ سندِ خودکار | [FxRevaluationPage.tsx](../../../desktop/src/pages/accounting/FxRevaluationPage.tsx) |

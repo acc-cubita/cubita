@@ -2,7 +2,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CubitaBridge } from '../electron.d'
+import type { CubitaBridge, JournalOutboxEdit } from '../electron.d'
 import { useJournalEntryDraft, type JournalEntryDraft } from './journalEntryDraft'
 
 vi.mock('../platform', () => ({ isElectron: true, isEnterprise: false }))
@@ -22,13 +22,17 @@ let root: Root
 const queue = vi.fn()
 const onQueued = vi.fn()
 
-function Harness() { draft = useJournalEntryDraft({ token: 't', accounts, onQueued }); return null }
+let editing: JournalOutboxEdit | undefined
+const saved = vi.fn()
+const onEdited = vi.fn()
+function Harness() { draft = useJournalEntryDraft({ token: 't', accounts, onQueued, editing, onEdited }); return null }
 beforeEach(() => {
   ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
   localStorage.clear()
   queue.mockReset().mockResolvedValue('local-id')
   onQueued.mockReset()
-  window.cubita = { queueJournalEntry: queue } as unknown as CubitaBridge
+  editing = undefined; saved.mockReset().mockResolvedValue({ state: 'synced', message: 'اصلاح شد' }); onEdited.mockReset()
+  window.cubita = { queueJournalEntry: queue, saveJournalEdit: saved } as unknown as CubitaBridge
   years = [OPEN]
   fiscalFailure = null
   fiscalResponse = null
@@ -63,6 +67,18 @@ async function render() {
 async function submit() { let result = false; await act(async () => { result = await draft.submit() }); return result }
 
 describe('ثبتِ دسکتاپ: سال مالی پیش از صف و پیش‌نویسِ محفوظ', () => {
+  it('ویرایش اطلاعات اصلی را بارگذاری و همان شناسه را ذخیره می‌کند، نه queueJournalEntry', async () => {
+    editing = { local_id: 'original', lease: 'lease', payload: JSON.stringify({ entry_date: '2025-07-08', description: 'قبلی', sub_number: 'A', lines: [
+      { account_id: 'a', debit: 100, credit: 0, description: 'ردیف اول' }, { account_id: 'b', debit: 0, credit: 100 },
+    ] }) }
+    await act(async () => root.render(<Harness />))
+    expect(draft.entryDate).toBe('2025-07-08'); expect(draft.description).toBe('قبلی'); expect(draft.lines[0].description).toBe('ردیف اول')
+    expect(await submit()).toBe(false); expect(saved).not.toHaveBeenCalled(); expect(draft.message?.text).toContain('نسخه قبلی سند در صف حفظ شده')
+    act(() => { draft.setEntryDate('2026-09-28'); draft.setDescription('اصلاح') })
+    expect(await submit()).toBe(true)
+    expect(saved).toHaveBeenCalledExactlyOnceWith('original', 'lease', expect.objectContaining({ entry_date: '2026-09-28', description: 'اصلاح', sub_number: 'A' }))
+    expect(queue).not.toHaveBeenCalled(); expect(onEdited).toHaveBeenCalledOnce()
+  })
   it('تاریخ معتبر یک‌بار وارد صف می‌شود و ورودی پاک می‌شود', async () => {
     await render()
     expect(await submit()).toBe(true)

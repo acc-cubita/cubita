@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { outboxErrorText } from './outboxError'
 
 describe('خطای خوانای صفِ جدید و قدیمی', () => {
+  it('پیام Electron IPC هم قبل از تبدیل تاریخ پاک می‌شود', () => {
+    expect(outboxErrorText("Error invoking remote method 'journal:saveEdit': Error: تاریخ 2025-07-08 نادرست است")).toBe('تاریخ ۱۴۰۴/۰۴/۱۷ نادرست است')
+  })
   it('detailِ JSON بیرون می‌آید، تاریخ جلالی و راهِ اقدام روشن می‌شود', () => {
     const raw = JSON.stringify({ detail: 'تاریخ 2026-09-28 در هیچ سال مالی تعریف‌شده‌ای نیست؛ ابتدا سال مالی مربوطه را بسازید' })
     const message = outboxErrorText(raw)
