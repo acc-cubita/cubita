@@ -53,11 +53,13 @@ import {
   snapshotNow,
   type BackupSettings,
 } from './backup.js'
-import { currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
+import { checkForUpdatesNow, currentUpdateStatus, quitAndInstall, setupAutoUpdate } from './updater.js'
 import { EDITION, currentServerUrl, discoverServers, probeServer, saveServerUrl } from './serverSettings.js'
-import { verifyDownloadedUpdate } from './updateVerify.js'
+import { verifyDownloadedUpdate, verifyUpdateFeed } from './updateVerify.js'
 import { TRUSTED_UPDATE_KEYS } from './updateKeys.js'
+import { beginJournalEdit, saveJournalEdit, cancelJournalEdit, clearJournalEditors } from './journalOutbox.js'
 import { normalizeServerUrl } from './serverAddress.js'
+import { applyNetwork, disableNetwork, inspectNetwork, previewNetwork } from './enterpriseNetwork.js'
 import { driverFor, listSerialPorts } from './pos/drivers.js'
 import type { PayResult, PosStatus, PosTerminalProfile } from './pos/types.js'
 
@@ -69,6 +71,18 @@ let apiBaseUrl = currentServerUrl() ?? ''
 
 let mainWindow: BrowserWindow | null = null
 let authToken: string | null = null
+
+function configureUpdater() {
+  if (EDITION === 'cloud') setupAutoUpdate(() => mainWindow, debugLog)
+  else if (apiBaseUrl) {
+    const feedUrl = `${apiBaseUrl}/updates/`
+    setupAutoUpdate(() => mainWindow, debugLog, {
+      feedUrl,
+      verifyFeed: () => verifyUpdateFeed(feedUrl, TRUSTED_UPDATE_KEYS),
+      verify: (file, version) => verifyDownloadedUpdate(feedUrl, file, TRUSTED_UPDATE_KEYS, fetch, version),
+    })
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -122,8 +136,14 @@ function createWindow() {
     debugLog('did-finish-load')
   })
   mainWindow.webContents.on('render-process-gone', (_evt, details) => {
+    clearJournalEditors()
     debugLog(`render-process-gone: ${JSON.stringify(details)}`)
   })
+
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
+    if (!inPlace && mainFrame) clearJournalEditors()
+  })
+  mainWindow.on('closed', clearJournalEditors)
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -148,17 +168,7 @@ app.whenReady().then(() => {
 
     // ابری: فیدِ acc.cubita.ir. سازمانی: فیدِ سرورِ خودِ شرکت با سنجشِ امضا پیش از نصب
     // (ENTERPRISE_PLAN.md، M5). سازمانیِ هنوز وصل‌نشده فیدی ندارد.
-    if (EDITION === 'cloud') {
-      setupAutoUpdate(() => mainWindow, debugLog)
-      debugLog('auto-update wired')
-    } else if (apiBaseUrl) {
-      const feedUrl = `${apiBaseUrl}/updates/`
-      setupAutoUpdate(() => mainWindow, debugLog, {
-        feedUrl,
-        verify: (file) => verifyDownloadedUpdate(feedUrl, file, TRUSTED_UPDATE_KEYS),
-      })
-      debugLog(`auto-update wired (enterprise feed ${feedUrl})`)
-    }
+    configureUpdater()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -200,12 +210,25 @@ ipcMain.handle('window:isMaximized', () => {
 // آن را روی `window.cubitaConfig` می‌گذارد. بعد از تغییرِ نشانی، رندرر صفحه را
 // دوباره بار می‌کند تا همه‌چیز از نشانیِ تازه شروع شود.
 ipcMain.on('server:config', (evt) => {
-  evt.returnValue = { edition: EDITION, serverUrl: apiBaseUrl || null }
+  evt.returnValue = { edition: EDITION, serverUrl: apiBaseUrl || null, version: app.getVersion() }
 })
 
 ipcMain.handle('server:probe', (_evt, input: string) => probeServer(String(input ?? '')))
 
 ipcMain.handle('server:discover', () => discoverServers())
+
+// Privileged configuration is local to the installed app, never available over HTTP.
+for (const [channel, action] of Object.entries({
+  'network:inspect': inspectNetwork, 'network:preview': previewNetwork,
+  'network:apply': applyNetwork, 'network:disable': disableNetwork,
+})) {
+  ipcMain.handle(channel, (evt, input) => {
+    if (EDITION !== 'enterprise' || evt.sender !== mainWindow?.webContents || evt.senderFrame !== mainWindow?.webContents.mainFrame) {
+      return { ok: false, error: 'تنظیم شبکه فقط در پنجرهٔ اصلی کوبیتا سازمانی مجاز است.' }
+    }
+    return action(input)
+  })
+}
 
 // اجرای نصابِ نسخه‌ی تازه روی **خودِ سرور** (کوبیتا سازمانی). مسیر از API می‌آید، پس فقط
 // نصابی اجرا می‌شود که واقعاً در پوشه‌ی آپدیتِ سرور است — نه هر exeِ دلخواه.
@@ -255,6 +278,7 @@ ipcMain.handle('server:save', (_evt, input: string) => {
     authToken = null
   }
   apiBaseUrl = result.url
+  if (EDITION === 'enterprise') configureUpdater()
   return result
 })
 
@@ -287,6 +311,7 @@ ipcMain.handle('auth:restoreSession', async (): Promise<RestoreResult> => {
 })
 
 ipcMain.handle('auth:clearSession', async () => {
+  clearJournalEditors()
   // بهترین‌تلاش: خروجِ سمتِ سرور نباید مانعِ خروجِ محلی شود (مثلاً آفلاین).
   await bestEffortLogout({ apiBaseUrl: apiBaseUrl })
   clearStoredSession()
@@ -313,6 +338,10 @@ ipcMain.handle('journal:queueEntry', (_evt, payload: unknown) => {
 ipcMain.handle('journal:listOutbox', () => {
   return getLocalDb().prepare('SELECT * FROM outbox_journal_entries ORDER BY created_at DESC').all()
 })
+
+ipcMain.handle('journal:beginEdit', (_evt, id: string) => beginJournalEdit({ apiBaseUrl, getToken: () => authToken }, String(id)))
+ipcMain.handle('journal:saveEdit', (_evt, id: string, lease: string, payload: unknown) => saveJournalEdit({ apiBaseUrl, getToken: () => authToken }, String(id), String(lease), payload))
+ipcMain.handle('journal:cancelEdit', (_evt, id: string, lease: string) => cancelJournalEdit(String(id), String(lease)))
 
 ipcMain.handle('invoice:queueSalesInvoice', (_evt, payload: unknown) => {
   return queueSalesInvoice(payload)
@@ -439,6 +468,7 @@ ipcMain.handle('pos:status', async (_evt, profile: PosTerminalProfile): Promise<
 // --- به‌روزرسانی ---
 
 ipcMain.handle('update:status', () => currentUpdateStatus())
+ipcMain.handle('update:check', () => checkForUpdatesNow())
 
 ipcMain.handle('update:installNow', () => {
   quitAndInstall()

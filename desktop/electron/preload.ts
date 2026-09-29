@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('cubita', {
   pushOutbox: () => ipcRenderer.invoke('sync:pushOutbox'),
   queueJournalEntry: (payload: unknown) => ipcRenderer.invoke('journal:queueEntry', payload),
   listOutbox: () => ipcRenderer.invoke('journal:listOutbox'),
+  beginJournalEdit: (id: string) => ipcRenderer.invoke('journal:beginEdit', id),
+  saveJournalEdit: (id: string, lease: string, payload: unknown) => ipcRenderer.invoke('journal:saveEdit', id, lease, payload),
+  cancelJournalEdit: (id: string, lease: string) => ipcRenderer.invoke('journal:cancelEdit', id, lease),
   queueSalesInvoice: (payload: unknown) => ipcRenderer.invoke('invoice:queueSalesInvoice', payload),
   listSalesInvoiceOutbox: () => ipcRenderer.invoke('invoice:listOutbox'),
   queueCheck: (payload: unknown) => ipcRenderer.invoke('check:queueCheck', payload),
@@ -50,6 +53,10 @@ contextBridge.exposeInMainWorld('cubita', {
   serverProbe: (url: string) => ipcRenderer.invoke('server:probe', url),
   serverSave: (url: string) => ipcRenderer.invoke('server:save', url),
   serverDiscover: () => ipcRenderer.invoke('server:discover'),
+  networkInspect: () => ipcRenderer.invoke('network:inspect'),
+  networkPreview: (config: unknown) => ipcRenderer.invoke('network:preview', config),
+  networkApply: (config: unknown) => ipcRenderer.invoke('network:apply', config),
+  networkDisable: () => ipcRenderer.invoke('network:disable'),
   runUpdateInstaller: (installerPath: string) => ipcRenderer.invoke('updates:runInstaller', installerPath),
   posTerminal: {
     pay: (profile: unknown, amountRial: number, refId: string) =>
@@ -73,6 +80,7 @@ contextBridge.exposeInMainWorld('windowControls', {
 
 contextBridge.exposeInMainWorld('cubitaUpdate', {
   status: () => ipcRenderer.invoke('update:status'),
+  check: () => ipcRenderer.invoke('update:check'),
   installNow: () => ipcRenderer.invoke('update:installNow'),
   onStatus: (cb: (status: unknown) => void) => {
     const listener = (_evt: unknown, status: unknown) => cb(status)

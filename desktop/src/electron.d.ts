@@ -1,4 +1,5 @@
 import type { ReferenceSyncReport, SyncPermissions } from './lib/referenceSync'
+import type { NetworkConfig, NetworkInventory, NetworkPlan, NetworkResult, NetworkState } from './lib/enterpriseNetwork'
 
 export interface AccountCache {
   id: string
@@ -42,6 +43,16 @@ export interface OutboxEntry {
   server_id: string | null
   server_number: number | null
   sync_error: string | null
+}
+
+export interface JournalOutboxEdit {
+  local_id: string
+  lease: string
+  payload: string
+}
+export interface JournalOutboxSaveResult {
+  state: 'synced' | 'queued'
+  message: string
 }
 
 export interface PosTerminalProfileClient {
@@ -107,6 +118,9 @@ export interface CubitaBridge {
   pushOutbox: () => Promise<{ pushed: number; failed: number }>
   queueJournalEntry: (payload: unknown) => Promise<string>
   listOutbox: () => Promise<OutboxEntry[]>
+  beginJournalEdit?: (localId: string) => Promise<{ state: 'editing'; edit: JournalOutboxEdit } | JournalOutboxSaveResult>
+  saveJournalEdit?: (localId: string, lease: string, payload: unknown) => Promise<JournalOutboxSaveResult>
+  cancelJournalEdit?: (localId: string, lease: string) => Promise<void>
   queueSalesInvoice: (payload: unknown) => Promise<string>
   listSalesInvoiceOutbox: () => Promise<OutboxEntry[]>
   queueCheck: (payload: unknown) => Promise<string>
@@ -140,6 +154,10 @@ export interface CubitaBridge {
   serverSave?: (url: string) => Promise<ServerResult>
   /** کوبیتا سازمانی: جست‌وجوی سرور روی همین رایانه و `/24`ِ شبکه‌ی داخلی. */
   serverDiscover?: () => Promise<string[]>
+  networkInspect?: () => Promise<NetworkResult<NetworkInventory>>
+  networkPreview?: (config: NetworkConfig) => Promise<NetworkResult<NetworkPlan>>
+  networkApply?: (config: NetworkConfig) => Promise<NetworkResult<NetworkState>>
+  networkDisable?: () => Promise<NetworkResult<NetworkState>>
   /** کوبیتا سازمانی، فقط روی خودِ سرور: اجرای نصابِ دانلودشده. خطا یا null. */
   runUpdateInstaller?: (installerPath: string) => Promise<string | null>
   posTerminal?: PosTerminalBridge
@@ -180,6 +198,7 @@ export type ServerResult = { ok: true; url: string } | { ok: false; url?: string
 
 /** نسخه و نشانیِ سرور — preload همزمان از main می‌گیرد. در وب وجود ندارد. */
 export interface CubitaConfig {
+  version?: string
   edition: 'cloud' | 'enterprise'
   /** سازمانیِ هنوز وصل‌نشده: null. */
   serverUrl: string | null
@@ -195,6 +214,12 @@ export interface WindowControlsBridge {
 
 declare global {
   interface Window {
+    cubitaUpdate?: {
+      status: () => Promise<import('./lib/updateStatus').UpdateStatus>
+      check?: () => Promise<import('./lib/updateStatus').UpdateStatus>
+      installNow: () => Promise<void>
+      onStatus: (cb: (status: import('./lib/updateStatus').UpdateStatus) => void) => () => void
+    }
     cubita: CubitaBridge
     cubitaConfig?: CubitaConfig
     windowControls: WindowControlsBridge

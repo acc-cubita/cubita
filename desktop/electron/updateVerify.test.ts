@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { UPDATE_CONTEXT, verifyDownloadedUpdate, verifyManifestSignature } from './updateVerify'
+import { UPDATE_CONTEXT, verifyDownloadedUpdate, verifyManifestSignature, verifyUpdateFeed } from './updateVerify'
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519')
 const rawPublic = publicKey.export({ format: 'jwk' }).x as string
@@ -31,6 +31,15 @@ function feed(files: Record<string, Buffer | string>): typeof fetch {
 
 describe('verifyDownloadedUpdate', () => {
   const installer = Buffer.from('MZ-cubita-installer')
+  it('پیش‌سنجش LAN امضا و مسیر را می‌سنجد و نسخه متفاوت نصب نمی‌شود', async () => {
+    const { manifest, file } = fixture(installer)
+    const normal = feed({ 'latest.yml': manifest, 'latest.yml.sig': signManifest(manifest) })
+    expect(await verifyUpdateFeed('http://srv:8420/updates/', KEYS, normal)).toBeNull()
+    expect(await verifyDownloadedUpdate('http://srv', file, KEYS, normal, '1.9.4')).toMatch(/نسخه/)
+    const external = Buffer.from(manifest.toString().replace('Setup.exe', 'https://outside.invalid/Setup.exe'))
+    expect(await verifyUpdateFeed('http://srv', KEYS, feed({ 'latest.yml': external, 'latest.yml.sig': signManifest(external) }))).toMatch(/خارج از سرور/)
+    expect(await verifyUpdateFeed('http://srv', KEYS, feed({ 'latest.yml': manifest }))).toMatch(/امضا/)
+  })
 
   it('accepts a signed manifest whose hash matches the downloaded file', async () => {
     const { manifest, file } = fixture(installer)

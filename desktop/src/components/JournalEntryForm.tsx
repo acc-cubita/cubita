@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { BookOpen, Keyboard, Rows3, Search, Trash2, X } from 'lucide-react'
-import type { AccountCache } from '../electron.d'
+import type { AccountCache, JournalOutboxEdit, JournalOutboxSaveResult } from '../electron.d'
 import { SectionCard } from './SectionCard'
 import { SearchSelect } from './SearchSelect'
 import { NumberInput } from './NumberInput'
@@ -41,12 +41,18 @@ export function JournalEntryForm({
   token,
   accounts,
   onQueued,
+  editing,
+  onEdited,
+  onCancel,
 }: {
   token: string
   accounts: AccountCache[]
   onQueued: () => void
+  editing?: JournalOutboxEdit
+  onEdited?: (result: JournalOutboxSaveResult) => void
+  onCancel?: () => void
 }) {
-  const d = useJournalEntryDraft({ token, accounts, onQueued })
+  const d = useJournalEntryDraft({ token, accounts, onQueued, editing, onEdited, onCancel })
   //: **یک پیش‌نویس، دو نما.** هر دو حالت از همین هوک می‌خوانند و همان کلیدهای
   //: `usePersistentState` را دارند، پس عوض‌کردنِ حالت وسطِ ثبت هیچ داده‌ای را
   //: از بین نمی‌برد — نه ردیفی، نه مبلغی (§۳۵). این خاصیتِ طراحی است، نه کدِ
@@ -98,6 +104,7 @@ export function JournalEntryForm({
     return (
       <SectionCard icon={BookOpen} title="ثبت سند حسابداری">
         <div className="ef-empty">قبل از ثبت سند، یک‌بار «هم‌گام‌سازی» کنید تا چارت حساب در دسترس باشد.</div>
+        {editing && <button type="button" className="btn-secondary" onClick={d.cancelEdit}>انصراف از ویرایش</button>}
       </SectionCard>
     )
   }
@@ -242,11 +249,12 @@ export function JournalEntryForm({
       >
         <SectionCard
           icon={BookOpen}
-          title="سند حسابداری"
+          title={d.editing ? 'ویرایش سند صف‌شده' : 'سند حسابداری'}
           tip="سندِ تازه «موقت» ثبت می‌شود تا در کارتابل بازبینی شود؛ فاکتور، فیش و چک خودشان خودکار سند می‌خورند. شماره عطف را سرور هنگامِ ثبت می‌دهد."
           badge={<CountBadge>{fa(d.validLineCount)} ردیف معتبر</CountBadge>}
           actions={
             <div className="jg-head-actions">
+              {d.editing && <button type="button" disabled={d.submitting} onClick={d.cancelEdit}>انصراف از ویرایش</button>}
               <div className={`jg-find${find ? ' has-query' : ''}`} role="search">
                 <Search size={14} aria-hidden="true" />
                 <input
@@ -317,7 +325,8 @@ export function JournalEntryForm({
     >
       <SectionCard
         icon={BookOpen}
-        title="سربرگ سند"
+        title={d.editing ? 'ویرایش سند صف‌شده' : 'سربرگ سند'}
+        actions={d.editing ? <button type="button" disabled={d.submitting} onClick={d.cancelEdit}>انصراف از ویرایش</button> : undefined}
         //: حالتِ ساده بی اصطلاحِ «کارتابل» و «عطف»: کاربرِ ساده این‌ها را لازم ندارد، و
         //: راهِ درستِ کارهای روزمره‌اش فرم‌های خودشان است نه سندِ دستی (§۲۷، §۵۱).
         tip="بیشترِ کارها سندِ دستی نمی‌خواهند: فاکتور، دریافت و پرداخت و چک خودشان سند می‌زنند. این فرم برای جابه‌جایی‌هایی است که فرمِ خودشان را ندارند."
@@ -653,6 +662,7 @@ function JournalFooter({ d, shortcut = false, columns = false }: { d: JournalEnt
       state={balanceState(d.totalDebit, d.totalCredit, d.isBalanced)}
       submitting={d.submitting}
       message={d.message}
+      submitLabel={d.editing ? 'ذخیره اصلاحات و ارسال مجدد' : 'ثبت سند'}
       shortcut={shortcut}
       columns={columns}
     />

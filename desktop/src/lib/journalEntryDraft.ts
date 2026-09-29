@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AccountCache } from '../electron.d'
+import type { AccountCache, JournalOutboxEdit, JournalOutboxSaveResult } from '../electron.d'
 import {
   ApiError,
   createJournalEntryDirect,
@@ -13,32 +13,18 @@ import {
   type Currency,
 } from '../api'
 import { isElectron } from '../platform'
-import { todayIso } from './jalali'
+import { todayIso, formatErrorDates } from './jalali'
 import { usePersistentState } from './usePersistentState'
 //: کنش‌های ردیف عمداً بیرون از این هوک‌اند تا بدونِ DOM تست شوند
 //: (`journalLineOps.test.ts`). محیطِ vitest این پروژه `node` است.
 import * as ops from './journalLineOps'
 import { rememberDescriptions } from './descriptionMemory'
 import { checkJournalDate } from './journalDateValidation'
+import { parseQueuedJournalDraft, mergeQueuedJournalPayload } from './journalOutboxDraft'
+import { outboxErrorText } from './outboxError'
 
-export interface JournalDraftLine {
-  accountId: string
-  debit: string
-  credit: string
-  /** مبلغ به ارزِ انتخابیِ سند. خالی = ردیفِ ریالی. */
-  fxAmount?: string
-  /** پیگیری — فقط برای حسابی که «پیگیری» دارد؛ سرور بقیه را رد می‌کند. */
-  trackingNo?: string
-  trackingDate?: string
-  /** تفصیلیِ ردیف — برای حسابِ «تفصیلی پذیر» اجباری. خالی = ارث از سطحِ سند. */
-  analyticId?: string
-  /** مرکزِ هزینه‌ی ردیف — خالی = مرکزِ سند. سرور همان قاعده‌ی تفصیلی را دارد: ردیف مقدم
-   *  است (`JournalLineIn.cost_center_id`). پیش‌نویسِ قدیمی بی این فیلد هم معتبر است. */
-  costCenterId?: string
-  /** شرحِ ردیف. API از اول می‌پذیردش (`JournalLineIn.description`) ولی تا امروز
-   *  هیچ فرمی نمی‌فرستادش؛ گریدِ حسابدار اولین مصرف‌کننده‌اش است. */
-  description?: string
-}
+import type { JournalDraftLine } from './journalDraftTypes'
+export type { JournalDraftLine } from './journalDraftTypes'
 
 const emptyLine = (): JournalDraftLine => ({
   accountId: '',
@@ -57,33 +43,41 @@ export function useJournalEntryDraft({
   token,
   accounts,
   onQueued,
+  editing,
+  onEdited,
+  onCancel,
 }: {
   token: string
   accounts: AccountCache[]
   onQueued: () => void
+  editing?: JournalOutboxEdit
+  onEdited?: (result: JournalOutboxSaveResult) => void
+  onCancel?: () => void
 }) {
+  const initial = useMemo(() => editing ? parseQueuedJournalDraft(editing.payload) : null, [editing])
   // ورودی‌های کاربر ماندگار می‌شوند (رفرش/جابه‌جایی پیش‌نویس را نمی‌برد)؛ داده‌ی سرور و پیام/در‌حال‌ثبت نه.
-  const [description, setDescription] = usePersistentState('cubita.draft.journal.description', '')
+  const [description, setDescription] = usePersistentState('cubita.draft.journal.description', initial?.description ?? '', !!editing)
   //: شماره فرعی — ارجاعِ آزادِ کاربر. عطف اینجا نیست: سرور می‌دهدش و فرم نه
   //: نشانش می‌دهد نه می‌فرستدش، چون چیزی برای انتخاب‌کردن ندارد.
-  const [subNumber, setSubNumber] = usePersistentState('cubita.draft.journal.subNumber', '')
-  const [entryDate, setEntryDate] = usePersistentState('cubita.draft.journal.entryDate', todayIso())
-  const [lines, setLines] = usePersistentState<JournalDraftLine[]>('cubita.draft.journal.lines', [emptyLine(), emptyLine()])
+  const [subNumber, setSubNumber] = usePersistentState('cubita.draft.journal.subNumber', initial?.subNumber ?? '', !!editing)
+  const [entryDate, setEntryDate] = usePersistentState('cubita.draft.journal.entryDate', initial?.entryDate ?? todayIso(), !!editing)
+  const [lines, setLines] = usePersistentState<JournalDraftLine[]>('cubita.draft.journal.lines', initial?.lines ?? [emptyLine(), emptyLine()], !!editing)
   const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
   const [costCenters, setCostCenters] = useState<CostCenterRecord[]>([])
-  const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.journal.costCenterId', '')
+  const [costCenterId, setCostCenterId] = usePersistentState('cubita.draft.journal.costCenterId', initial?.costCenterId ?? '', !!editing)
   const [analytics, setAnalytics] = useState<AnalyticAccount[]>([])
-  const [analyticId, setAnalyticId] = usePersistentState('cubita.draft.journal.analyticId', '')
+  const [analyticId, setAnalyticId] = usePersistentState('cubita.draft.journal.analyticId', initial?.analyticId ?? '', !!editing)
   const [currencies, setCurrencies] = useState<Currency[]>([])
-  const [currencyCode, setCurrencyCode] = usePersistentState('cubita.draft.journal.currency', '')
-  const [fxRate, setFxRate] = usePersistentState('cubita.draft.journal.fxRate', '')
+  const [currencyCode, setCurrencyCode] = usePersistentState('cubita.draft.journal.currency', initial?.currencyCode ?? '', !!editing)
+  const [fxRate, setFxRate] = usePersistentState('cubita.draft.journal.fxRate', initial?.fxRate ?? '', !!editing)
   //: سندِ تازه پیش‌فرض «موقت» است تا در کارتابل بازبینی شود؛ دفترداری که بازبینی
   //: نمی‌خواهد می‌تواند همان‌جا «دائم» بزند.
   const [status, setStatus] = usePersistentState<'temporary' | 'permanent'>(
     'cubita.draft.journal.status',
-    'temporary',
+    initial?.status ?? 'temporary',
+    !!editing,
   )
 
   //: این سه از `accounts` مشتق‌اند و `accounts` معمولاً ثابت است، ولی بدونِ
@@ -128,7 +122,7 @@ export function useJournalEntryDraft({
   // با انتخابِ ارز، آخرین نرخِ ثبت‌شده پیشنهاد می‌شود تا کاربر عددی را که خودش
   // در «ارزها و نرخ ارز» گذاشته دوباره تایپ نکند.
   useEffect(() => {
-    if (!currencyCode) return
+    if (!currencyCode || editing) return // نرخ تاریخی سند نباید با نرخ امروز جایگزین شود.
     fetchLatestRate(token, currencyCode)
       .then((r) => setFxRate(String(r.rate ?? '')))
       .catch(() => {})
@@ -233,6 +227,10 @@ export function useJournalEntryDraft({
     }
 
     const validLines = lines.filter(ops.isPostedLine)
+    if (validLines.some((line) => !postableAccounts.some((account) => account.id === line.accountId))) {
+      setMessage({ text: 'یکی از حساب‌های سند در چارت فعلی موجود نیست؛ هم‌گام‌سازی کنید یا حساب آن ردیف را اصلاح کنید.', kind: 'err' })
+      return false
+    }
     if (validLines.length < 2) {
       setMessage({ text: 'سند باید حداقل دو ردیف معتبر (حساب + بدهکار یا بستانکار) داشته باشد.', kind: 'err' })
       return false
@@ -305,6 +303,14 @@ export function useJournalEntryDraft({
     setSubmitting(true)
     try {
       if (isElectron) {
+        if (editing && initial) {
+          if (!window.cubita.saveJournalEdit) throw new Error('این نسخه ویرایش صف را پشتیبانی نمی‌کند؛ برنامه را به‌روز کنید.')
+          await checkJournalDate(token, payload.entry_date)
+          const result = await window.cubita.saveJournalEdit(editing.local_id, editing.lease, mergeQueuedJournalPayload(initial.original, payload, validLines, fxRate))
+          onQueued()
+          onEdited?.(result)
+          return true
+        }
         const connection = await checkJournalDate(token, payload.entry_date)
         await window.cubita.queueJournalEntry(payload)
         setMessage({
@@ -336,7 +342,9 @@ export function useJournalEntryDraft({
       const rowText = err instanceof ApiError
         ? ops.serverLineErrors(err.detail, ops.postedRowNumbers(lines), err.lineErrors)
         : null
-      setMessage({ text: rowText ?? (err instanceof Error ? err.message : 'خطای ناشناخته'), kind: 'err' })
+      let errorText = formatErrorDates(rowText ?? outboxErrorText(err instanceof Error ? err.message : String(err)))
+      if (editing) errorText = errorText.replace('سند هنوز وارد صف نشده', 'اصلاحات هنوز ذخیره نشده؛ نسخه قبلی سند در صف حفظ شده')
+      setMessage({ text: errorText, kind: 'err' })
       return false
     } finally {
       submittingRef.current = false
@@ -345,6 +353,8 @@ export function useJournalEntryDraft({
   }
 
   return {
+    editing: !!editing,
+    cancelEdit: () => { if (!submittingRef.current) onCancel?.() },
     description,
     setDescription,
     subNumber,

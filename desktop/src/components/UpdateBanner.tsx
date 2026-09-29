@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import type { UpdateStatus } from '../lib/updateStatus'
+import { toFaDigits } from '../lib/jalali'
 
 /**
  * نوار اطلاع‌رسانی به‌روزرسانی — فقط در اپ دسکتاپ.
@@ -11,47 +13,34 @@ import { useEffect, useState } from 'react'
  * برنامه وسط ثبت فاکتور یعنی از دست رفتن کار کاربر. به‌روزرسانی در خروج طبیعی
  * برنامه خودش نصب می‌شود؛ این دکمه فقط راه میان‌بر است.
  */
-type UpdateStatus =
-  | { state: 'checking' }
-  | { state: 'available'; version: string }
-  | { state: 'downloading'; percent: number }
-  | { state: 'ready'; version: string }
-  | { state: 'none' }
-  | { state: 'error'; message: string }
-
-declare global {
-  interface Window {
-    cubitaUpdate?: {
-      status: () => Promise<UpdateStatus>
-      installNow: () => Promise<void>
-      onStatus: (cb: (status: UpdateStatus) => void) => () => void
-    }
-  }
-}
-
 export function UpdateBanner() {
   const [status, setStatus] = useState<UpdateStatus>({ state: 'none' })
-  const [dismissed, setDismissed] = useState(false)
+  const [dismissed, setDismissed] = useState<string | null>(null)
 
   useEffect(() => {
     const api = window.cubitaUpdate
     if (!api) return
-    api.status().then(setStatus).catch(() => {})
-    return api.onStatus(setStatus)
+    let active = true
+    let received = false
+    const stop = api.onStatus((next) => { received = true; if (active) setStatus(next) })
+    api.status().then((next) => { if (active && !received) setStatus(next) }).catch(() => {})
+    return () => { active = false; stop() }
   }, [])
 
-  if (status.state !== 'ready' || dismissed) return null
+  if (status.state !== 'ready' || dismissed === status.version) return null
 
   return (
     <div className="update-banner" role="status">
       <span>
-        نسخه‌ی {status.version} آماده‌ی نصب است. با بستن برنامه خودکار اعمال می‌شود.
+        نسخه‌ی {toFaDigits(status.version)} آماده‌ی نصب است. با بستن برنامه خودکار اعمال می‌شود.
       </span>
       <span className="update-banner__actions">
-        <button type="button" onClick={() => window.cubitaUpdate?.installNow()}>
+        <button type="button" onClick={() => {
+          if (window.confirm('کارهای در حال انجام را ذخیره کنید. برنامه برای نصب آپدیت بسته و دوباره باز می‌شود. ادامه می‌دهید؟')) void window.cubitaUpdate?.installNow()
+        }}>
           نصب و راه‌اندازی مجدد
         </button>
-        <button type="button" className="update-banner__later" onClick={() => setDismissed(true)}>
+        <button type="button" className="update-banner__later" onClick={() => setDismissed(status.version)}>
           بعداً
         </button>
       </span>
