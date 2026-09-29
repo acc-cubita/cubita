@@ -7,7 +7,27 @@ from sqlalchemy.orm import Session
 from app.models.accounting import Account, JournalEntry
 from app.models.analytic import AnalyticAccount
 from app.models.cost_center import CostCenter
+from app.models.user import User
 from app.schemas.accounting import JournalEntryOut
+
+
+def resolve_creator_names(db: Session, entries: list[JournalEntry]) -> dict[UUID, str]:
+    """نامِ فعلیِ ثبت‌کننده را برای اسنادِ مجازِ همین صفحه، با یک خواندن برگردان.
+
+    هویت از created_by_id ذخیره‌شده می‌آید، نه کاربرِ فعلی یا نقشِ قابل‌تغییرش.
+    JOIN با خودِ سند و قیدِ مستأجر مانعِ خواندنِ کاربر با شناسهٔ دلخواه می‌شود.
+    """
+    if not entries:
+        return {}
+    tenant_id = entries[0].tenant_id
+    entry_ids = {entry.id for entry in entries}
+    return {
+        entry_id: name for entry_id, name in db.execute(
+            select(JournalEntry.id, User.name)
+            .join(User, User.id == JournalEntry.created_by_id)
+            .where(JournalEntry.tenant_id == tenant_id, JournalEntry.id.in_(entry_ids))
+        )
+    }
 
 
 def fill_line_labels(db: Session, entry: JournalEntry, out: JournalEntryOut) -> None:

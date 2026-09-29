@@ -9,7 +9,7 @@ const output = path.resolve('../_deploy/entry-presentation-qa')
 fs.mkdirSync(output, { recursive: true })
 const entry = {
   id: 'sample', number: 2, atf_number: 102, sub_number: 'A-25', entry_date: '2026-09-29',
-  description: 'انتقال از صندوق به بانک', source_type: 'manual', source: null,
+  description: 'انتقال از صندوق به بانک', source_type: 'manual', source: null, created_by_name: 'مریم احمدی',
   status: 'temporary', finalized_at: null, voided_at: null, reverses_entry_id: null,
   lines: [
     { id: '1', account_id: 'bank', account_code: '1102', account_name: 'بانک', debit: '10000000', credit: '0', description: 'واریز وجه به حساب بانکی' },
@@ -51,6 +51,10 @@ try {
     page.on('pageerror', error => errors.push(error.message))
     page.on('console', event => { if (event.type() === 'error' && !event.text().includes('503')) errors.push(event.text()) })
     await page.goto(`${origin}/tests/fixtures/entry-presentation.html?theme=${theme}`)
+    await page.getByText('ثبت‌کننده: مریم احمدی', { exact: true }).waitFor()
+    if (theme === 'tipalti' && (width === 1440 || width === 390)) {
+      await page.screenshot({ path: path.join(output, `${width}-${theme}-creator-list.png`) })
+    }
     const open = async nextMode => {
       mode = nextMode
       await page.getByText('انتقال از صندوق به بانک', { exact: true }).click()
@@ -93,6 +97,7 @@ try {
     const dialog = page.getByRole('dialog')
     assert.equal(await dialog.getByText('بانک', { exact: true }).count(), 1)
     assert.equal(await dialog.getByText('۱۴۰۵/۰۷/۰۷', { exact: true }).count(), 1)
+    assert.equal(await dialog.getByText('ثبت‌کننده: مریم احمدی', { exact: true }).count(), 1)
     await page.keyboard.press('Tab'); await metrics('simple')
     await page.keyboard.press('Escape'); assert.equal(await page.getByRole('dialog').count(), 0)
     await open('rich'); await page.getByText('قرارداد تجهیز شعبه', { exact: false }).waitFor()

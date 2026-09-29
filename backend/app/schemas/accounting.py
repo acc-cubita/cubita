@@ -307,6 +307,8 @@ class JournalEntryOut(BaseModel):
     entry_date: date
     description: str
     source_type: str
+    #: نامِ فعلیِ صاحبِ created_by_id؛ نقشِ او در لحظهٔ ثبت از قبل ذخیره نشده است.
+    created_by_name: str | None = None
     #: هویتِ عملیاتِ منبع. `None` یعنی سند عملیاتِ بیرونی ندارد — دستی، تسعیر،
     #: اختتامیه. از `journal_entry_id`ِ خودِ ماژول‌ها مشتق می‌شود، نه از ستونی روی
     #: سند؛ توضیحش در `services/entry_source.py`.

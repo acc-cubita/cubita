@@ -5693,6 +5693,7 @@ button.topnav-org:hover {
 .entry-document-meta > div:last-child { border-inline-end: 0; }
 .entry-document-meta dt { color: var(--text-muted); font-size: var(--fs-sm); margin-bottom: 8px; }
 .entry-document-meta dd { margin: 0; color: var(--text-h); font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.entry-creator { display: block; margin-block-start: 3px; color: var(--text-muted); font-size: var(--fs-xs); font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
 .entry-document-description { padding: 16px 0; }
 .entry-document-description p { margin: 8px 0 0; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .entry-document-table-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border: 1px solid var(--border); border-bottom: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; font-weight: 600; color: var(--text-h); }
@@ -15168,6 +15169,8 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 /* ── «اسناد حسابداری» (تمِ اکسلی): گریدِ فهرست در قابِ لغزشِ خودش با سرستون و «جمعِ بازه»ِ چسبنده ──
  * ستون‌ها همان `xl-grid--list`اند؛ این‌جا فقط کلیک‌به‌سند، ردیفِ فعالِ کیبورد و ارتفاعِ خانه‌های کنش. */
 .el-sheet > tbody > tr.acc-row--clickable { cursor: pointer; }
+.el-sheet .el-origin { min-width: 0; }
+.el-sheet .el-origin-source { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page .ef-table-wrap > table.el-sheet td.xl-rowhead { padding: 0; }
 .page .ef-table-wrap > table.el-sheet td.card-actions { padding-block: 0; }
 .page .lr-scroll:focus-within > table.el-sheet > tbody > tr.is-active:not(.is-selected) > td:not(.xl-rowhead) { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }

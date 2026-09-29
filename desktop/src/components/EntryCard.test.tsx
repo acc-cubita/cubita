@@ -7,7 +7,7 @@ import { EntryCard } from './EntryCard'
 
 const sample = (): JournalEntryRecord => ({
   id: 'entry', number: 2, atf_number: 102, sub_number: 'A-25', entry_date: '2026-09-29',
-  description: 'انتقال از صندوق به بانک', source_type: 'manual', source: null,
+  description: 'انتقال از صندوق به بانک', source_type: 'manual', source: null, created_by_name: 'مریم احمدی',
   status: 'temporary', voided_at: null, reverses_entry_id: null,
   lines: [
     { id: '1', account_id: 'bank', account_code: '1102', account_name: 'بانک', debit: '10000000', credit: '0', description: 'دریافت وجه' },
@@ -28,6 +28,7 @@ describe('برگهٔ مشترکِ سند', () => {
     expect(host.textContent).toContain('سند شمارهٔ ۲')
     expect(host.textContent).toContain('۱۰۲')
     expect(host.textContent).toContain('A-۲۵')
+    expect(host.querySelector('.entry-document-meta')?.textContent).toContain('ثبت‌کننده: مریم احمدی')
     expect([...host.querySelectorAll('.entry-account')].map((node) => node.textContent)).toEqual(['۱۱۰۲بانک', '۱۱۰۱صندوق'])
     expect(host.querySelector('tfoot')?.textContent).toContain('سند تراز است')
     expect(host.querySelectorAll('tfoot .num')).toHaveLength(2)
@@ -54,6 +55,12 @@ describe('برگهٔ مشترکِ سند', () => {
     await act(() => root.render(<EntryCard entry={{ ...entry, lines: [] }} />))
     expect(host.textContent).toContain('ردیفی برای این سند دریافت نشد')
     expect(host.textContent).not.toContain('سند تراز است')
+  })
+  it('نامِ ناموجود را حدس نمی‌زند و برای منشأ خودکار ثبت‌کنندهٔ دستی نشان نمی‌دهد', async () => {
+    await act(() => root.render(<EntryCard entry={{ ...sample(), created_by_name: null }} />))
+    expect(host.textContent).toContain('ثبت‌کننده: نام در دسترس نیست')
+    await act(() => root.render(<EntryCard entry={{ ...sample(), source_type: 'sales_invoice' }} />))
+    expect(host.textContent).not.toContain('ثبت‌کننده:')
   })
   it('وضعیت ابطال/برگشت و کنش واقعیِ منشأ محفوظ است', async () => {
     const open = vi.fn(), entry = { ...sample(), voided_at: '2026-09-29', reverses_entry_id: 'old' }

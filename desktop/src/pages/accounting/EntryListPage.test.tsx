@@ -29,6 +29,7 @@ const entry = (n: number, status = 'temporary', voided = false) => ({
   entry_date: '2026-09-01',
   description: `سند ${n}`,
   source_type: 'manual',
+  created_by_name: n === 1 ? 'مریم احمدی' : null,
   source: null,
   status,
   voided_at: voided ? '2026-09-02' : null,
@@ -87,6 +88,11 @@ const rows = () => [...container.querySelectorAll<HTMLTableRowElement>('.el-shee
 const button = (text: string) => [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)!
 
 describe('اسناد حسابداری', () => {
+  it('نام ثبت‌کنندهٔ ذخیره‌شده را کنار منشأ دستی نشان می‌دهد و برای نامِ ناموجود حدس نمی‌زند', async () => {
+    await render()
+    expect(rows()[0].querySelector('[data-label="منشأ"]')?.textContent).toContain('ثبت‌کننده: مریم احمدی')
+    expect(rows()[1].querySelector('[data-label="منشأ"]')?.textContent).toContain('ثبت‌کننده: نام در دسترس نیست')
+  })
   it('صفحه‌ی اول، «جمعِ بازه» از سرور با نشانِ توازن، و «سندِ بعدی» صفحه‌ی بعد را اضافه می‌کند', async () => {
     await render()
     expect(rows().map((tr) => tr.querySelector('.card-title')?.textContent)).toEqual(['سند ۱', 'سند ۲'])

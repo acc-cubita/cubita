@@ -1,6 +1,6 @@
 import { CheckCircle2, AlertTriangle, Info } from 'lucide-react'
 import { formatJalali, toFaDigits } from '../lib/jalali'
-import { entryAccountName, entryAmount, entryTotals } from '../lib/entryPresentation'
+import { entryAccountName, entryAmount, entryTotals, manualCreatorText } from '../lib/entryPresentation'
 import { StatusChip, sourceText } from '../pages/accounting/kit'
 import type { JournalEntryRecord } from '../api'
 
@@ -41,7 +41,9 @@ export function EntryCard({ entry, accountNames, onOpenSource }: {
         <div><dt>شمارهٔ فرعی</dt><dd><bdi>{entry.sub_number ? toFaDigits(entry.sub_number) : '—'}</bdi></dd></div>
         <div><dt>منشأ ثبت</dt><dd>{onOpenSource ? (
           <button type="button" className="link-btn" onClick={onOpenSource}>{sourceText(entry)}</button>
-        ) : sourceText(entry)}</dd></div>
+        ) : sourceText(entry)}
+          {manualCreatorText(entry) && <span className="entry-creator">{manualCreatorText(entry)}</span>}
+        </dd></div>
       </dl>
 
       <section className="entry-document-description" aria-label="شرح سند">

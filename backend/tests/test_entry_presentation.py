@@ -8,10 +8,11 @@ from app.models.accounting import JournalLine
 from app.models.analytic import AnalyticAccount
 from app.models.cost_center import CostCenter
 from app.models.tenant import Tenant
+from app.models.user import User
 from app.schemas.accounting import JournalEntryOut
 from app.services import chart_codes as cc
 from app.services.common import get_account, make_journal_entry
-from app.services.entry_presentation import fill_line_labels
+from app.services.entry_presentation import fill_line_labels, resolve_creator_names
 from app.tenant_context import session_tenant
 
 
@@ -54,7 +55,37 @@ def test_detail_returns_labels_and_preserves_money_and_order(db, user, client):
     assert result["lines"][0]["cost_center_code"] == "QA-12"
     assert result["lines"][1]["analytic_name"] is None
     assert result["entry_date"] == "2026-06-01"
+    assert result["created_by_name"] == user.name
     assert not db.new and not db.dirty and not db.deleted
+
+
+def test_list_and_detail_show_persisted_creator_not_current_viewer(db, user, client):
+    first, _, _ = _entry(db, user)
+    second, _, _ = _entry(db, user)
+    author = User(name="حسابدار دیگر", email=f"author-{uuid4()}@example.test", hashed_password="unused")
+    db.add(author)
+    db.flush()
+    second.created_by_id = author.id
+    db.flush()
+
+    rows = client.get("/api/journal-entries", params={"q": "انتقال وجه"}).json()["items"]
+    names = {row["id"]: row["created_by_name"] for row in rows}
+    assert names[str(first.id)] == user.name
+    assert names[str(second.id)] == "حسابدار دیگر"
+    assert client.get(f"/api/journal-entries/{second.id}").json()["created_by_name"] == "حسابدار دیگر"
+
+
+def test_creator_lookup_is_one_tenant_scoped_query_and_missing_stays_null(db, user):
+    first, _, _ = _entry(db, user)
+    second, _, _ = _entry(db, user)
+    with patch.object(db, "execute", wraps=db.execute) as execute:
+        names = resolve_creator_names(db, [first, second])
+    assert execute.call_count == 1
+    assert names == {first.id: user.name, second.id: user.name}
+    statement = execute.call_args.args[0]
+    assert "tenant_id =" in str(statement)
+    assert first.tenant_id in statement.compile().params.values()
+    assert resolve_creator_names(db, []) == {}
 
 
 def test_labels_are_batched_and_restricted_to_entry_tenant(db, user):

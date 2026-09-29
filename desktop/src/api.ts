@@ -830,6 +830,8 @@ export interface JournalEntryRecord {
   entry_date: string
   description: string
   source_type: string
+  /** نام فعلی کاربری که شناسه‌اش هنگام ثبت سند ذخیره شد؛ نقش تاریخی نیست. */
+  created_by_name?: string | null
   /** null = سند عملیاتِ بیرونی ندارد (دستی، تسعیر، اختتامیه). */
   source: EntrySource | null
   /** `temporary` | `permanent` — سندِ دائم دیگر ادغام/بازشماره‌گذاری نمی‌شود. */

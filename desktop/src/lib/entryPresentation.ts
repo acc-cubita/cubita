@@ -1,6 +1,12 @@
 import type { JournalEntryLine } from '../api'
 import { formatErrorDates, toFaDigits } from './jalali'
 
+/** «دستی» نوعِ منشأ است، نه نامِ فرد؛ نام از هویت ذخیره‌شدهٔ خود سند می‌آید. */
+export function manualCreatorText(entry: { source_type: string; created_by_name?: string | null }): string | null {
+  if (entry.source_type !== 'manual') return null
+  return `ثبت‌کننده: ${entry.created_by_name?.trim() || 'نام در دسترس نیست'}`
+}
+
 // فقط نمایش: Decimal سرور را به Number تبدیل نمی‌کنیم؛ ریال ۱۸رقمی و ارز با
 // چهار رقم اعشار نباید در نمای سند گرد شوند یا توازنِ کاذب بسازند.
 const SCALE = 10_000n
