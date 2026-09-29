@@ -1,6 +1,7 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  BadgeCheck,
   CheckCircle2,
   Landmark,
   Plus,
@@ -20,8 +21,10 @@ import {
   fetchCashboxes,
   fetchCheckTimeline,
   fetchCheckSummary,
+  fetchCheckbooks,
   fetchChecks,
   fetchContacts,
+  fetchNextCheckNumber,
   updateCheckStatus,
   type CheckEventRecord,
   type CheckRecord,
@@ -37,15 +40,17 @@ import { formatJalali, toFaDigits, todayIso } from '../../lib/jalali'
 import { AsyncBlock, Metric, Note, OpsPage, fa, faInt, useAsync, type Msg } from '../accounting/kit'
 import { SearchSelect } from '../../components/SearchSelect'
 import { FormField } from '../../components/form/FormKit'
+import { Tabs } from '../../components/Tabs'
+import { SelectionBar } from '../../components/XlGrid'
+import { modsOf, useRowSelection } from '../../lib/rowSelection'
 
 /**
- * عملیاتِ چکِ ماژولِ «دریافت و پرداخت».
+ * «چک‌ها»ی ماژولِ «دریافت و پرداخت» — یک صفحه، چهار برگه.
  *
- * **چرا چهار صفحه‌ی جدا و نه یک فهرستِ چک با دکمه‌های همه‌کاره:** پیش‌تر یک جدولِ واحد
- * بود که هر ردیفش بسته به وضعیت، دکمه‌های متفاوتی نشان می‌داد. کاربر باید کلِ دفتر را
- * می‌گشت تا کارِ امروزش را پیدا کند. حالا هر صفحه از منو دقیقاً همان دسته‌ای را
- * می‌آورد که کارِ آن عملیات است: چکِ نزدِ ما برای واگذاری، چکِ نزدِ بانک برای وصول،
- * چکِ صادرشده برای کسر، و جست‌وجو برای وقتی که دنبالِ یک برگِ مشخصی.
+ * **چرا برگه‌های جدا و نه یک فهرستِ چک با دکمه‌های همه‌کاره:** پیش‌تر یک جدولِ واحد بود که هر ردیفش بسته به
+ * وضعیت، دکمه‌های متفاوتی نشان می‌داد. کاربر باید کلِ دفتر را می‌گشت تا کارِ امروزش را پیدا کند. حالا هر برگه
+ * دقیقاً همان دسته‌ای را می‌آورد که کارِ آن است: چکِ نزدِ ما برای واگذاری، چکِ نزدِ بانک برای وصول، چکِ صادرشده
+ * برای کسر، و جست‌وجو برای وقتی که دنبالِ یک برگِ مشخصی. تا ۱۴۰۵/۰۷/۰۶ این چهار برگه چهار منوی جدا بودند.
  */
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : 'خطای ناشناخته')
@@ -136,6 +141,7 @@ type Action = {
   key: string
   label: string
   icon: typeof CheckCircle2
+  /** حسابِ بانکی لازم است — از خودِ چک (برگِ دسته‌چک)، وگرنه از انتخاب‌گرِ بالای جدول. */
   needsBank?: boolean
   /** «نقد کردن» به صندوق می‌رود، نه بانک — دو مسیرِ جدا. */
   needsCashbox?: boolean
@@ -143,8 +149,17 @@ type Action = {
 }
 
 /**
- * جدولِ چک با کنش‌های وضعیت. هر صفحه فقط می‌گوید کدام چک‌ها را می‌خواهد و چه کنشی
- * روی آن‌ها ممکن است — بقیه‌ی رفتار (بارگذاری، انتخاب بانک، پیام) این‌جا یک‌بار است.
+ * جدولِ چک با کنش‌های وضعیت — **گریدِ اکسلیِ فهرست** (الگوی «د با کنش»ِ تمِ اکسلی؛ مرجع: کارتابل اسناد موقت).
+ *
+ * هر برگه فقط می‌گوید کدام چک‌ها را می‌خواهد و چه کنشی روی آن‌ها ممکن است — بقیه‌ی رفتار (بارگذاری، انتخابِ
+ * بانک و صندوق، پیام، تاریخچه) این‌جا یک‌بار است. شماره‌ی ردیف انتخاب می‌کند (کلیک، Ctrl، Shift) و نوارِ انتخاب
+ * جمعِ مبلغِ انتخاب‌شده‌ها را می‌گوید؛ جمعِ کلِ همین دسته در `tfoot`ِ خودِ گرید است، نه کارتِ جدا. زیرِ ۷۶۰px کارت.
+ *
+ * - ستونِ «وضعیت» ندارد: هر جدول یک دسته است (نزدِ ما، نزدِ بانک، …) و عنوانِ کارتش همان را می‌گوید.
+ * - حساب و صندوقِ مقصد **یک‌بار بالای جدول** انتخاب می‌شوند، نه در هر ردیف: واگذاریِ یک روز معمولاً همه به یک
+ *   حساب است، و دو ستونِ انتخاب‌گر جای «طرف حساب» را می‌گرفت. برگی که مقصدِ دیگری دارد؟ انتخاب را پیش از کلیک
+ *   عوض کنید.
+ * - شماره و کنش‌ها در قابِ باریک میخ‌اند تا با لغزشِ افقی نه برگ گم شود نه دکمه‌هایش.
  */
 function CheckActionTable({
   token,
@@ -154,6 +169,7 @@ function CheckActionTable({
   loading,
   error,
   emptyText,
+  bankLabel = 'حسابِ بانکی',
 }: {
   token: string
   rows: CheckRecord[]
@@ -162,36 +178,43 @@ function CheckActionTable({
   loading: boolean
   error: string | null
   emptyText: string
+  /** برچسبِ انتخاب‌گرِ حساب — «واگذاری به حسابِ» یا «کسر از حسابِ». */
+  bankLabel?: string
 }) {
   const [busy, setBusy] = useState<string | null>(null)
-  const [bankPick, setBankPick] = useState<Record<string, string>>({})
-  const [boxPick, setBoxPick] = useState<Record<string, string>>({})
+  const [bankId, setBankId] = useState('')
+  const [boxId, setBoxId] = useState('')
   //: تاریخچه فقط برای ردیفِ بازشده خوانده می‌شود — نه برای هر دوازده ردیفِ صفحه.
   const [openId, setOpenId] = useState<string | null>(null)
-  const banks = useAsync(() => fetchBankAccountsLive(token), [token])
-  const boxes = useAsync(
-    () => (actions.some((a) => a.needsCashbox) ? fetchCashboxes(token, false) : Promise.resolve([])),
-    [token],
-  )
+  const { selected, click, clear } = useRowSelection()
+  const needsBank = actions.some((a) => a.needsBank)
+  //: چکی که از دسته‌چک صادر شده حسابش را از همان دسته دارد؛ انتخاب‌گر فقط وقتی هست که برگِ بی‌حسابی در دسته باشد.
+  const askBank = needsBank && rows.some((c) => !c.bank_account_id)
+  const askBox = actions.some((a) => a.needsCashbox)
+  const banks = useAsync(() => (needsBank ? fetchBankAccountsLive(token) : Promise.resolve([])), [token, needsBank])
+  const boxes = useAsync(() => (askBox ? fetchCashboxes(token, false) : Promise.resolve([])), [token, askBox])
   const history = useAsync(
     () => (openId ? fetchCheckTimeline(token, openId) : Promise.resolve([])),
     [token, openId],
   )
   const pg = usePagination(rows, 12)
+  const order = pg.pageItems.map((c) => c.id)
+  //: دسته‌ی تازه (بعد از ثبتِ یک کنش) یعنی ردیف‌های دیگر؛ انتخابِ قبلی معنا ندارد.
+  useEffect(() => clear(), [rows, clear])
 
   async function run(check: CheckRecord, action: Action) {
     //: چکی که از یک دسته‌چک صادر شده، حسابش را از همان دسته دارد. پرسیدنِ دوباره
     //: هم اضافه است هم راهی برای ناسازگاری: تعهد روی یک حساب ثبت شده بود و پول
     //: می‌توانست از حسابِ دیگری کم شود. سرور هم حالا حسابِ ناهمخوان را رد می‌کند.
-    const bankId = bankPick[check.id] || check.bank_account_id || ''
-    if (action.needsBank && !bankId) {
-      onDone({ text: 'اول حساب بانکی را انتخاب کنید.', kind: 'err' })
+    const bank = check.bank_account_id || (action.needsBank ? bankId : '')
+    if (action.needsBank && !bank) {
+      onDone({ text: `اول «${bankLabel}» را بالای جدول انتخاب کنید.`, kind: 'err' })
       return
     }
     setBusy(check.id)
     try {
-      await updateCheckStatus(token, check.id, action.key, bankId || undefined, {
-        cashbox_id: action.needsCashbox ? boxPick[check.id] || null : null,
+      await updateCheckStatus(token, check.id, action.key, bank || undefined, {
+        cashbox_id: action.needsCashbox ? boxId || null : null,
       })
       onDone({ text: `چکِ شماره ${check.number}: ${action.label} ثبت شد.`, kind: 'ok' })
     } catch (err) {
@@ -201,116 +224,159 @@ function CheckActionTable({
     }
   }
 
-  const needsBank = actions.some((a) => a.needsBank)
-  const needsCashbox = actions.some((a) => a.needsCashbox)
+  const total = rows.reduce((s, c) => s + Number(c.amount), 0)
+  const picked = rows.filter((c) => selected.has(c.id))
+  const pickedSum = picked.reduce((s, c) => s + Number(c.amount), 0)
 
   return (
     <AsyncBlock loading={loading} error={error} empty={rows.length === 0} emptyText={emptyText}>
-      <div className="table-scroll">
-        <table className="cards-on-mobile acc-table">
-          <thead>
-            <tr>
-              <th>شماره</th>
-              <th>طرف حساب</th>
-              <th>بانک</th>
-              <th>سررسید</th>
-              <th>وضعیت</th>
-              <th>مبلغ</th>
-              {needsBank && <th>واریز به</th>}
-              {needsCashbox && <th>به صندوق</th>}
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {pg.pageItems.map((c) => (
-              <Fragment key={c.id}>
+      <div className="jg">
+        {(askBank || askBox) && (
+          <div className="ck-dest">
+            {askBank && (
+              <label className="acc-inline-field">
+                {bankLabel}
+                <SearchSelect value={bankId} onChange={(e) => setBankId(e.target.value)}>
+                  <option value="">— انتخاب حساب —</option>
+                  {(banks.data ?? []).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              </label>
+            )}
+            {askBox && (
+              <label className="acc-inline-field">
+                نقد به صندوقِ
+                <SearchSelect value={boxId} onChange={(e) => setBoxId(e.target.value)}>
+                  <option value="">— صندوقِ پیش‌فرض —</option>
+                  {(boxes.data ?? []).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </SearchSelect>
+              </label>
+            )}
+          </div>
+        )}
+        <div className="table-scroll ef-table-wrap jg-wrap ck-wrap">
+          <table className={`cards-on-mobile ef-table xl-grid ck-sheet ck-sheet--a${actions.length}`}>
+            <colgroup>
+              <col className="ck-c-rowhead" />
+              <col className="ck-c-number" />
+              <col />
+              <col className="ck-c-bank" />
+              <col className="ck-c-due" />
+              <col className="ck-c-amount" />
+              <col className="ck-c-actions" />
+            </colgroup>
+            <thead>
               <tr>
-                <td className="card-title" data-label="شماره">
-                  {toFaDigits(c.number)}
-                  {c.sayad_id ? <div className="entity-sub" dir="ltr">{toFaDigits(c.sayad_id)}</div> : null}
-                </td>
-                <td className="card-wide" data-label="طرف حساب">{c.contact_name || '—'}</td>
-                <td data-label="بانک">{c.bank_name || '—'}</td>
-                <td data-label="سررسید">
-                  {formatJalali(c.due_date)} <DueChip due={c.due_date} />
-                </td>
-                <td data-label="وضعیت"><StatusChip status={c.status} /></td>
-                <td className="num" data-label="مبلغ">{fa(c.amount)}</td>
-                {needsBank && (
-                  <td data-label="واریز به">
-                    {c.bank_account_id ? (
-                      //: حساب از خودِ چک می‌آید؛ عوض‌کردنش در همین لحظه یعنی سندِ
-                      //: وصول به حسابی بخورد که تعهد آن‌جا ثبت نشده بود.
-                      <span className="entity-sub">
-                        {(banks.data ?? []).find((b) => b.id === c.bank_account_id)?.name ?? '—'}
-                      </span>
-                    ) : (
-                      <SearchSelect
-                        value={bankPick[c.id] ?? ''}
-                        onChange={(e) => setBankPick({ ...bankPick, [c.id]: e.target.value })}
-                      >
-                        <option value="">— انتخاب —</option>
-                        {(banks.data ?? []).map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </SearchSelect>
-                    )}
-                  </td>
-                )}
-                {needsCashbox && (
-                  <td data-label="به صندوق">
-                    <SearchSelect
-                      value={boxPick[c.id] ?? ''}
-                      onChange={(e) => setBoxPick({ ...boxPick, [c.id]: e.target.value })}
-                    >
-                      <option value="">— صندوقِ پیش‌فرض —</option>
-                      {(boxes.data ?? []).map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </SearchSelect>
-                  </td>
-                )}
-                <td className="card-actions">
-                  {actions.map((a) => {
-                    const Icon = a.icon
-                    return (
-                      <button
-                        key={a.key}
-                        type="button"
-                        className={a.tone === 'danger' ? 'danger' : undefined}
-                        onClick={() => void run(c, a)}
-                        disabled={busy === c.id}
-                      >
-                        <Icon size={13} /> {a.label}
-                      </button>
-                    )
-                  })}
-                  {/*
-                    وضعیتِ فعلی به‌تنهایی توضیح نمی‌دهد چک چطور به اینجا رسیده.
-                    «واخواست‌شده» وقتی معنی کامل دارد که بشود دید کِی و به کدام
-                    بانک واگذار شده بود.
-                  */}
-                  <button type="button" onClick={() => setOpenId(openId === c.id ? null : c.id)}>
-                    <History size={13} /> {openId === c.id ? 'بستن' : 'تاریخچه'}
-                  </button>
-                </td>
+                <th className="xl-rowhead card-hide ck-pin-head">ردیف</th>
+                <th className="ck-pin-lead">شماره</th>
+                <th>طرف حساب</th>
+                <th>بانک</th>
+                <th>سررسید</th>
+                <th className="num">مبلغ</th>
+                <th className="ck-pin-end" aria-label="کنش‌ها" />
               </tr>
-              {openId === c.id && (
-                <tr className="card-full">
-                  <td colSpan={needsBank || needsCashbox ? 8 : 7}>
-                    <CheckTimeline steps={history.data ?? []} loading={history.loading} />
-                  </td>
-                </tr>
-              )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pg.pageItems.map((c, i) => {
+                const on = selected.has(c.id)
+                const open = openId === c.id
+                return (
+                  <Fragment key={c.id}>
+                    <tr className={on ? 'is-selected' : undefined} aria-selected={on}>
+                      <td className="xl-rowhead card-hide ck-pin-head">
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          className="xl-rowhead-btn"
+                          aria-pressed={on}
+                          aria-label={`انتخابِ چکِ ${toFaDigits(c.number)}`}
+                          onClick={(e) => click(order, c.id, modsOf(e))}
+                        >
+                          {faInt(pg.page * 12 + i + 1)}
+                        </button>
+                      </td>
+                      <td className="card-title ck-pin-lead" data-label="شماره">
+                        <span dir="ltr">{toFaDigits(c.number)}</span>
+                        {c.sayad_id ? <div className="entity-sub" dir="ltr">{toFaDigits(c.sayad_id)}</div> : null}
+                      </td>
+                      <td className="card-wide" data-label="طرف حساب" title={c.contact_name || undefined}>
+                        {c.contact_name || '—'}
+                      </td>
+                      <td data-label="بانک">{c.bank_name || '—'}</td>
+                      <td data-label="سررسید">
+                        {formatJalali(c.due_date)} <DueChip due={c.due_date} />
+                      </td>
+                      <td className="num" data-label="مبلغ">{fa(c.amount)}</td>
+                      <td className="card-actions ck-actions ck-pin-end">
+                        {actions.map((a) => {
+                          const Icon = a.icon
+                          return (
+                            <button
+                              key={a.key}
+                              type="button"
+                              className={`ck-act${a.tone === 'danger' ? ' danger' : ''}`}
+                              onClick={() => void run(c, a)}
+                              disabled={busy === c.id}
+                            >
+                              <Icon size={13} aria-hidden="true" /> {a.label}
+                            </button>
+                          )
+                        })}
+                        {/*
+                          وضعیتِ فعلی به‌تنهایی توضیح نمی‌دهد چک چطور به اینجا رسیده.
+                          «واخواست‌شده» وقتی معنی کامل دارد که بشود دید کِی و به کدام
+                          بانک واگذار شده بود. در گرید فقط نشانه است (جا برای کنش‌ها)؛ در کارت برچسب هم دارد.
+                        */}
+                        <button
+                          type="button"
+                          className="ck-act ck-act--ghost ck-act--icon"
+                          aria-expanded={open}
+                          aria-label={open ? 'بستنِ تاریخچه' : 'تاریخچه'}
+                          title={open ? 'بستنِ تاریخچه' : 'تاریخچه'}
+                          onClick={() => setOpenId(open ? null : c.id)}
+                        >
+                          <History size={13} aria-hidden="true" />
+                          <span className="ck-act-text">{open ? 'بستن' : 'تاریخچه'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr className="ck-trail-row">
+                        <td className="card-full" colSpan={7}>
+                          <CheckTimeline steps={history.data ?? []} loading={history.loading} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td className="xl-rowhead card-hide ck-pin-head" />
+                <td className="card-title ck-pin-lead">جمعِ {faInt(rows.length)} برگ</td>
+                <td className="card-hide" colSpan={3} />
+                <td className="num" data-label="جمع مبلغ">{fa(total)}</td>
+                <td className="card-hide ck-pin-end" />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
         <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
+        {picked.length > 0 && (
+          <SelectionBar count={picked.length} unit="چک" onClear={clear}>
+            <span>
+              جمع مبلغ <b className="num">{fa(pickedSum)}</b>
+            </span>
+          </SelectionBar>
+        )}
       </div>
     </AsyncBlock>
   )
@@ -334,8 +400,8 @@ const EMPTY_CHECK = {
  * ثبتِ برگِ تازه.
  *
  * **چرا این‌جا و نه یک عملیاتِ جدا:** ثبتِ چک کارِ مستقلی نیست؛ ادامه‌ی همان جریانی
- * است که کاربر در آن ایستاده — چکِ دریافتی وسطِ «عملیات چک دریافتنی» ثبت می‌شود و
- * چکِ صادرشده وسطِ «دسته چک»، جایی که شماره‌ی برگِ بعدی معلوم است.
+ * است که کاربر در آن ایستاده — چکِ دریافتی بالای برگه‌ی «چک‌های دریافتنی» ثبت می‌شود و
+ * چکِ صادرشده بالای «چک‌های پرداختنی»، از دسته‌ای که شماره‌ی برگِ بعدی‌اش معلوم است.
  */
 function CheckForm({
   token,
@@ -459,13 +525,65 @@ function CheckForm({
   )
 }
 
-// ═══════════════════ ۴) عملیات بانکی چک دریافتنی ═══════════════════
+// ═══════════════════ «چک‌ها» — چهار برگه در یک صفحه ═══════════════════
 
-export function CheckReceivableOpsPage({ token }: { token: string }) {
+/**
+ * «چک‌ها» — همه‌ی کارِ چک در یک صفحه با چهار برگه (مرحله‌ی ۲ِ مرتب‌سازیِ زیرمنوها، ۱۴۰۵/۰۷/۰۶).
+ *
+ * پیش از این چهار منوی جدا بود («چک دریافتنی»، «وصول چک پرداختنی»، «استرداد چک»، «جست‌وجوی چک») و صدورِ چک هم
+ * زیرِ «دسته چک» پنهان بود. حالا یک ردیف در منو و چهار برگه — ولی **هر برگه همان دسته‌ی کاری را می‌آورد که صفحه‌ی
+ * قبلی می‌آورد** (نزدِ ما، نزدِ بانک، صادرشده، …): جدولِ همه‌کاره‌ای که هر ردیفش بسته به وضعیت دکمه‌ی دیگری دارد
+ * همان چیزی بود که این چیدمان برای حذفش ساخته شده بود.
+ */
+export function ChecksPage({
+  token,
+  onNavigate,
+}: {
+  token: string
+  onNavigate: (page: PageKey, section?: string | null) => void
+}) {
+  return (
+    <OpsPage
+      icon={ScrollText}
+      title="چک‌ها"
+      description="چکِ دریافتی از ثبت تا وصول، چکِ خودتان از صدور تا کسر از بانک، استرداد، و ردیابیِ هر برگ — هر کار در برگه‌ی خودش."
+    >
+      <Tabs
+        syncPage="checks"
+        tabs={[
+          { key: 'receivable', label: 'چک‌های دریافتنی', icon: ScrollText, content: <ReceivableTab token={token} /> },
+          { key: 'payable', label: 'چک‌های پرداختنی', icon: BadgeCheck, content: <PayableTab token={token} /> },
+          { key: 'return', label: 'استرداد چک', icon: Undo2, content: <ReturnTab token={token} /> },
+          { key: 'search', label: 'جست‌وجوی چک', icon: Search, content: <SearchTab token={token} onNavigate={onNavigate} /> },
+        ]}
+      />
+    </OpsPage>
+  )
+}
+
+/** بارگذاری و «پیامِ بعد از کنش» — مشترکِ برگه‌هایی که با `CheckActionTable` کار می‌کنند. */
+function useChecks(token: string) {
   const [msg, setMsg] = useState<Msg>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const checks = useAsync(() => fetchChecks(token), [token, reloadKey])
+  const done = (m: Msg) => {
+    setMsg(m)
+    if (m?.kind === 'ok') setReloadKey((k) => k + 1)
+  }
+  const reload = () => setReloadKey((k) => k + 1)
+  return { checks, msg, done, reload }
+}
 
+const reloadButton = (reload: () => void) => (
+  <button type="button" onClick={reload}>
+    <RefreshCw size={13} /> بازخوانی
+  </button>
+)
+
+// ── دریافتنی ──
+
+function ReceivableTab({ token }: { token: string }) {
+  const { checks, msg, done, reload } = useChecks(token)
   const inHand = useMemo(
     () => (checks.data ?? []).filter((c) => c.type === 'receivable' && c.status === 'in_hand'),
     [checks.data],
@@ -481,32 +599,21 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
     [checks.data],
   )
 
-  const done = (m: Msg) => {
-    setMsg(m)
-    if (m?.kind === 'ok') setReloadKey((k) => k + 1)
-  }
-
   return (
-    <OpsPage
-      icon={ScrollText}
-      title="چک دریافتنی"
-      description="چکی که از مشتری گرفته‌اید: واگذاری به بانک تا وصول شود، یا خرج کردنش بابتِ بدهیِ خودتان. هر دو راهِ بازگشت دارند."
-      head={
-        <div className="cc-head">
-          <div className="cc-summary">
-            <Metric icon={<ScrollText size={14} />} label="نزدِ ما" value={faInt(inHand.length)} hint="آماده‌ی واگذاری" />
-            <Metric icon={<Landmark size={14} />} label="نزدِ بانک" value={faInt(deposited.length)} tone="out" hint="در انتظارِ وصول" />
-            <Metric icon={<Share2 size={14} />} label="خرج‌شده" value={faInt(endorsed.length)} hint="نزدِ طرفِ دیگر" />
-            <Metric
-              icon={<CheckCircle2 size={14} />}
-              label="جمعِ در جریان"
-              value={fa([...inHand, ...deposited, ...endorsed].reduce((s, c) => s + Number(c.amount), 0))}
-              tone="in"
-            />
-          </div>
+    <>
+      <section className="cc-head">
+        <div className="cc-summary">
+          <Metric icon={<ScrollText size={14} />} label="نزدِ ما" value={faInt(inHand.length)} hint="آماده‌ی واگذاری" />
+          <Metric icon={<Landmark size={14} />} label="نزدِ بانک" value={faInt(deposited.length)} tone="out" hint="در انتظارِ وصول" />
+          <Metric icon={<Share2 size={14} />} label="خرج‌شده" value={faInt(endorsed.length)} hint="نزدِ طرفِ دیگر" />
+          <Metric
+            icon={<CheckCircle2 size={14} />}
+            label="جمعِ در جریان"
+            value={fa([...inHand, ...deposited, ...endorsed].reduce((s, c) => s + Number(c.amount), 0))}
+            tone="in"
+          />
         </div>
-      }
-    >
+      </section>
       <Note msg={msg} />
 
       <SectionCard
@@ -521,11 +628,7 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
         icon={ScrollText}
         title="نزدِ ما — آماده‌ی واگذاری"
         description="چک را به بانک واگذار کنید تا در سررسید وصول شود، یا همان برگ را بابتِ بدهیِ خودتان به دیگری بدهید."
-        actions={
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
-            <RefreshCw size={13} /> بازخوانی
-          </button>
-        }
+        actions={reloadButton(reload)}
       >
         <CheckActionTable
           token={token}
@@ -534,6 +637,7 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
           error={checks.error}
           emptyText="چکِ دریافتنیِ نزدِ ما نیست."
           onDone={done}
+          bankLabel="واگذاری به حسابِ"
           actions={[
             { key: 'deposited', label: 'واگذاری به بانک', icon: Landmark, needsBank: true },
             //: نقد کردن با وصولِ بانکی یکی نیست (§۱۹): پول به صندوق می‌رود، نه
@@ -576,17 +680,111 @@ export function CheckReceivableOpsPage({ token }: { token: string }) {
           actions={[{ key: 'in_hand', label: 'برگشت از خرج', icon: Undo2 }]}
         />
       </SectionCard>
-    </OpsPage>
+    </>
   )
 }
 
-// ═══════════════════ ۶) استرداد چک ═══════════════════
+// ── پرداختنی: صدور از دسته و وصول ──
 
-export function CheckReturnPage({ token }: { token: string }) {
-  const [msg, setMsg] = useState<Msg>(null)
-  const [reloadKey, setReloadKey] = useState(0)
-  const checks = useAsync(() => fetchChecks(token), [token, reloadKey])
+function PayableTab({ token }: { token: string }) {
+  const { checks, msg, done, reload } = useChecks(token)
+  //: دسته‌ای که کاربر می‌خواهد از آن برگ صادر کند. تا ۱۴۰۵/۰۷/۰۶ این کار زیرِ تعریفِ «دسته چک» بود — عملیاتی
+  //: لای تعریف؛ حالا کنارِ همان چک‌هایی است که صادر می‌کند.
+  const [issueFrom, setIssueFrom] = useState('')
+  const books = useAsync(() => fetchCheckbooks(token), [token, checks.data])
+  const nextNumber = useAsync(
+    () => (issueFrom ? fetchNextCheckNumber(token, issueFrom) : Promise.resolve({ number: '' })),
+    [token, issueFrom, checks.data],
+  )
+  const issued = useMemo(
+    () => (checks.data ?? []).filter((c) => c.type === 'payable' && c.status === 'issued'),
+    [checks.data],
+  )
+  const dueSoon = issued.filter((c) => daysToDue(c.due_date) <= 7).length
+  const open = (books.data ?? []).filter((b) => b.is_active && b.remaining_count > 0)
 
+  return (
+    <>
+      <section className="cc-head">
+        <div className="cc-summary">
+          <Metric icon={<ScrollText size={14} />} label="صادرشده و باز" value={faInt(issued.length)} />
+          <Metric
+            icon={<AlertTriangle size={14} />}
+            label="سررسیدِ نزدیک (۷ روز)"
+            value={faInt(dueSoon)}
+            tone={dueSoon > 0 ? 'out' : 'plain'}
+          />
+          <Metric
+            icon={<Landmark size={14} />}
+            label="جمعِ تعهد"
+            value={fa(issued.reduce((s, c) => s + Number(c.amount), 0))}
+            tone="out"
+          />
+        </div>
+      </section>
+      <Note msg={msg} />
+
+      <SectionCard
+        icon={Plus}
+        title="صدورِ چک از دسته"
+        description="برگِ بعدیِ دسته خودکار پیشنهاد می‌شود و چک به همان دسته وصل می‌ماند، پس شمارِ برگِ باقی‌مانده درست می‌ماند. پرداختی که چند ابزار دارد (نقد + چک + …) از «اعلامیه پرداخت» ثبت می‌شود."
+      >
+        <label className="acc-inline-field">
+          از دسته‌چکِ
+          <SearchSelect value={issueFrom} onChange={(e) => setIssueFrom(e.target.value)}>
+            <option value="">— انتخاب دسته —</option>
+            {open.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.bank_account_name} — {b.first_number} تا {b.last_number} ({faInt(b.remaining_count)} برگ مانده)
+              </option>
+            ))}
+          </SearchSelect>
+        </label>
+        {issueFrom ? (
+          <CheckForm
+            token={token}
+            type="payable"
+            checkbookId={issueFrom}
+            suggestedNumber={nextNumber.data?.number || undefined}
+            onSaved={done}
+          />
+        ) : (
+          <p className="hint">
+            {open.length > 0
+              ? 'برای صدورِ برگ، اول دسته‌چک را انتخاب کنید.'
+              : 'دسته‌چکِ بازی نیست — در «حساب‌های نقد و بانک ← دسته‌چک‌ها» یک دسته تعریف کنید.'}
+          </p>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        icon={Landmark}
+        title="صادرشده‌ها — در انتظارِ وصول"
+        description="چکی که طرفِ مقابل وصول کرده: کسر از حسابِ بانکی و بستنِ بدهی."
+        actions={reloadButton(reload)}
+      >
+        <CheckActionTable
+          token={token}
+          rows={issued}
+          loading={checks.loading}
+          error={checks.error}
+          emptyText="چکِ پرداختنیِ بازی نیست."
+          onDone={done}
+          bankLabel="چکِ بی‌دسته از حسابِ"
+          actions={[
+            { key: 'cleared', label: 'وصول شد', icon: CheckCircle2, needsBank: true },
+            { key: 'bounced', label: 'برگشت خورد', icon: AlertTriangle, tone: 'danger' },
+          ]}
+        />
+      </SectionCard>
+    </>
+  )
+}
+
+// ── استرداد ──
+
+function ReturnTab({ token }: { token: string }) {
+  const { checks, msg, done, reload } = useChecks(token)
   const returnable = useMemo(
     () => (checks.data ?? []).filter((c) => c.type === 'receivable' && c.status === 'in_hand'),
     [checks.data],
@@ -598,36 +796,17 @@ export function CheckReturnPage({ token }: { token: string }) {
   )
   const returned = useMemo(() => (checks.data ?? []).filter((c) => c.status === 'returned'), [checks.data])
 
-  const done = (m: Msg) => {
-    setMsg(m)
-    if (m?.kind === 'ok') setReloadKey((k) => k + 1)
-  }
-
   return (
-    <OpsPage
-      icon={Undo2}
-      title="استرداد چک"
-      description="چکی که بدونِ وصول به صاحبش پس داده می‌شود — مثلاً وقتی معامله فسخ شده. طلبِ طرف‌حساب دوباره باز می‌شود."
-    >
+    <>
       <Note msg={msg} />
-
       <p className="hint acc-note">
         <AlertTriangle size={14} />
-        استرداد با «برگشت خوردن» یکی نیست: آن‌جا بانک چک را برگشت می‌زند، این‌جا برگ سالم پس داده می‌شود.
-        چکِ دریافتنی فقط وقتی «نزدِ ما»ست قابلِ استرداد است؛ چکی که به بانک واگذار شده یا خرج شده، اول باید با
-        «بازگشت از بانک» یا «برگشت از خرج» به دستِ شما برگردد — هر دو در صفحه‌ی «عملیات بانکی چک دریافتنی».
+        استرداد با «برگشت خوردن» یکی نیست: آن‌جا بانک چک را برگشت می‌زند، این‌جا برگ سالم پس داده می‌شود. چکِ دریافتنی
+        فقط وقتی «نزدِ ما»ست قابلِ استرداد است؛ چکی که به بانک واگذار شده یا خرج شده، اول باید با «بازگشت از بانک» یا
+        «برگشت از خرج» به دستِ شما برگردد — هر دو در برگه‌ی «چک‌های دریافتنی».
       </p>
 
-      <SectionCard
-        icon={Undo2}
-        title="چک‌های قابلِ استرداد"
-        description="چکِ دریافتنیِ نزدِ ما"
-        actions={
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
-            <RefreshCw size={13} /> بازخوانی
-          </button>
-        }
-      >
+      <SectionCard icon={Undo2} title="چک‌های قابلِ استرداد" description="چکِ دریافتنیِ نزدِ ما" actions={reloadButton(reload)}>
         <CheckActionTable
           token={token}
           rows={returnable}
@@ -644,11 +823,7 @@ export function CheckReturnPage({ token }: { token: string }) {
         برگشته. تا امروز راهی برای ثبتش نبود و کاربر مجبور بود «برگشت خورد» بزند
         — که واخواست است و معنایش برای سابقه‌ی طرف‌حساب کاملاً فرق دارد.
       */}
-      <SectionCard
-        icon={Undo2}
-        title="چکِ پرداختنیِ برگشته به ما"
-        description="چکی که خودمان صادر کرده‌ایم و پیش از وصول پس گرفته‌ایم"
-      >
+      <SectionCard icon={Undo2} title="چکِ پرداختنیِ برگشته به ما" description="چکی که خودمان صادر کرده‌ایم و پیش از وصول پس گرفته‌ایم">
         <CheckActionTable
           token={token}
           rows={payableReturnable}
@@ -661,112 +836,21 @@ export function CheckReturnPage({ token }: { token: string }) {
       </SectionCard>
 
       <SectionCard icon={ScrollText} title="مستردشده‌ها" description={`${faInt(returned.length)} برگ`}>
-        <AsyncBlock
-          loading={checks.loading}
-          error={checks.error}
-          empty={returned.length === 0}
-          emptyText="هنوز چکی مسترد نشده."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>شماره</th>
-                  <th>طرف حساب</th>
-                  <th>سررسید</th>
-                  <th>مبلغ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {returned.map((c) => (
-                  <tr key={c.id}>
-                    <td className="card-title" data-label="شماره">{toFaDigits(c.number)}</td>
-                    <td className="card-wide" data-label="طرف حساب">{c.contact_name || '—'}</td>
-                    <td data-label="سررسید">{formatJalali(c.due_date)}</td>
-                    <td className="num" data-label="مبلغ">{fa(c.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
-// ═══════════════════ ۷) وصول چک پرداختنی ═══════════════════
-
-export function CheckPayableClearPage({ token }: { token: string }) {
-  const [msg, setMsg] = useState<Msg>(null)
-  const [reloadKey, setReloadKey] = useState(0)
-  const checks = useAsync(() => fetchChecks(token), [token, reloadKey])
-
-  const issued = useMemo(
-    () => (checks.data ?? []).filter((c) => c.type === 'payable' && c.status === 'issued'),
-    [checks.data],
-  )
-  const dueSoon = issued.filter((c) => daysToDue(c.due_date) <= 7).length
-
-  const done = (m: Msg) => {
-    setMsg(m)
-    if (m?.kind === 'ok') setReloadKey((k) => k + 1)
-  }
-
-  return (
-    <OpsPage
-      icon={Landmark}
-      title="وصول چک پرداختنی"
-      description="چکی که خودتان صادر کرده‌اید و طرفِ مقابل آن را وصول کرده — کسر از حسابِ بانکی و بستنِ بدهی."
-      head={
-        <div className="cc-head">
-          <div className="cc-summary">
-            <Metric icon={<ScrollText size={14} />} label="صادرشده و باز" value={faInt(issued.length)} />
-            <Metric
-              icon={<AlertTriangle size={14} />}
-              label="سررسیدِ نزدیک (۷ روز)"
-              value={faInt(dueSoon)}
-              tone={dueSoon > 0 ? 'out' : 'plain'}
-            />
-            <Metric
-              icon={<Landmark size={14} />}
-              label="جمعِ تعهد"
-              value={fa(issued.reduce((s, c) => s + Number(c.amount), 0))}
-              tone="out"
-            />
-          </div>
-        </div>
-      }
-    >
-      <Note msg={msg} />
-      <SectionCard
-        icon={Landmark}
-        title="چک‌های صادرشده"
-        description="حسابی که پول از آن کسر می‌شود را انتخاب و وصول را ثبت کنید."
-        actions={
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)}>
-            <RefreshCw size={13} /> بازخوانی
-          </button>
-        }
-      >
         <CheckActionTable
           token={token}
-          rows={issued}
+          rows={returned}
           loading={checks.loading}
           error={checks.error}
-          emptyText="چکِ پرداختنیِ بازی نیست."
+          emptyText="هنوز چکی مسترد نشده."
           onDone={done}
-          actions={[
-            { key: 'cleared', label: 'وصول شد', icon: CheckCircle2, needsBank: true },
-            { key: 'bounced', label: 'برگشت خورد', icon: AlertTriangle, tone: 'danger' },
-          ]}
+          actions={[]}
         />
       </SectionCard>
-    </OpsPage>
+    </>
   )
 }
 
-// ═══════════════════ ۸) جستجوی چک ═══════════════════
+// ── جست‌وجو ──
 
 /**
  * کارگاهِ جستجو و ردیابیِ چک.
@@ -779,14 +863,14 @@ export function CheckPayableClearPage({ token }: { token: string }) {
  * می‌کند — از کجا آمد، الان کجاست، چه بر سرش آمد، و هر گام در کدام سند ثبت شد.
  *
  * **و خودش هیچ وضعیتی را عوض نمی‌کند (§۲۸).** کنش‌های مجاز کاربر را به همان
- * عملیاتِ استانداردِ چک می‌برند؛ موتورِ دومِ گذرِ وضعیت ساخته نمی‌شود.
+ * برگه‌ی استانداردِ چک می‌برند؛ موتورِ دومِ گذرِ وضعیت ساخته نمی‌شود.
  */
-export function CheckSearchPage({
+function SearchTab({
   token,
   onNavigate,
 }: {
   token: string
-  onNavigate?: (page: PageKey) => void
+  onNavigate: (page: PageKey, section?: string | null) => void
 }) {
   const [q, setQ] = useState('')
   const [type, setType] = useState<'' | 'receivable' | 'payable'>('')
@@ -801,13 +885,11 @@ export function CheckSearchPage({
   const [selected, setSelected] = useState<CheckRecord | null>(null)
 
   const rows = useAsync(() => fetchChecks(token, applied), [token, applied])
-  const summary = useAsync(
-    () => fetchCheckSummary(token, type || undefined),
-    [token, type],
-  )
+  const summary = useAsync(() => fetchCheckSummary(token, type || undefined), [token, type])
 
   const list = rows.data ?? []
   const pg = usePagination(list, 15, JSON.stringify(applied))
+  const total = list.reduce((s, c) => s + Number(c.amount), 0)
 
   function apply() {
     setSelected(null)
@@ -835,53 +917,35 @@ export function CheckSearchPage({
   }
 
   return (
-    <OpsPage
-      icon={Search}
-      title="جستجو و ردیابی چک"
-      description="یک برگ را پیدا کنید و کلِ مسیرش را ببینید: از کجا آمد، الان کجاست، و هر گام در کدام سند ثبت شد."
-      head={
-        <div className="cc-head">
-          <div className="cc-toolbar">
-            <div className="cc-presets">
-              <button type="button" className={type === '' ? 'is-active' : ''} onClick={() => setType('')}>
-                همه
-              </button>
-              <button
-                type="button"
-                className={type === 'receivable' ? 'is-active' : ''}
-                onClick={() => setType('receivable')}
-              >
-                دریافتنی
-              </button>
-              <button
-                type="button"
-                className={type === 'payable' ? 'is-active' : ''}
-                onClick={() => setType('payable')}
-              >
-                پرداختنی
-              </button>
-            </div>
+    <>
+      <section className="cc-head">
+        <div className="cc-toolbar">
+          <div className="cc-presets">
+            <button type="button" className={type === '' ? 'is-active' : ''} onClick={() => setType('')}>
+              همه
+            </button>
+            <button type="button" className={type === 'receivable' ? 'is-active' : ''} onClick={() => setType('receivable')}>
+              دریافتنی
+            </button>
+            <button type="button" className={type === 'payable' ? 'is-active' : ''} onClick={() => setType('payable')}>
+              پرداختنی
+            </button>
           </div>
-          <AsyncBlock
-            loading={summary.loading}
-            error={summary.error}
-            empty={(summary.data ?? []).length === 0}
-            emptyText="چکی ثبت نشده."
-          >
-            <div className="cc-summary">
-              {(summary.data ?? []).map((s) => (
-                <Metric
-                  key={s.status}
-                  icon={<ScrollText size={14} />}
-                  label={s.label}
-                  value={`${faInt(s.count)} برگ · ${fa(s.amount)}`}
-                />
-              ))}
-            </div>
-          </AsyncBlock>
         </div>
-      }
-    >
+        <AsyncBlock
+          loading={summary.loading}
+          error={summary.error}
+          empty={(summary.data ?? []).length === 0}
+          emptyText="چکی ثبت نشده."
+        >
+          <div className="cc-summary">
+            {(summary.data ?? []).map((s) => (
+              <Metric key={s.status} icon={<ScrollText size={14} />} label={s.label} value={`${faInt(s.count)} برگ · ${fa(s.amount)}`} />
+            ))}
+          </div>
+        </AsyncBlock>
+      </section>
+
       <SectionCard
         icon={Search}
         title="جستجو"
@@ -947,91 +1011,122 @@ export function CheckSearchPage({
       </SectionCard>
 
       <SectionCard icon={ScrollText} title="نتیجه" description={`${faInt(list.length)} برگ`}>
-        <AsyncBlock
-          loading={rows.loading}
-          error={rows.error}
-          empty={list.length === 0}
-          emptyText="چکی با این شرایط پیدا نشد."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
+        <AsyncBlock loading={rows.loading} error={rows.error} empty={list.length === 0} emptyText="چکی با این شرایط پیدا نشد.">
+          <div className="table-scroll ef-table-wrap jg-wrap ck-wrap">
+            <table className="cards-on-mobile ef-table xl-grid ck-sheet ck-sheet--find">
+              <colgroup>
+                <col className="ck-c-rowhead" />
+                <col className="ck-c-number" />
+                <col className="ck-c-type" />
+                <col className="ck-c-amount" />
+                <col className="ck-c-date" />
+                <col />
+                <col className="ck-c-bank" />
+                <col className="ck-c-status" />
+                <col className="ck-c-holder" />
+                <col className="ck-c-go" />
+              </colgroup>
               <thead>
                 <tr>
+                  <th className="xl-rowhead card-hide ck-pin-head">ردیف</th>
+                  <th className="ck-pin-lead" title="کد صیادی زیرِ شماره">شماره / صیادی</th>
                   <th>نوع</th>
-                  <th>شماره</th>
-                  <th>کد صیادی</th>
-                  <th>مبلغ</th>
+                  <th className="num">مبلغ</th>
                   <th>سررسید</th>
                   <th>طرف حساب</th>
                   <th>بانک</th>
                   <th>وضعیت</th>
                   <th>موقعیت فعلی</th>
-                  <th className="card-actions"></th>
+                  <th className="ck-pin-end" aria-label="مسیر چک" />
                 </tr>
               </thead>
               <tbody>
-                {pg.pageItems.map((c) => (
+                {pg.pageItems.map((c, i) => (
                   <tr key={c.id} className={selected?.id === c.id ? 'is-selected' : undefined}>
+                    <td className="xl-rowhead card-hide ck-pin-head">
+                      <span className="xl-rowhead-num">{faInt(pg.page * 15 + i + 1)}</span>
+                    </td>
+                    <td className="card-title ck-pin-lead" data-label="شماره">
+                      <span dir="ltr">{toFaDigits(c.number)}</span>
+                      {c.sayad_id ? (
+                        <div className="entity-sub" dir="ltr" title="کد صیادی">
+                          {toFaDigits(c.sayad_id)}
+                        </div>
+                      ) : null}
+                    </td>
                     <td data-label="نوع">{c.type === 'receivable' ? 'دریافتنی' : 'پرداختنی'}</td>
-                    <td className="card-title" data-label="شماره">
-                      {toFaDigits(c.number)}
-                    </td>
-                    <td data-label="کد صیادی">
-                      <span dir="ltr">{c.sayad_id ? toFaDigits(c.sayad_id) : '—'}</span>
-                    </td>
-                    <td className="num" data-label="مبلغ">
-                      {fa(c.amount)}
-                    </td>
+                    <td className="num" data-label="مبلغ">{fa(c.amount)}</td>
                     <td data-label="سررسید">{formatJalali(c.due_date)}</td>
-                    <td className="card-wide" data-label="طرف حساب">
+                    <td className="card-wide" data-label="طرف حساب" title={c.contact_name || undefined}>
                       {c.contact_name || '—'}
                     </td>
                     <td data-label="بانک">{c.bank_name || '—'}</td>
                     <td data-label="وضعیت">
                       <StatusChip status={c.status} />
                     </td>
-                    <td data-label="موقعیت فعلی">{c.holder_label || '—'}</td>
-                    <td className="card-actions">
+                    <td data-label="موقعیت فعلی" title={c.holder_label || undefined}>
+                      {c.holder_label || '—'}
+                    </td>
+                    <td className="card-actions ck-actions ck-pin-end">
                       <button
                         type="button"
+                        className="ck-act ck-act--ghost ck-act--icon"
+                        aria-expanded={selected?.id === c.id}
+                        aria-label={selected?.id === c.id ? 'بستنِ مسیر چک' : 'مسیر چک'}
+                        title={selected?.id === c.id ? 'بستنِ مسیر چک' : 'مسیر چک'}
                         onClick={() => setSelected(selected?.id === c.id ? null : c)}
                       >
-                        <History size={13} /> {selected?.id === c.id ? 'بستن' : 'مسیر چک'}
+                        <History size={13} aria-hidden="true" />
+                        <span className="ck-act-text">{selected?.id === c.id ? 'بستن' : 'مسیر چک'}</span>
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td className="xl-rowhead card-hide ck-pin-head" />
+                  <td className="card-title ck-pin-lead">جمعِ {faInt(list.length)} برگ</td>
+                  <td className="card-hide" />
+                  <td className="num" data-label="جمع مبلغ">{fa(total)}</td>
+                  <td className="card-hide" colSpan={5} />
+                  <td className="card-hide ck-pin-end" />
+                </tr>
+              </tfoot>
             </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
           </div>
+          <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
         </AsyncBlock>
       </SectionCard>
 
       {selected && <CheckDossier token={token} check={selected} onNavigate={onNavigate} />}
-    </OpsPage>
+    </>
   )
 }
 
 /**
  * کنشی که از این وضعیت معنی دارد، و صفحه‌ای که واقعاً انجامش می‌دهد (§۲۷ §۲۸).
  *
- * این‌جا فقط **مسیر** است، نه عمل: صفحه‌ی جستجو هیچ گذری ثبت نمی‌کند.
+ * این‌جا فقط **مسیر** است، نه عمل: برگه‌ی جستجو هیچ گذری ثبت نمی‌کند؛ دکمه کاربر را به برگه‌ای می‌برد که
+ * آن گذر را ثبت می‌کند.
  */
-const ACTIONS_BY_STATUS: Record<string, { label: string; page: PageKey }[]> = {
+const ACTIONS_BY_STATUS: Record<string, { label: string; tab: 'receivable' | 'payable' | 'return' }[]> = {
   in_hand: [
-    { label: 'واگذاری به بانک', page: 'checkops' },
-    { label: 'نقد کردن', page: 'checkops' },
-    { label: 'خرج کردن', page: 'checkops' },
-    { label: 'استرداد', page: 'checkreturn' },
+    { label: 'واگذاری به بانک', tab: 'receivable' },
+    { label: 'نقد کردن', tab: 'receivable' },
+    { label: 'خرج کردن', tab: 'receivable' },
+    { label: 'استرداد', tab: 'return' },
   ],
   deposited: [
-    { label: 'وصول', page: 'checkops' },
-    { label: 'واخواست', page: 'checkops' },
-    { label: 'بازگشت از بانک', page: 'checkreturn' },
+    { label: 'وصول', tab: 'receivable' },
+    { label: 'واخواست', tab: 'receivable' },
+    { label: 'بازگشت از بانک', tab: 'receivable' },
   ],
-  endorsed: [{ label: 'برگشت از خرج', page: 'checkreturn' }],
-  issued: [{ label: 'وصول چک پرداختنی', page: 'checkpayclear' }],
+  endorsed: [{ label: 'برگشت از خرج', tab: 'receivable' }],
+  issued: [
+    { label: 'وصول چک پرداختنی', tab: 'payable' },
+    { label: 'استرداد به ما', tab: 'return' },
+  ],
 }
 
 /**
@@ -1047,7 +1142,7 @@ function CheckDossier({
 }: {
   token: string
   check: CheckRecord
-  onNavigate?: (page: PageKey) => void
+  onNavigate: (page: PageKey, section?: string | null) => void
 }) {
   const events = useAsync(() => fetchCheckTimeline(token, check.id), [token, check.id])
   const actions = ACTIONS_BY_STATUS[check.status] ?? []
@@ -1090,11 +1185,11 @@ function CheckDossier({
         </div>
       </dl>
 
-      {actions.length > 0 && onNavigate && (
+      {actions.length > 0 && (
         <div className="form-actions">
           <span className="muted">عملیاتِ ممکن از این وضعیت:</span>
           {actions.map((a) => (
-            <button key={a.label} type="button" onClick={() => onNavigate(a.page)}>
+            <button key={a.label} type="button" onClick={() => onNavigate('checks', a.tab)}>
               {a.label}
             </button>
           ))}

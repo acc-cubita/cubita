@@ -60,7 +60,6 @@ import {
   Scale,
   ScanLine,
   ScrollText,
-  Search,
   Settings,
   Settings2,
   ShieldCheck,
@@ -198,13 +197,12 @@ export type PageKey =
   | 'payflow'
   | 'receiptvoucher'
   | 'paymentvoucher'
-  | 'checkops'
   | 'contactsettle'
-  | 'checkreturn'
-  | 'checkpayclear'
-  | 'checksearch'
+  //: «چک‌ها» — چهار برگه (دریافتنی، پرداختنی، استرداد، جست‌وجو) در یک صفحه؛ جانشینِ
+  //: `checkops`/`checkpayclear`/`checkreturn`/`checksearch` (`LEGACY_PAGES`).
+  | 'checks'
   | 'possettle'
-  | 'bankstatement'
+  //: «مغایرت‌گیری بانکی» — ورود و تطبیقِ صورت‌حساب؛ جانشینِ `bankstatement` (`LEGACY_PAGES`).
   | 'bankreconcile'
   | 'cashbox'
   //: «حساب‌های نقد و بانک» — پنج برگه‌ی تعریف (صندوق، بانک، کارتخوان، دسته‌چک، تنخواه) در یک صفحه؛ جانشینِ
@@ -398,12 +396,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'paymentvoucher', label: 'اعلامیه پرداخت', icon: <ArrowUpFromLine size={18} />, section: DAILY_SECTION },
       { key: 'contactsettle', label: 'تسویه حساب طرف مقابل', icon: <Scale size={18} />, section: DAILY_SECTION },
       { key: 'ownertxn', label: 'تراکنش شریک', icon: <HandCoins size={18} />, section: DAILY_SECTION },
-      { key: 'checkops', label: 'چک دریافتنی', icon: <ScrollText size={18} />, section: 'چک' },
-      { key: 'checkpayclear', label: 'وصول چک پرداختنی', icon: <BadgeCheck size={18} />, section: 'چک' },
-      { key: 'checkreturn', label: 'استرداد چک', icon: <Undo2 size={18} />, section: 'چک' },
-      { key: 'checksearch', label: 'جست‌وجوی چک', icon: <Search size={18} />, section: 'چک' },
-      { key: 'bankstatement', label: 'صورت حساب بانکی', icon: <FileSpreadsheet size={18} />, section: 'بانک، کارتخوان و تنخواه' },
-      { key: 'bankreconcile', label: 'مغایرت بانکی', icon: <GitCompareArrows size={18} />, section: 'بانک، کارتخوان و تنخواه' },
+      //: چهار منوی چک، یک صفحه با چهار برگه (مرحله‌ی ۲، ۱۴۰۵/۰۷/۰۶) — برگه‌ها زیرِ همین ردیف باز می‌شوند.
+      { key: 'checks', label: 'چک‌ها', icon: <ScrollText size={18} />, section: 'چک' },
+      //: ورود و تطبیقِ صورت‌حساب یک صفحه شد (مرحله‌ی ۲، ۱۴۰۵/۰۷/۰۶) — «صورت حساب بانکی» نمای دومِ همین داده بود.
+      { key: 'bankreconcile', label: 'مغایرت‌گیری بانکی', icon: <GitCompareArrows size={18} />, section: 'بانک، کارتخوان و تنخواه' },
       { key: 'possettle', label: 'تسویه کارتخوان', icon: <CreditCard size={18} />, section: 'بانک، کارتخوان و تنخواه' },
       //: «تنخواه‌دار»ِ قبلی تعریف نبود، شارژِ تنخواه بود — کنارِ صورت‌هزینه‌اش می‌نشیند (۱۴۰۵/۰۷/۰۶).
       { key: 'pettyholder', label: 'شارژ تنخواه', icon: <Wallet size={18} />, section: 'بانک، کارتخوان و تنخواه' },
@@ -576,8 +572,8 @@ export const PAGE_MODULE_KEY: Partial<Record<PageKey, string | string[]>> = Obje
 
 //: هجده عملیاتِ «دریافت و پرداخت» + فهرستش، همگی زیرِ چترِ ماژولِ `banking`.
 for (const key of [
-  'payflow', 'receiptvoucher', 'paymentvoucher', 'checkops', 'contactsettle', 'checkreturn',
-  'checkpayclear', 'checksearch', 'possettle', 'bankstatement', 'bankreconcile', 'cashbox',
+  'payflow', 'receiptvoucher', 'paymentvoucher', 'contactsettle', 'checks',
+  'possettle', 'bankreconcile', 'cashbox',
   'cashbank', 'pettyholder', 'pettyexpense', 'bankledger',
   'treasuryledger', 'paymentnoticelist', 'possettlelist',
   'checkoplist', 'contactsettlelist',
@@ -909,6 +905,13 @@ export const LEGACY_PAGES: Readonly<Record<string, { page: PageKey; section?: st
   posterminallist: { page: 'cashbank', section: 'pos' },
   checkbooks: { page: 'cashbank', section: 'checkbooks' },
   checkbooklist: { page: 'cashbank', section: 'checkbooks' },
+  //: چهار منوی چک در «چک‌ها» (۱۴۰۵/۰۷/۰۶).
+  checkops: { page: 'checks', section: 'receivable' },
+  checkpayclear: { page: 'checks', section: 'payable' },
+  checkreturn: { page: 'checks', section: 'return' },
+  checksearch: { page: 'checks', section: 'search' },
+  //: ورودِ صورت‌حساب دکمه‌ای در «مغایرت‌گیری بانکی» شد.
+  bankstatement: { page: 'bankreconcile' },
 }
 
 /** مقصدِ واقعیِ یک ناوبری — کلیدِ قدیمی به جای تازه‌اش، بقیه همان که بود. */

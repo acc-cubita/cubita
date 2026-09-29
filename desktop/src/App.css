@@ -935,6 +935,9 @@ button:disabled {
   border-color: var(--accent);
   color: var(--accent);
 }
+/* ورودیِ فایلِ پنهانِ درونِ دکمه، قاعده‌ی عمومیِ «برچسب + ورودی = ستون»ِ index.css را فعال می‌کرد و آیکن بالای متن
+ * می‌نشست. دکمه است نه فیلد: هم‌خط. */
+label:is(.btn-file, .bk-file-btn) { flex-direction: row; white-space: nowrap; }
 
 .btn-primary {
   background: var(--accent);
@@ -14847,6 +14850,141 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
 @media print {
   .cb-open { display: none !important; }
 }
+
+/* ── «چک‌ها» (تمِ اکسلی، الگوی «د با کنش»؛ مرجع: کارتابل اسناد موقت) ──
+ * هر برگه چند جدولِ کوتاه است، هر کدام یک دسته (نزدِ ما، نزدِ بانک، …): شماره‌ی ردیف انتخاب می‌کند، جمع در `tfoot`،
+ * دکمه‌های کنش کوچک و هم‌خط. حساب/صندوقِ مقصد یک ردیفِ بالای گرید است (`ck-dest`)، نه ستون. در قابِ باریک (۱۲۰۰ با
+ * منوی کناری) جدول در قابِ خودش می‌لغزد و شماره و کنش‌ها میخ‌اند — همان «ثابت‌کردنِ ستون»ِ اکسل. */
+.ck-dest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin-block-end: var(--sp-2);
+}
+.ck-dest .acc-inline-field { margin: 0; }
+@media (min-width: 761px) {
+  /* کمینه = جمعِ ستون‌های ثابت + ۱۲۰px برای «طرف حساب»؛ کمتر از این، ستونِ خودکار صفر می‌شد. */
+  .page .ef-table-wrap > table.ck-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 744px; }
+  .page .ef-table-wrap > table.ck-sheet--a1 { min-inline-size: 868px; }
+  .page .ef-table-wrap > table.ck-sheet--a2 { min-inline-size: 912px; }
+  .page .ef-table-wrap > table.ck-sheet--a3 { min-inline-size: 1016px; }
+  .page .ef-table-wrap > table.ck-sheet--find { min-inline-size: 996px; }
+  .ck-sheet col.ck-c-rowhead { width: 44px; }
+  .ck-sheet col.ck-c-number { width: 150px; }
+  .ck-sheet col.ck-c-type { width: 84px; }
+  .ck-sheet col.ck-c-bank { width: 88px; }
+  .ck-sheet col.ck-c-due { width: 178px; }
+  .ck-sheet col.ck-c-date { width: 92px; }
+  .ck-sheet col.ck-c-status { width: 150px; }
+  .ck-sheet col.ck-c-amount { width: 120px; }
+  .ck-sheet col.ck-c-holder { width: 104px; }
+  .ck-sheet col.ck-c-go { width: 44px; }
+  .ck-sheet--a0 col.ck-c-actions { width: 44px; }
+  .ck-sheet--a1 col.ck-c-actions { width: 168px; }
+  .ck-sheet--a2 col.ck-c-actions { width: 212px; }
+  .ck-sheet--a3 col.ck-c-actions { width: 316px; }
+  .page .ef-table-wrap > table.ck-sheet td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+  .page .ef-table-wrap > table.ck-sheet td .entity-sub { overflow: hidden; text-overflow: ellipsis; }
+  .ck-act--icon { inline-size: 28px; justify-content: center; padding-inline: 0; }
+  .ck-act--icon .ck-act-text { display: none; }
+
+  /* میخ‌ها: شماره‌ی ردیف و شماره‌ی چک سمتِ راست، کنش‌ها سمتِ چپ. زمینه‌ی مات، وگرنه ستونِ زیرش پیدا می‌شود. */
+  .ck-sheet :is(th, td).ck-pin-head { position: sticky; inset-inline-start: 0; z-index: 1; }
+  .ck-sheet :is(th, td).ck-pin-lead {
+    position: sticky;
+    inset-inline-start: 44px;
+    z-index: 1;
+    box-shadow: -4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent);
+  }
+  .ck-sheet :is(th, td).ck-pin-end {
+    position: sticky;
+    inset-inline-end: 0;
+    z-index: 1;
+    box-shadow: 4px 0 6px -4px color-mix(in srgb, var(--text) 25%, transparent);
+  }
+  .page .ef-table-wrap > table.ck-sheet > tbody > tr > td:is(.ck-pin-lead, .ck-pin-end) { background: var(--surface); }
+  .page .ef-table-wrap > table.ck-sheet > tbody > tr:hover > td:is(.ck-pin-lead, .ck-pin-end) {
+    background: linear-gradient(color-mix(in srgb, var(--accent) 5%, transparent), color-mix(in srgb, var(--accent) 5%, transparent)), var(--surface);
+  }
+  .page .ef-table-wrap > table.ck-sheet > tbody > tr.is-selected > td:is(.ck-pin-lead, .ck-pin-end) {
+    background: linear-gradient(var(--accent-bg), var(--accent-bg)), var(--surface);
+  }
+  .page .ef-table-wrap > table.ck-sheet > tbody > tr.ck-trail-row > td { position: static; }
+  .ck-sheet > thead th:is(.ck-pin-head, .ck-pin-lead, .ck-pin-end) { z-index: 3; }
+  .ck-sheet > tfoot td:is(.ck-pin-head, .ck-pin-lead, .ck-pin-end) { z-index: 2; }
+}
+.page .ef-table-wrap > table.ck-sheet td.ck-actions { padding-block: 0; padding-inline: 6px; text-align: end; }
+.ck-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin-inline-start: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ck-act:first-child { margin-inline-start: 0; }
+.ck-act:hover:not(:disabled) { border-color: var(--accent); color: var(--text-h); }
+.ck-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ck-act:disabled { opacity: 0.55; cursor: progress; }
+.ck-act.danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border-strong)); color: var(--danger); }
+.ck-act.danger:hover:not(:disabled) { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
+.ck-act--ghost { border-color: transparent; background: transparent; color: var(--text-muted); }
+.ck-act--ghost[aria-expanded='true'] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent-on-tint, var(--text-h)); }
+/* «جمعِ n برگ»: ته‌رنگِ سرستون، مثلِ پانویسِ گردشِ حساب. */
+.page .ef-table-wrap > table.ck-sheet > tfoot td {
+  block-size: 34px;
+  padding: 0 10px;
+  border-block-start: 1px solid var(--border-strong);
+  background: var(--xl-head);
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* ردیفِ تاریخچه — زیرِ ردیفِ خودش، تمام‌عرض، با ته‌رنگِ سربرگ. */
+.page .ef-table-wrap > table.ck-sheet > tbody > tr.ck-trail-row > td,
+.page .ef-table-wrap > table.ck-sheet > tbody > tr.ck-trail-row:hover > td {
+  padding: var(--sp-2) var(--sp-3);
+  background: color-mix(in srgb, var(--xl-head) 45%, var(--surface));
+  white-space: normal;
+}
+
+@media (max-width: 760px) {
+  /* کارت: خط، زمینه و میخِ گرید در کارت معنا ندارند؛ حالِ ردیف روی خودِ کارت است و «جمع» کارتِ آخر. */
+  .page .ef-table-wrap > table.ck-sheet { min-inline-size: 0; }
+  .ck-sheet tfoot { display: block; }
+  .ck-sheet > tfoot > tr { background: var(--xl-head); }
+  .page .ef-table-wrap > table.ck-sheet > :is(tbody, tfoot) > tr > td,
+  .page .ef-table-wrap > table.ck-sheet > tbody > tr:is(:hover, .is-selected) > td {
+    block-size: auto;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    white-space: normal;
+  }
+  .page .ef-table-wrap > table.ck-sheet > tbody > tr > td.ck-actions { padding: 0; }
+  .ck-sheet > tbody > tr.is-selected { border-color: var(--accent); background: var(--accent-bg); }
+  .ck-act { justify-content: center; min-height: 34px; margin: 0; }
+  .ck-act--ghost { border-color: var(--border); }
+  .ck-dest { flex-direction: column; align-items: stretch; }
+}
+@media print {
+  .ck-dest,
+  .ck-sheet .ck-actions { display: none !important; }
+}
+
+/* «مغایرت‌گیری بانکی»: چسباندنِ ردیف‌های صورت‌حساب زیرِ انتخابِ حساب — متنِ CSV تک‌فاصله و چپ‌به‌راست. */
+.rc-paste { margin-block: var(--sp-2) var(--sp-3); }
+.rc-paste textarea { inline-size: 100%; font-family: ui-monospace, Consolas, monospace; }
 
 /* ── «شماره‌گذاری مجدد اسناد» (تمِ اکسلی): نقشه‌ی شماره‌ها ──
  * عطف (ثابت) کم‌رنگ؛ شماره‌ی تازه‌ای که عوض می‌شود پررنگِ accent، بی‌تغییر کم‌رنگ؛ با انتخابِ دستی، ردیف‌های بیرونِ انتخاب کم‌رنگ. */

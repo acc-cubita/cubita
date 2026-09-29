@@ -95,7 +95,7 @@ describe('صافیِ متنی', () => {
   })
 
   it('با نامِ دسته — همه‌ی گزارش‌های آن دسته', () => {
-    expect(found('بانک و صندوق')).toEqual(['bankledger', 'checksearch', 'cashbox'])
+    expect(found('بانک و صندوق')).toEqual(['bankledger', 'checks/search', 'cashbox'])
   })
 
   it('ی و ک عربی و نیم‌فاصله فرقی نمی‌کنند', () => {

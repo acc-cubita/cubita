@@ -174,15 +174,15 @@ export function PayFlowPage({ token, onNavigate }: { token: string; onNavigate: 
               title="چک‌ها"
               description="چکِ دریافتی را واگذار و وصول کنید، چکِ صادرشده را از دسته‌چک بکشید و سررسیدش را پیگیری کنید."
               state={{ label: 'هر وقت چک داشتید', tone: 'warn' }}
-              action="عملیات چک"
-              onGo={() => onNavigate('checkops')}
+              action="چک‌ها"
+              onGo={() => onNavigate('checks', 'receivable')}
             />
             <Step
               index={5}
               title="تطبیق با بانک"
               description="صورت‌حسابِ بانک را وارد کنید و مغایرت‌ها را ببندید — تنها راهِ مطمئن‌شدن از اینکه دفتر با بانک یکی است."
               state={{ label: 'پایانِ هر ماه', tone: 'warn' }}
-              action="مغایرت بانکی"
+              action="مغایرت‌گیری بانکی"
               onGo={() => onNavigate('bankreconcile')}
             />
           </div>

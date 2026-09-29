@@ -409,17 +409,13 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   receiptvoucher: 'treasuryledger', //: سه عملیات، یک دفترِ مشترک با فیلتر
   paymentvoucher: 'paymentnoticelist',
   contactsettle: 'contactsettlelist',
-  //: دفترِ چک‌ها همان «جستجوی چک» است — کاربر صریحاً آن را در کارتِ عملیات خواست،
-  //: و فهرستِ دومِ چک یعنی دو نمای یک داده.
-  checkops: 'checksearch',
-  checkreturn: 'checkoplist',
-  checkpayclear: 'checkoplist',
-  bankreconcile: 'state',
-  checksearch: 'view',
+  //: «چک‌ها» (چهار برگه) — دفترِ گذرهایش «عملیات چک» است؛ برگه‌ی «جست‌وجو» خودش دفترِ برگ‌هاست.
+  checks: 'checkoplist',
+  //: صورت‌حساب همین‌جا وارد می‌شود، پس رکورد می‌سازد و دفترش «ردیف‌های صورت‌حساب بانکی» است.
+  bankreconcile: 'statementlist',
   bankledger: 'view',
   cashbox: 'view',
   possettle: 'possettlelist',
-  bankstatement: 'statementlist',
   //: پنج برگه‌ی اکسلیِ تعریف — هر برگه هم فرم است و هم دفترِ کاملِ همان رکوردها با مانده‌شان (الگوی «ب»ِ تمِ
   //: اکسلی). فهرستِ نظیرِ جدا دو نمای یک داده بود و رفت.
   cashbank: 'view',
@@ -853,6 +849,12 @@ export const SECTION_LIST_MAP: Record<string, readonly ListTarget[]> = {
   'cashbank/pos': [],
   'cashbank/checkbooks': [],
   'cashbank/petty': [],
+
+  // ── «چک‌ها»: هر گذر در «عملیات چک» ثبت می‌شود؛ جست‌وجو خودش دفترِ برگ‌هاست ──
+  'checks/receivable': ['checkoplist'],
+  'checks/payable': ['checkoplist'],
+  'checks/return': ['checkoplist'],
+  'checks/search': [],
 
   // ── ماژول‌هایی که دفتری ندارند ──
   'integration/build': [],

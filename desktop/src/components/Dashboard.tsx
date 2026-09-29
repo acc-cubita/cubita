@@ -131,12 +131,7 @@ import {
   ReceiptVoucherPage,
   TreasuryLedgerPage,
 } from '../pages/treasury/TreasuryOpsPages'
-import {
-  CheckPayableClearPage,
-  CheckReceivableOpsPage,
-  CheckReturnPage,
-  CheckSearchPage,
-} from '../pages/treasury/CheckOpsPages'
+import { ChecksPage } from '../pages/treasury/CheckOpsPages'
 import {
   PaymentNoticeListPage,
   PettyCashListPage,
@@ -154,7 +149,6 @@ import {
 import {
   BankLedgerPage,
   BankReconcilePage,
-  BankStatementPage,
   PosSettlementPage,
 } from '../pages/treasury/BankOpsPages'
 import { HelpPage } from '../pages/HelpPage'
@@ -270,14 +264,10 @@ const PAGE_TITLES: Record<PageKey, string> = {
   payflow: 'فرآیند دریافت و پرداخت',
   receiptvoucher: 'رسید دریافت',
   paymentvoucher: 'اعلامیه پرداخت',
-  checkops: 'چک دریافتنی',
   contactsettle: 'تسویه حساب طرف مقابل',
-  checkreturn: 'استرداد چک',
-  checkpayclear: 'وصول چک پرداختنی',
-  checksearch: 'جست‌وجوی چک',
+  checks: 'چک‌ها',
   possettle: 'تسویه کارتخوان',
-  bankstatement: 'صورت حساب بانکی',
-  bankreconcile: 'مغایرت بانکی',
+  bankreconcile: 'مغایرت‌گیری بانکی',
   cashbox: 'گردش صندوق',
   cashbank: 'حساب‌های نقد و بانک',
   pettyholder: 'شارژ تنخواه',
@@ -741,13 +731,9 @@ export function Dashboard({
           {page === 'payflow' && <PayFlowPage token={token} onNavigate={navigate} />}
           {page === 'receiptvoucher' && <ReceiptVoucherPage token={token} />}
           {page === 'paymentvoucher' && <PaymentVoucherPage token={token} />}
-          {page === 'checkops' && <CheckReceivableOpsPage token={token} />}
           {page === 'contactsettle' && <ContactSettlementPage token={token} />}
-          {page === 'checkreturn' && <CheckReturnPage token={token} />}
-          {page === 'checkpayclear' && <CheckPayableClearPage token={token} />}
-          {page === 'checksearch' && <CheckSearchPage token={token} onNavigate={setPage} />}
+          {page === 'checks' && <ChecksPage token={token} onNavigate={navigate} />}
           {page === 'possettle' && <PosSettlementPage token={token} />}
-          {page === 'bankstatement' && <BankStatementPage token={token} />}
           {page === 'bankreconcile' && <BankReconcilePage token={token} bankAccounts={bankAccounts} />}
           {page === 'cashbox' && <CashBoxPage token={token} onNavigate={navigate} />}
           {page === 'cashbank' && <CashBankPage token={token} />}

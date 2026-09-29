@@ -620,7 +620,7 @@ export function StatementListPage({ token }: { token: string }) {
           loading={data.loading}
           error={data.error}
           empty={rows.length === 0}
-          emptyText="ردیفی با این فیلتر نیست. از عملیاتِ «صورت حساب بانکی» وارد کنید."
+          emptyText="ردیفی با این فیلتر نیست. صورت‌حساب را در «مغایرت‌گیری بانکی» وارد کنید."
         >
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">

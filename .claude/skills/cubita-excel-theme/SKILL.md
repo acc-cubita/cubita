@@ -40,6 +40,8 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | کارتابل اسناد موقت | #227 | د با کنش: برگه‌ی کلیک‌به‌انتخاب، «نمایش» در کشو، «منشأ» فهرستِ سربرگ (نه خانه‌های جدا)، نوارِ «دائم‌کردنِ n سند» و دکمه‌ی دسته‌ایِ منشأ/بازه | [EntryCartablePage.tsx](../../../desktop/src/pages/accounting/EntryCartablePage.tsx) |
 | شماره‌گذاری مجدد اسناد | #228 | ج با انتخاب: نقشه‌ی شماره‌ها (عطفِ ثابت، شماره‌ی تازه‌ی پررنگ)؛ انتخابِ دستی نقشه‌ی خودش را از سرور می‌گیرد؛ «شماره‌ی تکراری» پیش از اعمال | [RenumberEntriesPage.tsx](../../../desktop/src/pages/accounting/RenumberEntriesPage.tsx) |
 | ادغام اسناد | #228 | ج با انتخاب: برگه‌ی اسناد با سرگروهِ روز (روزِ دیگر قفل) و پیش‌نمایشِ سندِ ادغامی با نوارِ هم‌خط | [MergeEntriesPage.tsx](../../../desktop/src/pages/accounting/MergeEntriesPage.tsx) |
+| حساب‌های نقد و بانک | مرحله‌ی ۲ِ دریافت و پرداخت | ب: پنج برگه‌ی تعریف با `DefSheet` — ردیفِ خالیِ ته، ذخیره‌ی یک‌جا، قفلِ خانه با دلیل، برگه‌ی پهن با ستونِ میخ‌شده، ردیفِ جزئیات (برگ‌های خرج‌شده‌ی دسته‌چک) | [CashBankPage.tsx](../../../desktop/src/pages/treasury/CashBankPage.tsx) |
+| چک‌ها | مرحله‌ی ۲ِ دریافت و پرداخت | د با کنش: چند گریدِ کوتاه در هر برگه (یکی برای هر وضعیت)، انتخابِ ردیف با جمعِ مبلغ، جمع در پانویس، مقصدِ کنش یک ردیفِ بالای گرید (`ck-dest`) نه ستون، شماره و کنش‌های میخ در قابِ باریک | [CheckOpsPages.tsx](../../../desktop/src/pages/treasury/CheckOpsPages.tsx) |
 | دوره‌های بسته‌شده | #231 | د: قفل‌ها تازه‌ترین اول با بازه‌ی هر قفل، «مرزِ ثبتِ سند» روی آخرین، کلیک ← سندِ بستن | [PeriodCloseListPage.tsx](../../../desktop/src/pages/accounting/PeriodCloseListPage.tsx) |
 
 **بعدی:** وقتی صفحه‌ای تمام شد، ردیفش را این‌جا اضافه کن. صفحه‌ی بعدی را آرش انتخاب می‌کند.
@@ -79,6 +81,7 @@ description: روشِ بازسازیِ صفحه‌ها با «تمِ اکسلی�
 | `ColResizer`، `SelectionBar` | [components/XlGrid.tsx](../../../desktop/src/components/XlGrid.tsx) | دستگیره‌ی کشیدنِ لبه‌ی ستون؛ نوارِ «n ردیف انتخاب شد» با جمع و کنش‌های دسته‌ای. |
 | `FitText` | [components/FitText.tsx](../../../desktop/src/components/FitText.tsx) | عددی که در خانه جا نشود کوچک می‌شود، نه خانه بزرگ. |
 | `AccountCombo` (`emptyText`)، `SearchSelect`، `JalaliDatePicker` | components/ | انتخاب‌گرهای درونِ خانه. در گرید بی‌قاب می‌شوند (قاعده‌ی `xl-grid` در App.css). |
+| `DefSheet` | [components/DefSheet.tsx](../../../desktop/src/components/DefSheet.tsx) | برگه‌ی تعریفِ کامل (الگوی ب) از روی فهرستِ ستون‌ها: ویرایشِ درجا، ردیفِ خالیِ ته، `SheetFooter`، پیش‌نویس، قفل/حذف با دلیل، `wide` برای ستون‌های زیاد. منطقِ خالصش در `lib/defSheet.ts`. تعریفِ تازه (صندوق، حساب، …) را با همین بساز. |
 | `tenantKey()` | [lib/tenantScope.ts](../../../desktop/src/lib/tenantScope.ts) | کلیدِ `sessionStorage`ِ پیش‌نویس، جدا برای هر کسب‌وکار. |
 
 اگر قطعه‌ای کم بود، **همین‌ها را گسترش بده** (پارامترِ تازه با پیش‌فرضِ رفتارِ فعلی). نسخه‌ی دوم نساز.

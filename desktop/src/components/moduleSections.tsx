@@ -1,4 +1,5 @@
 import {
+  BadgeCheck,
   BadgeDollarSign,
   ScanSearch,
   AlertTriangle,
@@ -32,6 +33,8 @@ import {
   Percent,
   PieChart,
   Receipt,
+  ScrollText,
+  Search,
   Send,
   SlidersHorizontal,
   Wrench,
@@ -201,6 +204,13 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'pos', label: 'دستگاه‌های کارتخوان', icon: Nfc },
     { key: 'checkbooks', label: 'دسته‌چک‌ها', icon: BookMarked },
     { key: 'petty', label: 'صندوق‌های تنخواه', icon: Wallet },
+  ],
+  //: «چک‌ها» — چهار برگه (`ChecksPage`). هر برگه همان دسته‌ی کاری را دارد که منوی جدای قبلی داشت.
+  checks: [
+    { key: 'receivable', label: 'چک‌های دریافتنی', icon: ScrollText },
+    { key: 'payable', label: 'چک‌های پرداختنی', icon: BadgeCheck },
+    { key: 'return', label: 'استرداد چک', icon: Undo2 },
+    { key: 'search', label: 'جست‌وجوی چک', icon: Search },
   ],
   calendar: [
     { key: 'reminders', label: 'کارهای امروز', icon: BellRing },
