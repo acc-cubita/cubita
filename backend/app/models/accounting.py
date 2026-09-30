@@ -197,7 +197,8 @@ class JournalEntry(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
     #: سندِ تازه موقت متولد می‌شود و با «تبدیل اسناد موقت به دائم» یا با بستنِ دوره
-    #: قطعی می‌شود. سندِ دائم دیگر ادغام/بازشماره‌گذاری نمی‌شود — فقط ابطال با معکوس.
+    #: قطعی می‌شود. سندِ دائم ادغام/بازشماره‌گذاری نمی‌شود؛ اصلاحِ مستقیمِ سندِ
+    #: دستی فقط در دورهٔ باز، با دلیل و دفتر حسابرسیِ قبل/بعد مجاز است.
     status: Mapped[str] = mapped_column(String(12), default="temporary", server_default="temporary")
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finalized_by_id: Mapped[uuid.UUID | None] = mapped_column(

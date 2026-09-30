@@ -244,8 +244,29 @@ class JournalEntryIn(BaseModel):
         return self
 
 
+class JournalLineEditIn(JournalLineIn):
+    # شناسهٔ ردیف موجود را حفظ می‌کنیم تا ارجاع‌ها و تفاوتِ قبل/بعد دقیق بمانند.
+    id: UUID | None = None
+
+
+class JournalEntryEditIn(JournalEntryIn):
+    """اصلاح سند دستیِ ثبت‌شده؛ وضعیت باید همان وضعیت فعلی بماند."""
+
+    lines: list[JournalLineEditIn]
+    expected_updated_at: datetime
+    reason: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_not_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 3:
+            raise ValueError("دلیل اصلاح باید دست‌کم سه نویسه داشته باشد")
+        return cleaned
+
+
 class SubNumberIn(BaseModel):
-    """تنها فیلدی از سند که بعد از ثبت هم قابلِ اصلاح است."""
+    """اصلاحِ سریعِ شمارهٔ فرعیِ سند موقت؛ ویرایشِ کامل مسیرِ جدا دارد."""
 
     sub_number: str | None = Field(default=None, max_length=30)
 
@@ -305,6 +326,7 @@ class JournalEntryOut(BaseModel):
     #: شماره فرعی — ارجاعِ آزادِ کاربر. NULL = خالی.
     sub_number: str | None = None
     entry_date: date
+    updated_at: datetime
     description: str
     source_type: str
     #: نامِ فعلیِ صاحبِ created_by_id؛ نقشِ او در لحظهٔ ثبت از قبل ذخیره نشده است.
