@@ -406,7 +406,9 @@ def suppressed(session: Session):
         session.info[SUPPRESS_KEY] = previous
 
 
-def record_change(session: Session, obj, changes: dict, summary: str) -> None:
+def record_change(
+    session: Session, obj, changes: dict, summary: str, *, occurred_at: datetime | None = None,
+) -> None:
     """یک رکوردِ حسابرسیِ صریح با خلاصه‌ی دلخواه.
 
     `changes` همان شکلِ `{"field": {"from": ..., "to": ...}}`ِ ثبتِ خودکار را دارد
@@ -431,6 +433,7 @@ def record_change(session: Session, obj, changes: dict, summary: str) -> None:
             entity_id=obj.id,
             summary=summary,
             changes=changes or None,
+            **({"at": occurred_at} if occurred_at is not None else {}),
             request_id=request_id_var.get(),
         )
     )

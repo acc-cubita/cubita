@@ -10612,3 +10612,46 @@ export async function printOfficeLetter(token: string, id: string): Promise<void
 
 export const sendOfficeLetter = (token: string, id: string, version: number, recipientId: string, instruction: string) =>
   authedSend<OfficeLetter>(token, 'POST', `/api/automation/letters/${id}/send`, { version, recipient_id: recipientId, instruction })
+
+// --- اصلاحِ سند ثبت‌شده و تاریخچهٔ همان سند -------------------------------------
+
+export interface JournalEntryRecord { updated_at?: string }
+
+export interface JournalEditLineInput {
+  id?: string
+  account_id: string
+  debit: string
+  credit: string
+  description: string
+  cost_center_id?: string | null
+  analytic_id?: string | null
+  currency_code?: string | null
+  fx_amount?: string | null
+  fx_rate?: string | null
+  tracking_no?: string | null
+  tracking_date?: string | null
+}
+
+export interface JournalEditInput {
+  expected_updated_at: string
+  reason: string
+  entry_date: string
+  description: string
+  sub_number: string | null
+  status: string
+  lines: JournalEditLineInput[]
+}
+
+export interface JournalEditEvent {
+  id: string
+  at: string
+  actor_email: string
+  summary: string
+  changes: Record<string, { from: unknown; to: unknown }> | null
+}
+
+export const updateJournalEntry = (token: string, entryId: string, data: JournalEditInput) =>
+  authedSend<JournalEntryRecord>(token, 'PUT', `/api/journal-entries/${entryId}`, data)
+
+export const fetchJournalEditHistory = (token: string, entryId: string) =>
+  authedGetAll<JournalEditEvent>(token, `/api/journal-entries/${entryId}/history`)

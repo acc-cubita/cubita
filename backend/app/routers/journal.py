@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -17,12 +17,15 @@ from app.services.common import number_lines
 from app.services.printing import render_journal_entry
 from app.services.numbering import next_document_number
 from app.models.accounting import Account, JournalEntry, JournalLine
+from app.models.audit import AuditLog
 from app.models.user import User
+from app.schemas.audit import AuditEntryOut
 from app.pagination import Page, PageParams, paginate
 from app.routers.reports import report_filters
 from app.schemas.accounting import (
     EntrySourceOut,
     JournalEntryIn,
+    JournalEntryEditIn,
     JournalEntryOut,
     JournalListSummaryOut,
     SubNumberIn,
@@ -39,6 +42,7 @@ from app.services.idempotency import idempotent, read_key
 from app.services.journal_outbox import OPERATION, outbox_status
 from app.schemas.journal_outbox import JournalOutboxCheckIn
 from app.services.voiding import void_journal_entry
+from app import audit
 
 router = APIRouter(prefix="/api/journal-entries", tags=["journal"])
 
@@ -264,6 +268,156 @@ def get_entry(
     return row
 
 
+@router.get("/{entry_id}/history", response_model=Page[AuditEntryOut])
+def entry_edit_history(
+    entry_id: UUID,
+    params: PageParams = Depends(),
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("accounting", "view")),
+):
+    # اول سند را با RLS همان مستأجر بررسی می‌کنیم؛ شناسهٔ دلخواه نباید دفتر حسابرسی
+    # مستأجر دیگری را حتی در صورت تغییر سیاست جدول audit قابل خواندن کند.
+    if db.get(JournalEntry, entry_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند یافت نشد")
+    query = db.query(AuditLog).filter(
+        AuditLog.entity_type == "JournalEntry",
+        AuditLog.entity_id == entry_id,
+        AuditLog.action == "update",
+    )
+    items, cursor = paginate(query, [AuditLog.at, AuditLog.id], params, descending=True)
+    return Page(items=items, next_cursor=cursor)
+
+
+_LINE_FIELDS = (
+    "account_id", "cost_center_id", "analytic_id", "debit", "credit", "description",
+    "currency_code", "fx_amount", "fx_rate", "tracking_no", "tracking_date",
+)
+
+
+def _line_snapshot(line: JournalLine) -> dict:
+    # تاریخچه باید حتی پس از حذف/تعویض یک ردیف، مبلغ و حسابِ پیشین را بازسازی کند.
+    return {"id": line.id, "seq": line.seq, **{field: getattr(line, field) for field in _LINE_FIELDS}}
+
+
+def _label_snapshots(db: Session, snapshots: list[dict]) -> None:
+    # نامِ امروز را فقط برای نمایش تاریخچه به snapshot همان لحظه اضافه می‌کنیم؛
+    # بعداً با تغییر نام حساب نباید متنِ رویداد قدیمی عوض شود.
+    for model, field, prefix in (
+        (Account, "account_id", "account"),
+        (AnalyticAccount, "analytic_id", "analytic"),
+        (CostCenter, "cost_center_id", "cost_center"),
+    ):
+        ids = {line[field] for line in snapshots if line[field] is not None}
+        if not ids:
+            continue
+        labels = {ident: (code, name) for ident, code, name in db.query(
+            model.id, model.code, model.name,
+        ).filter(model.id.in_(ids))}
+        for line in snapshots:
+            if line[field] in labels:
+                line[f"{prefix}_code"], line[f"{prefix}_name"] = labels[line[field]]
+
+
+@router.put("/{entry_id}", response_model=JournalEntryOut)
+def edit_entry(
+    entry_id: UUID,
+    data: JournalEntryEditIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("accounting", "update")),
+):
+    """اصلاح سند دستی در دورهٔ باز، با دلیل و رد کاملِ فقط‌افزودنی."""
+    entry = (
+        db.query(JournalEntry)
+        .options(selectinload(JournalEntry.lines))
+        .filter(JournalEntry.id == entry_id)
+        .with_for_update()
+        .first()
+    )
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "سند یافت نشد")
+    if entry.source_type != "manual" or entry.reverses_entry_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "سند سیستمی یا برگشتی را از عملیاتِ منشأ اصلاح کنید")
+    if entry.voided_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "سند باطل‌شده ویرایش نمی‌شود؛ سند اصلاحی ثبت کنید")
+    if entry.updated_at != data.expected_updated_at:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این سند پس از بازشدنِ فرم تغییر کرده است؛ دوباره باز کنید و اصلاحات را بررسی کنید")
+    if data.status != entry.status:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "وضعیت سند از فرم ویرایش تغییر نمی‌کند؛ از کارتابل استفاده کنید")
+    # هر دو تاریخ باید باز باشند؛ جابه‌جاییِ تاریخ نباید سندِ دورهٔ بسته را از
+    # گذشته خارج کند یا اثر تازه‌ای در دورهٔ بسته وارد کند.
+    assert_period_open(db, entry.entry_date)
+    assert_period_open(db, data.entry_date)
+    cost_center_id = resolve_cost_center_id(db, data.cost_center_id)
+    analytic_id = resolve_analytic_id(db, data.analytic_id)
+    _assert_tracking_allowed(db, data.lines)
+    line_analytics = []
+    line_centers = []
+    for index, line in enumerate(data.lines):
+        try:
+            line_analytics.append(resolve_analytic_id(db, line.analytic_id) or analytic_id)
+            line_centers.append(resolve_cost_center_id(db, line.cost_center_id) or cost_center_id)
+        except HTTPException as exc:
+            field = "analytic_id" if len(line_analytics) == index else "cost_center_id"
+            raise JournalLineInputError(exc.status_code, str(exc.detail), [
+                {"index": index, "field": field, "message": str(exc.detail)},
+            ]) from exc
+    tafsili.assert_lines_have_tafsili(
+        db, [(line.account_id, analytic) for line, analytic in zip(data.lines, line_analytics)],
+        source_type="manual",
+    )
+
+    existing = {line.id: line for line in entry.lines}
+    incoming_ids = [line.id for line in data.lines if line.id is not None]
+    if len(incoming_ids) != len(set(incoming_ids)) or any(ident not in existing for ident in incoming_ids):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "شناسهٔ ردیف نامعتبر یا تکراری است؛ سند را دوباره باز کنید")
+    before = {
+        "entry_date": entry.entry_date, "description": entry.description,
+        "sub_number": entry.sub_number,
+        "lines": [_line_snapshot(line) for line in entry.lines],
+    }
+    new_lines = []
+    for seq, (source, center, analytic) in enumerate(zip(data.lines, line_centers, line_analytics), start=1):
+        line = existing.get(source.id) if source.id else JournalLine()
+        line.seq = seq
+        for field in _LINE_FIELDS:
+            setattr(line, field, center if field == "cost_center_id" else analytic if field == "analytic_id" else getattr(source, field))
+        new_lines.append(line)
+    entry.lines = new_lines
+    entry.entry_date = data.entry_date
+    entry.description = data.description
+    entry.sub_number = data.sub_number
+    after = {
+        "entry_date": entry.entry_date, "description": entry.description,
+        "sub_number": entry.sub_number,
+        "lines": [_line_snapshot(line) for line in entry.lines],
+    }
+    # برای ردیف تازه UUID هنگام flush ساخته می‌شود؛ مقایسهٔ تغییر پیش از flush
+    # است، اما snapshot نهایی پس از flush گرفته می‌شود.
+    comparable = lambda value: audit._jsonable(value)
+    if comparable(before) == comparable(after):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "تغییری در سند انجام نشده است")
+    entry.updated_at = datetime.now(timezone.utc)
+    with audit.suppressed(db):
+        db.flush()
+    after["lines"] = [_line_snapshot(line) for line in entry.lines]
+    _label_snapshots(db, before["lines"] + after["lines"])
+    changes = {
+        field: {"from": before[field], "to": after[field]}
+        for field in before if comparable(before[field]) != comparable(after[field])
+    }
+    changes["edit_reason"] = {"from": None, "to": data.reason}
+    changes["editor_name"] = {"from": None, "to": user.name}
+    audit.record_change(
+        db, entry, changes, f"اصلاح سند دستیِ {entry.number}: {data.reason}",
+        occurred_at=datetime.now(timezone.utc),
+    )
+    db.flush()
+    row = JournalEntryOut.model_validate(entry)
+    fill_line_labels(db, entry, row)
+    row.created_by_name = resolve_creator_names(db, [entry]).get(entry.id)
+    return row
+
+
 @router.post("", response_model=JournalEntryOut, status_code=201)
 def create_entry(
     data: JournalEntryIn,
@@ -399,9 +553,11 @@ def set_sub_number(
     امضاشده، و استثنا گذاشتن برای «فقط یک فیلدِ بی‌خطر» همان‌جایی است که این‌طور
     قاعده‌ها می‌شکنند. سندِ باطل هم دست‌نخوردنی است.
     """
-    entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
+    entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).with_for_update().first()
     if entry is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سند پیدا نشد")
+    if entry.source_type != "manual" or entry.reverses_entry_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "شمارهٔ فرعیِ سند سیستمی یا برگشتی را از عملیاتِ منشأ اصلاح کنید")
     if entry.voided_at is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "سندِ باطل‌شده ویرایش نمی‌شود")
     if entry.status != "temporary":
@@ -409,6 +565,7 @@ def set_sub_number(
             status.HTTP_409_CONFLICT,
             "سندِ دائم ویرایش نمی‌شود؛ شماره فرعی را پیش از دائم‌کردن ثبت کنید",
         )
+    assert_period_open(db, entry.entry_date)
 
     entry.sub_number = data.sub_number
     db.flush()

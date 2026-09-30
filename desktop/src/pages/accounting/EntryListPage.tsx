@@ -3,6 +3,9 @@ import { BookOpen, BookOpenCheck, ClipboardCheck, Download, FileStack, Printer, 
 
 import {
   fetchAllJournalEntries,
+  fetchAccountsLive,
+  fetchAnalytics,
+  fetchCostCenters,
   fetchFiscalYears,
   fetchJournalEntriesPage,
   fetchJournalEntriesSummary,
@@ -19,7 +22,6 @@ import { CheckChip } from '../../components/ReportViews'
 import { SearchSelect } from '../../components/SearchSelect'
 import { SectionCard } from '../../components/SectionCard'
 import { ColResizer, SelectionBar } from '../../components/XlGrid'
-import { downloadCsv } from '../../lib/csv'
 import { normalizeFa } from '../../lib/faText'
 import { manualCreatorText } from '../../lib/entryPresentation'
 import { formatJalali } from '../../lib/jalali'
@@ -85,7 +87,7 @@ const entryTotal = (e: JournalEntryRecord) => e.lines.reduce((s, l) => s + Numbe
  *   انتخاب با شماره‌ی ردیف و جمعِ انتخاب. **کلیک روی ردیف خودِ سند را باز می‌کند** (پیش از این هیچ کاری نمی‌کرد).
  * - **صفحه‌بندی از سرور:** پیش از این ۳۰۰ سندِ اول می‌آمد و بقیه بی‌صدا دیده نمی‌شد؛ حالا صفحه‌به‌صفحه با کرسر («سندِ
  *   بعدی») و **«جمعِ بازه»** در پانویس از `/summary`ِ سرور — کلِ دامنه، نه سندهای بارشده — با نشانِ توازن.
- * - خروجیِ CSV کلِ دامنه‌ی فیلترشده است.
+ * - خروجیِ Excel کلِ دامنه‌ی فیلترشده را با ردیف‌ها و قالبِ چاپی می‌دهد.
  */
 export function EntryListPage({ token, onNavigate }: { token: string; onNavigate?: (page: PageKey) => void }) {
   const range = useRange('year')
@@ -164,32 +166,32 @@ export function EntryListPage({ token, onNavigate }: { token: string; onNavigate
     }
   }
 
-  const [csvBusy, setCsvBusy] = useState(false)
-  async function exportCsv() {
-    setCsvBusy(true)
+  const [xlsxBusy, setXlsxBusy] = useState(false)
+  async function exportXlsx() {
+    setXlsxBusy(true)
     try {
       //: کلِ دامنه‌ی فیلترشده، نه صفحه‌های بارشده — کسی که «خروجی» می‌زند همه را می‌خواهد.
-      const all = await fetchAllJournalEntries(token, scope, q || undefined, colFilters)
-      downloadCsv(
-        `asnad-${range.from ?? 'all'}`,
-        ['شماره', 'عطف', 'فرعی', 'تاریخ', 'شرح', 'منشأ', 'ثبت‌کننده', 'وضعیت', 'ردیف', 'مبلغ'],
-        all.map((e) => [
-          e.number ?? '',
-          e.atf_number ?? '',
-          e.sub_number ?? '',
-          formatJalali(e.entry_date),
-          e.description,
-          sourceText(e),
-          e.created_by_name?.trim() || 'نام در دسترس نیست',
-          e.voided_at ? 'باطل' : e.status === 'permanent' ? 'دائم' : 'موقت',
-          e.lines.length,
-          entryTotal(e),
-        ]),
-      )
+      const [all, accounts, analytics, centers] = await Promise.all([
+        fetchAllJournalEntries(token, scope, q || undefined, colFilters),
+        fetchAccountsLive(token), fetchAnalytics(token), fetchCostCenters(token),
+      ])
+      const filters = [status ? (status === 'permanent' ? 'دائم' : 'موقت') : 'همهٔ وضعیت‌ها',
+        q && `جست‌وجو: ${q}`, colsQ.source && `منشأ: ${SOURCE_LABELS[colsQ.source] ?? colsQ.source}`,
+        colsQ.number && `شماره: ${colsQ.number}`, colsQ.atf && `عطف: ${colsQ.atf}`,
+        colsQ.sub && `فرعی: ${colsQ.sub}`, colsQ.desc && `شرح: ${colsQ.desc}`].filter(Boolean).join(' · ')
+      // کتابخانهٔ XLSX فقط با درخواستِ خروجی بار می‌شود، نه در بازشدنِ دفتر.
+      const { downloadJournalWorkbook } = await import('../../lib/journalWorkbook')
+      await downloadJournalWorkbook(`اسناد-حسابداری-${range.from ?? 'همه'}`, all, {
+        period: range.from ? `${formatJalali(range.from)} تا ${formatJalali(range.to ?? '')}` : 'کل دفتر',
+        filters, sourceLabel: sourceText,
+        accounts: new Map(accounts.map((a) => [a.id, { code: a.code, name: a.name }])),
+        analytics: new Map(analytics.map((a) => [a.id, a.name])),
+        centers: new Map(centers.map((c) => [c.id, c.name])),
+      })
     } catch (err) {
       setMsg({ text: err instanceof Error ? err.message : 'خطای ناشناخته', kind: 'err' })
     } finally {
-      setCsvBusy(false)
+      setXlsxBusy(false)
     }
   }
 
@@ -271,8 +273,8 @@ export function EntryListPage({ token, onNavigate }: { token: string; onNavigate
                 }}
               />
             </div>
-            <button type="button" className="ef-btn-secondary" onClick={() => void exportCsv()} disabled={csvBusy || !total || total.entry_count === 0}>
-              <Download size={14} /> {csvBusy ? 'در حال آماده‌سازی…' : 'خروجی CSV'}
+            <button type="button" className="ef-btn-secondary" onClick={() => void exportXlsx()} disabled={xlsxBusy || !total || total.entry_count === 0}>
+              <Download size={14} /> {xlsxBusy ? 'در حال آماده‌سازی…' : 'خروجی Excel'}
             </button>
             <button
               type="button"
