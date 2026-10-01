@@ -112,6 +112,25 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
     settings = get_settings()
     #: سازمانی: مجوز پیش از `allowed_modules` محاسبه می‌شود تا کشی که آن می‌خواند گرم باشد.
     lic = license_state.current(db) if settings.is_enterprise else None
+    if settings.is_enterprise and settings.market_bridge_enabled and lic.mode in ("active", "grace"):
+        from app.models.enterprise_market_bridge import EnterpriseMarketLocalState
+
+        market_linked = db.query(EnterpriseMarketLocalState.id).filter(
+            EnterpriseMarketLocalState.tenant_id == principal.tenant_id,
+            EnterpriseMarketLocalState.status == "active",
+        ).first() is not None
+        market_roles = [
+            role for role, permission in (("retailer", "market_buy"), ("distributor", "market_distribute"))
+            if market_linked and principal.has_permission(permission, "view")
+        ]
+    elif not settings.is_enterprise:
+        market_roles = [
+            role for role in ("retailer", "distributor")
+            if principal.membership.tenant.kind in (role, "both")
+            and principal.has_permission("marketplace", "view")
+        ]
+    else:
+        market_roles = []
     return MeOut(
         id=principal.user.id,
         name=principal.user.name,
@@ -131,6 +150,8 @@ def _me_out(principal: Principal, db: Session) -> MeOut:
         and principal.user.email.strip().lower() in settings.super_admin_emails_list,
         edition=settings.edition,
         tenant_kind=principal.membership.tenant.kind,
+        marketplace_roles=market_roles,
+        market_bridge_available=settings.market_bridge_enabled,
         is_trial=tinfo.is_trial,
         trial_days_left=tinfo.days_left,
         trial_expired=tinfo.expired,

@@ -153,6 +153,27 @@ describe('fail-openِ عمومیِ گیت', () => {
   })
 })
 
+describe('نقش‌های مستقلِ بازار', () => {
+  const marketKeys = (roles: string[]) => buildNav({
+    tenantKind: 'standard', marketplaceRoles: roles,
+  }).groups.flatMap((group) => group.items.map((item) => item.key))
+
+  it('شرکتِ دارای هر دو نقش، هر دو ماژول را می‌بیند', () => {
+    expect(marketKeys(['retailer', 'distributor'])).toContain('marketplace')
+    expect(marketKeys(['retailer', 'distributor'])).toContain('distributor')
+  })
+
+  it('عضوِ دارای فقط خرید، پخش را نمی‌بیند', () => {
+    expect(marketKeys(['retailer'])).toContain('marketplace')
+    expect(marketKeys(['retailer'])).not.toContain('distributor')
+  })
+
+  it('عضوِ بدونِ مجوزِ بازار، هیچ‌کدام را نمی‌بیند', () => {
+    expect(marketKeys([])).not.toContain('marketplace')
+    expect(marketKeys([])).not.toContain('distributor')
+  })
+})
+
 describe('ترتیبِ منو در هر حالت — UI-01 §۵۲', () => {
   const MODES: ExperienceMode[] = ['accountant', 'simple']
   const EVERY = [

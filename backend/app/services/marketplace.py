@@ -5,7 +5,7 @@
 اما اعتبارسنجیِ «کالا مالِ خودِ پخش‌کننده است» از RLS استفاده می‌کند: چون در نشستِ بسته‌شده
 به مستأجرِ پخش‌کننده، کوئریِ `Item` فقط کالاهای خودش را برمی‌گرداند.
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from uuid import UUID
 
@@ -17,6 +17,7 @@ from app.config import get_settings as get_app_settings
 from app.jalali import gregorian_to_jalali
 from app.models.banking import BankAccount
 from app.models.advanced_inventory import StockBatch
+from app.models.enterprise_market_bridge import EnterpriseMarketCatalog, EnterpriseMarketLink
 from app.models.inventory import Contact, Item, Warehouse
 from app.models.marketplace import (
     MarketplaceCommission,
@@ -261,7 +262,7 @@ def distributor_display_name(db: Session, distributor_tenant_id: UUID) -> str:
 def _active_distributor(db: Session, distributor_tenant_id: UUID) -> Tenant:
     """پخش‌کننده باید موجود، نوعِ distributor، مستأجرِ فعال، و در بازار فعال باشد."""
     t = db.get(Tenant, distributor_tenant_id)
-    if t is None or t.kind != "distributor" or t.status != "active":
+    if t is None or t.kind not in ("distributor", "both") or t.status != "active":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "پخش‌کننده یافت نشد")
     s = (
         db.query(MarketplaceSettings)
@@ -342,7 +343,7 @@ def list_distributors_for_retailer(db: Session, retailer_tenant_id: UUID) -> lis
         s
         for s in db.query(MarketplaceSettings).filter(MarketplaceSettings.is_active.is_(True)).all()
         if (t := db.get(Tenant, s.distributor_tenant_id)) is not None
-        and t.kind == "distributor"
+        and t.kind in ("distributor", "both")
         and t.status == "active"
     ]
     names = {s.distributor_tenant_id: s for s in live}
@@ -521,12 +522,14 @@ def load_connection_for_member(
 
 
 def list_messages(
-    db: Session, connection_id: UUID, after: datetime | None = None
+    db: Session, connection_id: UUID, after: datetime | None = None, *, latest_limit: int | None = None
 ) -> list[MarketplaceMessage]:
     q = db.query(MarketplaceMessage).filter(MarketplaceMessage.connection_id == connection_id)
     if after is not None:
         q = q.filter(MarketplaceMessage.created_at > after)
-    return q.order_by(MarketplaceMessage.created_at.asc()).all()
+    if latest_limit is not None:
+        return list(reversed(q.order_by(MarketplaceMessage.created_at.desc(), MarketplaceMessage.id.desc()).limit(latest_limit).all()))
+    return q.order_by(MarketplaceMessage.created_at.asc(), MarketplaceMessage.id.asc()).all()
 
 
 def _last_message(db: Session, connection_id: UUID) -> MarketplaceMessage | None:
@@ -546,6 +549,7 @@ def post_message(
     sender_role: str,
     sender_user_id: UUID | None,
     body: str,
+    sender_name: str = "",
 ) -> MarketplaceMessage:
     text = (body or "").strip()
     if not text:
@@ -556,6 +560,7 @@ def post_message(
         sender_tenant_id=sender_tenant_id,
         sender_role=sender_role,
         sender_user_id=sender_user_id,
+        sender_name=sender_name[:200],
         body=text,
     )
     db.add(msg)
@@ -623,6 +628,7 @@ def message_dict(msg: MarketplaceMessage) -> dict:
         "id": msg.id,
         "sender_role": msg.sender_role,
         "sender_user_id": msg.sender_user_id,
+        "sender_name": msg.sender_name,
         "body": msg.body,
         "created_at": msg.created_at,
     }
@@ -647,11 +653,13 @@ def load_order_for_member(db: Session, tenant_id: UUID, order_id: UUID) -> tuple
     return order, role
 
 
-def list_order_messages(db: Session, order_id: UUID, after: datetime | None = None) -> list[MarketplaceMessage]:
+def list_order_messages(db: Session, order_id: UUID, after: datetime | None = None, *, latest_limit: int | None = None) -> list[MarketplaceMessage]:
     q = db.query(MarketplaceMessage).filter(MarketplaceMessage.order_id == order_id)
     if after is not None:
         q = q.filter(MarketplaceMessage.created_at > after)
-    return q.order_by(MarketplaceMessage.created_at.asc()).all()
+    if latest_limit is not None:
+        return list(reversed(q.order_by(MarketplaceMessage.created_at.desc(), MarketplaceMessage.id.desc()).limit(latest_limit).all()))
+    return q.order_by(MarketplaceMessage.created_at.asc(), MarketplaceMessage.id.asc()).all()
 
 
 def _last_order_message(db: Session, order_id: UUID) -> MarketplaceMessage | None:
@@ -680,6 +688,7 @@ def post_order_message(
     sender_role: str,
     sender_user_id: UUID | None,
     body: str,
+    sender_name: str = "",
 ) -> MarketplaceMessage:
     text = (body or "").strip()
     if not text:
@@ -690,6 +699,7 @@ def post_order_message(
         sender_tenant_id=sender_tenant_id,
         sender_role=sender_role,
         sender_user_id=sender_user_id,
+        sender_name=sender_name[:200],
         body=text,
     )
     db.add(msg)
@@ -838,12 +848,48 @@ def _reserved_by_listing(db: Session, listing_ids: list) -> dict:
         .join(MarketplaceOrder, MarketplaceOrder.id == MarketplaceOrderLine.order_id)
         .filter(
             MarketplaceOrderLine.listing_id.in_(listing_ids),
-            MarketplaceOrder.status == "placed",
+            MarketplaceOrder.status.in_(("placed", "sync_pending")),
         )
         .group_by(MarketplaceOrderLine.listing_id)
         .all()
     )
     return {lid: Decimal(qty) for lid, qty in rows}
+
+
+def _reserved_external_by_listing(db: Session, catalog_rows: dict[UUID, EnterpriseMarketCatalog]) -> dict[UUID, Decimal]:
+    """Cloud reservations against each seller's last *local* stock snapshot.
+
+    A completed invoice only frees its provisional cloud reservation after a
+    newer local catalog snapshot includes the stock movement. Otherwise the
+    few minutes between receipt and sync could sell the same units twice.
+    """
+    from app.models.enterprise_market_bridge import EnterpriseMarketEvent
+
+    if not catalog_rows:
+        return {}
+    lines = db.query(MarketplaceOrderLine, MarketplaceOrder).join(
+        MarketplaceOrder, MarketplaceOrder.id == MarketplaceOrderLine.order_id
+    ).filter(
+        MarketplaceOrderLine.listing_id.in_(catalog_rows),
+        MarketplaceOrder.status.notin_(("rejected", "cancelled")),
+    ).all()
+    order_ids = {order.id for _, order in lines}
+    posted = dict(db.query(
+        EnterpriseMarketEvent.operation_ref, func.max(EnterpriseMarketEvent.posted_at)
+    ).filter(
+        EnterpriseMarketEvent.operation_ref.in_(order_ids),
+        EnterpriseMarketEvent.status == "posted",
+    ).group_by(EnterpriseMarketEvent.operation_ref).all()) if order_ids else {}
+    reserved: dict[UUID, Decimal] = {}
+    for line, order in lines:
+        catalog = catalog_rows[line.listing_id]
+        if order.status in ("placed", "sync_pending", "shipped") or (
+            order.status == "confirmed" and order.id not in posted
+        ) or (
+            posted.get(order.id) is not None and posted[order.id] >= catalog.last_synced_at
+        ):
+            reserved[line.listing_id] = reserved.get(line.listing_id, Decimal(0)) + Decimal(line.qty)
+    return reserved
 
 
 def catalog_allocation_rows(db: Session, distributor_tenant_id: UUID, listing_id: UUID) -> list[dict]:
@@ -979,6 +1025,22 @@ def _orderable_by_listing(db: Session, listings: list, allowed: set) -> dict:
     from app.services import reservations as reservations_svc
 
     out: dict[UUID, Decimal | None] = {}
+    external = {
+        row.cloud_listing_id: row
+        for row in db.query(EnterpriseMarketCatalog).join(
+            EnterpriseMarketLink, EnterpriseMarketLink.id == EnterpriseMarketCatalog.link_id
+        ).filter(
+            EnterpriseMarketCatalog.cloud_listing_id.in_([l.id for l in listings]),
+            EnterpriseMarketLink.status == "active",
+        ).all()
+    }
+    if external:
+        reserved = _reserved_external_by_listing(db, external)
+        now = datetime.now(timezone.utc)
+        for listing_id, row in external.items():
+            fresh = now - row.last_synced_at <= timedelta(minutes=3)
+            out[listing_id] = max(Decimal(row.available_qty) - reserved.get(listing_id, Decimal(0)), Decimal(0)) if fresh else Decimal(0)
+        listings = [l for l in listings if l.id not in external]
     by_distributor: dict[UUID, list] = {}
     for l in listings:
         by_distributor.setdefault(l.distributor_tenant_id, []).append(l)
@@ -1153,6 +1215,12 @@ def _orders_today_with_listing(db: Session, retailer_tenant_id: UUID, listing_id
 def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder:
     """فروشگاه سفارش می‌سازد. فقط از پخش‌کننده‌ی approved و لیستینگ‌های منتشرشده‌اش."""
     distributor_id = data.distributor_tenant_id
+    if distributor_id == retailer_tenant_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "نمی‌توانید از شرکتِ خودتان در بازار سفارش دهید")
+    # Pair/unpair takes the cloud tenant lock before inspecting open work.
+    # Take both identities in a stable order so an in-flight first order
+    # cannot slip past revoke and later lose its local fulfillment route.
+    db.query(Tenant).filter(Tenant.id.in_((distributor_id, retailer_tenant_id))).order_by(Tenant.id).with_for_update().all()
     if distributor_id not in approved_distributor_ids(db, retailer_tenant_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "به این پخش‌کننده متصل نیستید یا اتصال هنوز تأیید نشده است")
 
@@ -1210,10 +1278,25 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
                 unit_price=unit_price,
                 qty=qty,
                 line_total=line_total,
+                fulfillment_snapshot={
+                    "unit": listing.unit,
+                    "consumer_price": str(listing.consumer_price or 0),
+                    "components": [
+                        {"item_id": str(comp.distributor_item_id), "name": comp.item_name, "qty": str(comp.qty)}
+                        for comp in listing.components
+                    ],
+                },
             )
         )
 
     settings = get_settings(db, distributor_id)
+    linked_party = db.query(EnterpriseMarketLink.id).filter(
+        EnterpriseMarketLink.status == "active",
+        (EnterpriseMarketLink.cloud_tenant_id == distributor_id)
+        | (EnterpriseMarketLink.cloud_tenant_id == retailer_tenant_id),
+    ).first()
+    if linked_party is not None and settings.settlement_mode == "online":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "درگاه آنلاین برای سفارشِ نسخهٔ سازمانی پشتیبانی نمی‌شود؛ تسویهٔ اعتباری یا نقدِ تحویل را انتخاب کنید")
     order_number = settings.next_order_number
     settings.next_order_number = order_number + 1
 
@@ -1234,11 +1317,31 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
     #: به هر دو گره می‌خورد.
     db.flush()
 
+    external = {
+        row.cloud_listing_id: row
+        for row in db.query(EnterpriseMarketCatalog).join(
+            EnterpriseMarketLink, EnterpriseMarketLink.id == EnterpriseMarketCatalog.link_id
+        ).filter(
+            EnterpriseMarketCatalog.cloud_listing_id.in_(listing_ids),
+            EnterpriseMarketLink.status == "active",
+        ).with_for_update(of=EnterpriseMarketCatalog).all()
+    }
+    if external:
+        reserved = _reserved_external_by_listing(db, external)  # includes this new order
+        now = datetime.now(timezone.utc)
+        for listing_id, row in external.items():
+            if now - row.last_synced_at > timedelta(minutes=3):
+                raise HTTPException(status.HTTP_409_CONFLICT, "موجودیِ پخش‌کنندهٔ سازمانی تازه نیست؛ پس از اتصال دوباره تلاش کنید")
+            if reserved.get(listing_id, Decimal(0)) > Decimal(row.available_qty):
+                raise HTTPException(status.HTTP_409_CONFLICT, "موجودیِ قابل‌عرضه برای این سفارش کافی نیست")
+
     #: **رزرو در دفترِ پخش‌کننده.** تنها جایی در این جریان که فروشگاه به انبارِ
     #: طرفِ مقابل دست می‌زند، و عمداً از `tenant_scope` رد می‌شود تا RLS همان
     #: مستأجر را ببیند.
-    with tenant_scope(db, distributor_id):
-        _reserve_order_stock(db, order, listings)
+    native_listings = {lid: listing for lid, listing in listings.items() if lid not in external}
+    if native_listings:
+        with tenant_scope(db, distributor_id):
+            _reserve_order_stock(db, order, native_listings)
     return order
 
 
@@ -1486,14 +1589,18 @@ def _explode_order(order: MarketplaceOrder, listings: dict) -> list[dict]:
     fulfillment: list[dict] = []
     for ol in order.lines:
         listing = listings.get(ol.listing_id)
-        if listing is None:
+        if ol is None or (listing is None and ol.fulfillment_snapshot is None):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, "یکی از اقلامِ سفارش دیگر در کاتالوگ نیست؛ امکانِ تأیید نیست"
             )
-        comps = list(listing.components)
+        snapshot = ol.fulfillment_snapshot
+        comps = snapshot["components"] if snapshot is not None else [
+            {"item_id": str(comp.distributor_item_id), "name": comp.item_name, "qty": str(comp.qty)}
+            for comp in listing.components
+        ]
         if not comps:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "لیستینگِ سفارش جزئی برای تحویل ندارد")
-        units_list = [Decimal(c.qty) * Decimal(ol.qty) for c in comps]
+        units_list = [Decimal(c["qty"]) * Decimal(ol.qty) for c in comps]
         shares = _allocate_discount(Decimal(ol.line_total), units_list)
         for comp, units, share in zip(comps, units_list, shares):
             if units <= 0:
@@ -1502,14 +1609,17 @@ def _explode_order(order: MarketplaceOrder, listings: dict) -> list[dict]:
             discount = unit_price * units - share
             fulfillment.append(
                 {
-                    "distributor_item_id": comp.distributor_item_id,
-                    "name": comp.item_name,
-                    "unit": listing.unit,
+                    "distributor_item_id": UUID(comp["item_id"]),
+                    "name": comp["name"],
+                    "unit": snapshot["unit"] if snapshot is not None else listing.unit,
                     "units": units,
                     "unit_price": unit_price,
                     "discount": discount,
                     # قیمتِ مصرف‌کننده فقط برای لیستینگِ تکی معنا دارد (پک را نمی‌توان بینِ اجزا تقسیم کرد).
-                    "consumer_price": (Decimal(listing.consumer_price) if len(comps) == 1 else Decimal(0)),
+                    "consumer_price": (
+                        Decimal(snapshot["consumer_price"] if snapshot is not None else listing.consumer_price or 0)
+                        if len(comps) == 1 else Decimal(0)
+                    ),
                 }
             )
     return fulfillment
@@ -1639,7 +1749,7 @@ def confirm_order(
     )
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
-    if order.status in ("confirmed", "delivered"):
+    if order.status in ("sync_pending", "confirmed", "delivered"):
         return order  # بی‌اثر بودنِ تأییدِ دوباره
     if order.status != "placed":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فقط سفارشِ ثبت‌شده قابلِ تأیید است")
@@ -1653,6 +1763,14 @@ def confirm_order(
     if settings.require_delivery and order.settlement_mode == "credit":
         order.status = "confirmed"
         db.flush()
+        return order
+
+    from app.services.enterprise_market_orders import linked_parties, queue_fulfillment
+
+    if linked_parties(db, order):
+        pct = min(max(Decimal(cash_percent or 0), Decimal(0)), Decimal(100))
+        cash_amount = (Decimal(order.total) * pct / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP)
+        queue_fulfillment(db, order, distributor_user, cash_amount)
         return order
 
     conn = _fulfill(db, order, distributor_user)
@@ -1690,13 +1808,30 @@ def deliver_order(
     )
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
-    if order.status == "delivered":
+    if order.status in ("delivered", "sync_pending"):
         return order  # بی‌اثر بودنِ تحویلِ دوباره
     if order.status != "confirmed":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فقط سفارشِ تأییدشده قابلِ تحویل است")
 
     # اگر هنوز سند نخورده، همین‌جا پستِ دوطرفه + تسویه‌ی نقدِ تحویل. وگرنه فقط علامتِ تحویل.
-    if order.retailer_purchase_invoice_id is None:
+    from app.services.enterprise_market_orders import linked_parties, queue_fulfillment
+
+    links = linked_parties(db, order)
+    if links:
+        from app.models.enterprise_market_bridge import EnterpriseMarketEvent
+
+        # A linked side has no cloud invoice ID. That is not evidence that it
+        # still needs posting: the first confirmation may already have queued
+        # and received both financial receipts. Never enqueue that trade twice.
+        queued = db.query(EnterpriseMarketEvent.id).filter(
+            EnterpriseMarketEvent.operation_ref == order.id,
+            EnterpriseMarketEvent.kind == "order",
+        ).first()
+        if queued is None:
+            pct = min(max(Decimal(cash_percent or 0), Decimal(0)), Decimal(100))
+            cash_amount = (Decimal(order.total) * pct / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP)
+            queue_fulfillment(db, order, actor_user, cash_amount)
+    elif order.retailer_purchase_invoice_id is None:
         conn = _fulfill(db, order, actor_user)
         pct = min(max(Decimal(cash_percent or 0), Decimal(0)), Decimal(100))
         cash_amount = (Decimal(order.total) * pct / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP)
@@ -1706,7 +1841,10 @@ def deliver_order(
 
     order.delivered_at = datetime.now(timezone.utc)
     order.delivered_by_name = (actor_user.name or "")[:200]
-    order.status = "delivered"
+    # The delivery fact may be recorded now, but the trade is not financially
+    # final until every linked party has posted and acknowledged its invoice.
+    if order.status != "sync_pending":
+        order.status = "delivered"
     db.flush()
     return order
 
@@ -1932,7 +2070,7 @@ def reject_order(db: Session, distributor_tenant_id: UUID, order_id: UUID) -> Ma
     )
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "سفارش یافت نشد")
-    if order.status == "confirmed":
+    if order.status in ("sync_pending", "confirmed", "delivered"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "سفارشِ تأییدشده قابلِ رد نیست")
     #: ادعای این سفارش آزاد می‌شود تا موجودی به فروشگاه‌های دیگر برگردد (§۱۰).
     #: بی این، ردِ سفارش موجودی را تا ابد قفل نگه می‌داشت.
@@ -2270,9 +2408,16 @@ def _returned_qty_by_line(db: Session, order_id: UUID) -> dict[UUID, Decimal]:
 def request_return(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceReturn:
     """فروشگاه روی یک سفارشِ تأییدشده درخواستِ مرجوعی می‌دهد (کامل یا پارشال)."""
     order = _get_own_order(db, data.order_id, retailer_tenant_id=retailer_tenant_id)
+    # Serialize partial-return quantity checks for the same order. Otherwise
+    # two requests can both observe the same remaining quantity.
+    db.query(MarketplaceOrder.id).filter(MarketplaceOrder.id == order.id).with_for_update().one()
     # مرجوعی فقط پس از رسیدنِ کالا به فروشگاه: در حالتِ عادی status=confirmed و در گردشِ
     # کارِ تحویل status=delivered؛ در هر دو، فاکتورِ خرید صادر شده (شرطِ لازمِ approve).
-    if order.status not in ("confirmed", "delivered") or order.retailer_purchase_invoice_id is None:
+    from app.services.enterprise_market_orders import linked_parties
+
+    if order.status not in ("confirmed", "delivered") or (
+        order.retailer_purchase_invoice_id is None and not linked_parties(db, order)
+    ):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "مرجوعی فقط پس از تأیید و صدورِ فاکتور/تحویلِ سفارش ممکن است")
 
     settings = get_settings(db, order.distributor_tenant_id)
@@ -2329,10 +2474,14 @@ def _explode_return(db: Session, order: MarketplaceOrder, ret: MarketplaceReturn
     for rl in ret.lines:
         ol = lines_by_id.get(rl.order_line_id)
         listing = listings.get(ol.listing_id) if ol else None
-        if listing is None:
+        if listing is None and ol.fulfillment_snapshot is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "لیستینگِ این قلم دیگر موجود نیست؛ مرجوعیِ خودکار ممکن نیست")
-        for comp in listing.components:
-            dist_items[comp.distributor_item_id] = dist_items.get(comp.distributor_item_id, Decimal(0)) + Decimal(comp.qty) * Decimal(rl.qty)
+        comps = ol.fulfillment_snapshot["components"] if ol.fulfillment_snapshot is not None else [
+            {"item_id": str(comp.distributor_item_id), "qty": str(comp.qty)} for comp in listing.components
+        ]
+        for comp in comps:
+            item_id = UUID(comp["item_id"])
+            dist_items[item_id] = dist_items.get(item_id, Decimal(0)) + Decimal(comp["qty"]) * Decimal(rl.qty)
     return dist_items
 
 
@@ -2341,6 +2490,7 @@ def approve_return(db: Session, distributor_tenant_id: UUID, distributor_user: U
     ret = (
         db.query(MarketplaceReturn)
         .filter(MarketplaceReturn.id == return_id, MarketplaceReturn.distributor_tenant_id == distributor_tenant_id)
+        .with_for_update()
         .first()
     )
     if ret is None:
@@ -2348,7 +2498,14 @@ def approve_return(db: Session, distributor_tenant_id: UUID, distributor_user: U
     if ret.status != "requested":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "این مرجوعی قبلاً پردازش شده است")
     order = db.get(MarketplaceOrder, ret.order_id)
-    if order is None or order.distributor_sales_invoice_id is None or order.retailer_purchase_invoice_id is None:
+    from app.services.enterprise_market_orders import linked_parties, queue_return
+
+    if order is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "سفارش مرجوعی در دسترس نیست")
+    if linked_parties(db, order):
+        queue_return(db, order, ret, distributor_user)
+        return ret
+    if order.distributor_sales_invoice_id is None or order.retailer_purchase_invoice_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتورهای سفارش برای مرجوعی در دسترس نیست")
 
     dist_items = _explode_return(db, order, ret)
@@ -2408,6 +2565,7 @@ def reject_return(db: Session, distributor_tenant_id: UUID, return_id: UUID, res
     ret = (
         db.query(MarketplaceReturn)
         .filter(MarketplaceReturn.id == return_id, MarketplaceReturn.distributor_tenant_id == distributor_tenant_id)
+        .with_for_update()
         .first()
     )
     if ret is None:

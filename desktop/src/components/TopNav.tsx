@@ -54,6 +54,7 @@ export function TopNav({
   token,
   currentTenantId,
   tenantKind,
+  marketplaceRoles,
   enabledModules,
   allowedModules,
   isOwner,
@@ -72,6 +73,7 @@ export function TopNav({
   token?: string
   currentTenantId?: string
   tenantKind: string
+  marketplaceRoles?: string[]
   /** شخصی‌سازیِ پنل — کلیدِ ماژول‌های روشن/مجاز و اینکه کاربر مالک است. */
   enabledModules?: string[]
   allowedModules?: string[]
@@ -92,6 +94,7 @@ export function TopNav({
     setExperience(m, token ? (next) => updateProfile(token, { experience_mode: next }) : undefined)
   const nav = buildNav({
     tenantKind,
+    marketplaceRoles,
     enabledModules,
     allowedModules,
     isOwner,

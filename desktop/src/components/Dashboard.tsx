@@ -466,7 +466,7 @@ export function Dashboard({
   // نشانِ خوانده‌نشده‌ی گفتگوی بازار: فقط برای حسابِ پخش‌کننده/فروشگاه پول می‌شود.
   // `page` در وابستگی‌ها هست تا با هر جابه‌جایی (مثلاً بعد از خواندنِ پیام‌ها) فوراً به‌روز شود.
   useEffect(() => {
-    if (me.tenant_kind !== 'distributor' && me.tenant_kind !== 'retailer') return
+    if (!me.marketplace_roles?.length) return
     let cancelled = false
     const load = () => {
       fetchMpUnread(token)
@@ -476,7 +476,7 @@ export function Dashboard({
     load()
     const id = window.setInterval(load, 25000)
     return () => { cancelled = true; window.clearInterval(id) }
-  }, [token, me.tenant_kind, page])
+  }, [token, me.tenant_kind, me.marketplace_roles?.length, page])
 
   async function refreshFromLocalCache() {
     if (isElectron) {
@@ -684,8 +684,8 @@ export function Dashboard({
             />
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}
-          {page === 'distributor' && me.tenant_kind === 'distributor' && <DistributorPage token={token} items={items} />}
-          {page === 'marketplace' && me.tenant_kind === 'retailer' && <MarketplacePage token={token} trade={me.trade} />}
+          {page === 'distributor' && me.marketplace_roles?.includes('distributor') && <DistributorPage token={token} items={items} enterprise={me.edition === 'enterprise'} isOwner={me.role_key === 'owner'} />}
+          {page === 'marketplace' && me.marketplace_roles?.includes('retailer') && <MarketplacePage token={token} trade={me.trade} enterprise={me.edition === 'enterprise'} />}
           {page === 'fixedassets' && (
             <div className="page panels">
               <PageHeader
@@ -900,11 +900,12 @@ export function Dashboard({
     () =>
       buildNav({
         tenantKind: me.tenant_kind,
+        marketplaceRoles: me.marketplace_roles,
         enabledModules: me.enabled_modules,
         allowedModules: me.allowed_modules,
         isOwner: me.role_key === 'owner',
       }).groups,
-    [me.tenant_kind, me.enabled_modules, me.allowed_modules, me.role_key],
+    [me.tenant_kind, me.marketplace_roles, me.enabled_modules, me.allowed_modules, me.role_key],
   )
 
   // نوارِ تبِ داخلِ صفحه فقط وقتی پنهان می‌شود که کارتِ «عملیات» جایش را گرفته باشد.
@@ -932,6 +933,7 @@ export function Dashboard({
             token={token}
             currentTenantId={me.tenant_id}
             tenantKind={me.tenant_kind}
+            marketplaceRoles={me.marketplace_roles}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
             isOwner={me.role_key === 'owner'}
@@ -976,6 +978,7 @@ export function Dashboard({
             userName={me.name}
             roleName={me.role_name}
             tenantKind={me.tenant_kind}
+            marketplaceRoles={me.marketplace_roles}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
             isOwner={me.role_key === 'owner'}

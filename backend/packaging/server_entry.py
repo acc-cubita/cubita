@@ -99,9 +99,13 @@ def cmd_serve(args) -> int:
 
     from app.main import app
     from app.onprem.maintenance import BackupScheduler
+    from app.services.enterprise_market_sync import MarketSyncScheduler
 
     #: پشتیبانِ خودکار داخلِ همین سرویس — چیزی جدا برای نصب و خراب‌شدن نیست.
     BackupScheduler(layout, _pg_bin(args), env["MIGRATION_DATABASE_URL"]).start()
+    #: Separate outbound worker; an internet outage never blocks the LAN API or
+    #: local accounting.  Disabled by default until the full bridge is approved.
+    MarketSyncScheduler().start()
 
     uvicorn.run(
         app,

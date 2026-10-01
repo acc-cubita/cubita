@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     #: کدام محصول: `cloud` (acc.cubita.ir، چندمستأجری، پرداخت و ستاد) یا `enterprise`
     #: («کوبیتا سازمانی»، روی سرورِ خودِ شرکت در شبکه‌ی داخلی، یک کسب‌وکار، بدونِ
-    #: فروشگاه/بازار/ستاد). یک کد، دو محصول — نقشه‌ی کامل در ENTERPRISE_PLAN.md.
+    #: فروشگاه و ستاد). یک کد، دو محصول — نقشه‌ی کامل در ENTERPRISE_PLAN.md.
     #: هر رفتارِ وابسته به نسخه از `is_enterprise` بپرسد، نه از مقایسه‌ی رشته.
     edition: str = "cloud"
 
@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     license_signing_key_file: str = ""
     #: فقط سازمانی: سروری که فعال‌سازیِ آنلاین به آن می‌رود.
     license_server_url: str = "https://acc.cubita.ir"
+    #: تا پیوند، همگام‌سازی و ثبتِ مالیِ دوسویه کامل و آزموده نشده‌اند،
+    #: حتی منوی بازارِ سازمانی هم باز نشود. پیش‌فرضِ هر دو نسخه خاموش است.
+    market_bridge_enabled: bool = False
 
     database_url: str = "postgresql+psycopg://hesabdari:hesabdari@localhost:5432/hesabdari"
 

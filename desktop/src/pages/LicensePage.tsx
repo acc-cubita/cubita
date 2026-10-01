@@ -15,6 +15,7 @@ import { ServerBackupCard } from '../components/ServerBackupCard'
 import { ServerUpdateCard } from '../components/ServerUpdateCard'
 import { ClientUpdateCard } from '../components/ClientUpdateCard'
 import { EnterpriseNetworkCard } from '../components/EnterpriseNetworkCard'
+import { EnterpriseMarketPairCard } from '../components/EnterpriseMarketPairCard'
 import { connectionError } from '../lib/serverConnection'
 import { useServerReconnect } from '../lib/useServerConnection'
 import { formatJalali } from '../lib/jalali'
@@ -270,6 +271,7 @@ export function LicensePage({
         </SectionCard>
       </div>
       {isOwner && <EnterpriseNetworkCard />}
+      {isOwner && me.market_bridge_available && <EnterpriseMarketPairCard token={token} onMeUpdated={onMeUpdated} />}
       <ClientUpdateCard />
       {isOwner && <ServerUpdateCard token={token} />}
       {isOwner && <ServerBackupCard token={token} />}

@@ -8,7 +8,7 @@ import {
   type ModulesState,
   type MeResponse,
 } from '../api'
-import { NAV_GROUPS, uniqueNavItems } from '../lib/navModel'
+import { moduleChoiceGroups, toggleableModuleKeys } from '../lib/moduleChoices'
 import { PageHeader } from '../components/PageHeader'
 import { SearchSelect } from '../components/SearchSelect'
 import { SectionCard } from '../components/SectionCard'
@@ -85,21 +85,14 @@ export function ModulesPage({
   function kindOf(key: string): Kind {
     if (!state) return 'toggle'
     if (state.core.includes(key)) return 'core'
-    if (state.restricted.includes(key) && !state.allowed.includes(key)) return 'locked'
+    if (!state.allowed.includes(key)) return 'locked'
     return 'toggle'
   }
 
-  // فقط گروه‌هایی که ماژولِ کسب‌وکار دارند (همه‌ی NAV_GROUPS دارند).
+  // رجیستری سرور کلید ماژول دارد؛ ناوبری ممکن است فقط صفحه‌های زیرمجموعه را داشته باشد.
   const groups = useMemo(
     () =>
-      state
-        ? NAV_GROUPS.map((g) => ({
-            heading: g.heading,
-            items: g.items.filter(
-              (i) => state.core.includes(i.key) || state.optional.includes(i.key),
-            ),
-          })).filter((g) => g.items.length > 0)
-        : [],
+      state ? moduleChoiceGroups(state) : [],
     [state],
   )
 
@@ -107,9 +100,8 @@ export function ModulesPage({
   // پس آوردنشان در شمارش عددی می‌سازد که کاربر نمی‌تواند تغییرش دهد.
   const toggleable = useMemo(
     () =>
-      uniqueNavItems(groups).filter((i) => kindOf(i.key) === 'toggle').map((i) => i.key),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [groups, state],
+      state ? toggleableModuleKeys(state) : [],
+    [state],
   )
   const onCount = toggleable.filter((k) => enabled.has(k)).length
 
@@ -130,7 +122,12 @@ export function ModulesPage({
 
   function setAll(on: boolean) {
     setMessage(null)
-    setEnabled(on ? new Set(toggleable) : new Set())
+    // روشنِ قفل‌شده را حفظ می‌کنیم؛ «همه/هیچ‌کدام» فقط انتخاب‌های مجاز را عوض می‌کند.
+    setEnabled((prev) => {
+      const next = new Set([...prev].filter((key) => !toggleable.includes(key)))
+      if (on) toggleable.forEach((key) => next.add(key))
+      return next
+    })
   }
 
   async function save() {
@@ -156,6 +153,7 @@ export function ModulesPage({
     setTradeSaving(true)
     try {
       applyState(await saveTrade(token, key || null))
+      onMeUpdated(await fetchMe(token))
       setMessage('صنف ذخیره شد.')
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'خطای ناشناخته')
