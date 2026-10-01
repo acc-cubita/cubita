@@ -105,6 +105,18 @@ from app.models.payroll import (
 from app.models.refresh_token import RefreshToken
 from app.models.enterprise_license import EnterpriseLicense
 from app.models.enterprise_license_registry import EnterpriseLicenseEvent, EnterpriseLicenseRecord
+from app.models.enterprise_market_bridge import (
+    EnterpriseMarketCatalog,
+    EnterpriseMarketCommand,
+    EnterpriseMarketCloudItemMap,
+    EnterpriseMarketCounterpartyMap,
+    EnterpriseMarketEvent,
+    EnterpriseMarketItemMap,
+    EnterpriseMarketLink,
+    EnterpriseMarketListingMap,
+    EnterpriseMarketLocalPosting,
+    EnterpriseMarketLocalState,
+)
 from app.models.sales_inquiry import SalesInquiry
 from app.models.subscription import Subscription
 from app.models.recurring import RecurringJournalEntry, RecurringJournalLine
@@ -282,6 +294,16 @@ __all__ = [
     "EnterpriseLicense",
     "EnterpriseLicenseEvent",
     "EnterpriseLicenseRecord",
+    "EnterpriseMarketCatalog",
+    "EnterpriseMarketCommand",
+    "EnterpriseMarketCloudItemMap",
+    "EnterpriseMarketCounterpartyMap",
+    "EnterpriseMarketEvent",
+    "EnterpriseMarketItemMap",
+    "EnterpriseMarketLink",
+    "EnterpriseMarketListingMap",
+    "EnterpriseMarketLocalPosting",
+    "EnterpriseMarketLocalState",
     "RefreshToken",
     "DeviceToken",
     "EmailVerificationCode",

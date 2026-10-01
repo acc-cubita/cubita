@@ -100,6 +100,18 @@ PERMISSION_MODULES: list[dict] = [
         "actions": ["view", "create", "update", "delete", "approve", "deliver"],
     },
     {
+        "key": "market_buy",
+        "label": "بازار خرید",
+        "hint": "اتصال به پخش‌کننده، سفارش، گفتگو و درخواست مرجوعی در بازار سازمانی",
+        "actions": ["view", "create", "update"],
+    },
+    {
+        "key": "market_distribute",
+        "label": "پخش من",
+        "hint": "کاتالوگ، مشتریان، تأیید سفارش، مرجوعی و ثبت تحویل در بازار سازمانی",
+        "actions": ["view", "create", "update", "delete", "approve", "deliver"],
+    },
+    {
         "key": "calendar",
         "label": "تقویم و یادآوری",
         "actions": ["view", "create", "update", "delete"],

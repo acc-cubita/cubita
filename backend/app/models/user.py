@@ -60,7 +60,10 @@ DEFAULT_ROLES: list[dict] = [
         # فقط بازار: سفارش‌ها را می‌بیند و «تحویل» را ثبت می‌کند (که ورودِ کالا به انبارِ
         # فروشگاه را می‌زند). اکشنِ اختصاصیِ «deliver» تا نتواند سفارش تأیید/رد یا مرجوعی
         # تأیید کند (آن‌ها approve می‌خواهند). مالک با اکشنِ approve هم می‌تواند تحویل بزند.
-        "permissions": {"marketplace": ["view", "deliver"]},
+        "permissions": {
+            "marketplace": ["view", "deliver"],
+            "market_distribute": ["view", "deliver"],
+        },
     },
     {
         "key": "payroll_officer",

@@ -55,6 +55,13 @@ GLOBAL_TABLES = frozenset(
         # دفترِ مجوزهای فروخته‌شده در ابر (ستاد) — مثلِ subscriptions، دفترِ کنترل‌پنل است.
         "enterprise_licenses",
         "enterprise_license_events",
+        # Cloud broker records are shared by two counterparties. Access to them
+        # must be explicitly scoped by link/tenant in the bridge router.
+        "enterprise_market_links",
+        "enterprise_market_catalog",
+        "enterprise_market_cloud_item_maps",
+        "enterprise_market_events",
+        "enterprise_market_commands",
         # درخواستِ خرید از فرمِ سایت: فرستنده هنوز مشتری نیست و مستأجری ندارد — دفترِ فروشِ ستاد است.
         "sales_inquiries",
         # توکنِ دستگاهِ Push: به کاربر (سراسری) تعلق دارد نه مستأجر؛ ارسال با فیلترِ صریحِ user_id.

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings as get_app_settings
 from app.database import get_db
 from app.deps import Principal, get_principal, require_permission
+from app.models.enterprise_market_bridge import EnterpriseMarketLink
 from app.models.marketplace import MarketplaceOrder
 from app.models.user import User
 from app.services.payment_providers import get_provider
@@ -51,19 +52,38 @@ from app.schemas.marketplace import (
 from app.services import marketplace as svc
 from app.services import push
 
-router = APIRouter(prefix="/api/marketplace", tags=["marketplace"])
+def _linked_cloud_write_guard(
+    request: Request,
+    principal: Principal = Depends(get_principal),
+    db: Session = Depends(get_db),
+) -> None:
+    """Once linked, cloud account history is readable but new trades use on-prem."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    active = db.query(EnterpriseMarketLink.id).filter(
+        EnterpriseMarketLink.cloud_tenant_id == principal.tenant_id,
+        EnterpriseMarketLink.status == "active",
+    ).first()
+    if active is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "این حساب به نسخهٔ سازمانی پیوند دارد؛ عملیات تازه را از همان پنل انجام دهید")
+
+
+router = APIRouter(prefix="/api/marketplace", tags=["marketplace"], dependencies=[Depends(_linked_cloud_write_guard)])
+# Gateway callbacks have no tenant JWT.  They are intentionally outside the
+# browser-write guard and still validate the payment authority in their body.
+callback_router = APIRouter(prefix="/api/marketplace", tags=["marketplace"])
 
 
 def distributor_principal(principal: Principal = Depends(get_principal)) -> Principal:
     """فقط حسابِ پخش‌کننده. جدا از require_permission چون «نوعِ حساب» در RBAC نیست."""
-    if principal.membership.tenant.kind != "distributor":
+    if principal.membership.tenant.kind not in ("distributor", "both"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "این بخش فقط برای حسابِ پخش‌کننده در بازار است")
     return principal
 
 
 def retailer_principal(principal: Principal = Depends(get_principal)) -> Principal:
     """فقط حسابِ فروشگاه. جدا از require_permission چون «نوعِ حساب» در RBAC نیست."""
-    if principal.membership.tenant.kind != "retailer":
+    if principal.membership.tenant.kind not in ("retailer", "both"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "این بخش فقط برای حسابِ فروشگاه در بازار است")
     return principal
 
@@ -541,7 +561,7 @@ def pay_order(
     return {"redirect_url": redirect_url}
 
 
-@router.api_route("/pay/callback", methods=["GET", "POST"])
+@callback_router.api_route("/pay/callback", methods=["GET", "POST"])
 async def pay_callback(request: Request, db: Session = Depends(get_db)):
     """بازگشتِ درگاه (عمومی، بدونِ auth). سفارش با پارامترِ order پیدا و با درگاهِ پخش‌کننده
     verify می‌شود؛ در صورتِ موفقیت پستِ دوطرفه و تسویه انجام و مرورگر به اپ هدایت می‌شود.

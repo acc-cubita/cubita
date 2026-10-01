@@ -48,6 +48,8 @@ from app.routers import (
     devices,
     enterprise_activation,
     enterprise_license,
+    enterprise_market_cloud,
+    enterprise_market_local,
     enterprise_maintenance,
     enterprise_setup,
     enterprise_updates,
@@ -93,8 +95,8 @@ from app.routers import (
 #: روترهایی که فقط در ابر معنا دارند. هر کدام دلیلی دارد که روی سرورِ شرکت نباشد:
 #: - ستاد (`admin_*`): مدیریتِ پلتفرمِ ما؛ روی سرورِ مشتری ستادی وجود ندارد.
 #: - پرداخت (`billing`): خریدِ پلن با زرین‌پال؛ نسخه‌ی سازمانی با مجوز کار می‌کند.
-#: - فروشگاه/بازار (`integration`، `shop`، `storefront`، `marketplace`): تصمیمِ صاحبِ
-#:   محصول — این نسخه مخصوصِ شرکت‌ها و سازمان‌هاست و بازارِ عمده‌فروشی ندارد.
+#: - فروشگاه (`integration`، `shop`، `storefront`) روی ابر می‌ماند؛
+#:   روترِ قدیمی بازار هم ابری است، اما کاتالوگِ محلی بازار سازمانی روتر جدا دارد.
 #: - پوش (`devices`): توکنِ FCM برای اپِ موبایل؛ نسخه‌ی سازمانی موبایل ندارد.
 #: - فعال‌سازیِ آنلاین (`enterprise_activation`): سرورِ سازمانی *مشتریِ* این مسیر است، نه میزبانش.
 CLOUD_ONLY: tuple[APIRouter, ...] = (
@@ -109,6 +111,7 @@ CLOUD_ONLY: tuple[APIRouter, ...] = (
     admin_licenses.router,
     admin_sales.router,
     enterprise_activation.router,
+    enterprise_market_cloud.router,
     #: فرمِ «تماس برای خرید»ِ سایتِ ما — روی سرورِ مشتری فروشی در کار نیست.
     sales_inquiries.router,
     billing.router,
@@ -116,6 +119,7 @@ CLOUD_ONLY: tuple[APIRouter, ...] = (
     shop.router,
     storefront.router,
     marketplace.router,
+    marketplace.callback_router,
     devices.router,
 )
 
@@ -123,6 +127,8 @@ CLOUD_ONLY: tuple[APIRouter, ...] = (
 ENTERPRISE_ONLY: tuple[APIRouter, ...] = (
     enterprise_setup.router,
     enterprise_license.router,
+    enterprise_market_local.router,
+    enterprise_market_local.marketplace_router,
     enterprise_updates.router,
     enterprise_maintenance.router,
 )
@@ -191,6 +197,7 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     shop.router,
     storefront.router,
     marketplace.router,
+    marketplace.callback_router,
     #: عمومی — صفحه‌ی ثبت‌نام پیش از داشتنِ توکن صنف را می‌پرسد.
     trades.router,
     devices.router,
@@ -204,9 +211,12 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     admin_licenses.router,
     admin_sales.router,
     enterprise_activation.router,
+    enterprise_market_cloud.router,
     sales_inquiries.router,
     enterprise_setup.router,
     enterprise_license.router,
+    enterprise_market_local.router,
+    enterprise_market_local.marketplace_router,
     enterprise_updates.router,
     enterprise_maintenance.router,
 )

@@ -17,6 +17,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'خطای نا�
 
 const RET_BADGE: Record<MpReturnStatus, { label: string; tone: string }> = {
   requested: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
+  sync_pending: { label: 'در انتظار همگام‌سازی مالی', tone: 'tone-warning' },
   approved: { label: 'تأییدشده', tone: 'tone-success' },
   rejected: { label: 'ردشده', tone: 'tone-danger' },
 }

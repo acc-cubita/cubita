@@ -695,11 +695,13 @@ export function uniqueNavItems(groups: NavGroup[], extra: NavItem[] = []): NavIt
  *  Sidebar و TopNav هر دو همین را صدا می‌زنند تا ناوبری یکسان بماند. */
 export function buildNav({
   tenantKind,
+  marketplaceRoles,
   enabledModules = [],
   allowedModules = [],
   isOwner = false,
 }: {
   tenantKind: string
+  marketplaceRoles?: string[]
   //: کلیدِ ماژول‌های روشن/مجازِ کسب‌وکار (از MeResponse). خالی = فیلتر نکن (fail-open).
   enabledModules?: string[]
   allowedModules?: string[]
@@ -723,12 +725,13 @@ export function buildNav({
     items: g.items.filter((i) => isVisible(i.key)),
   })).filter((g) => g.items.length > 0)
 
-  // ماژول‌های بازارِ عمده‌فروشی — فقط برای حسابِ متناظر (انحصاری). standard هیچ‌کدام را نمی‌بیند.
+  // نقشِ بازار از مجوزِ همین عضو می‌آید؛ fallback فقط برای کلاینتِ قدیمیِ فاقدِ فیلد است.
+  const marketRoles = marketplaceRoles ?? (tenantKind === 'retailer' || tenantKind === 'distributor' ? [tenantKind] : [])
   const marketplaceItems: NavItem[] = [
-    ...(tenantKind === 'distributor'
+    ...(marketRoles.includes('distributor')
       ? [{ key: 'distributor' as PageKey, label: 'پخشِ من', icon: <Truck size={18} /> }]
       : []),
-    ...(tenantKind === 'retailer'
+    ...(marketRoles.includes('retailer')
       ? [{ key: 'marketplace' as PageKey, label: 'بازارِ خرید', icon: <Store size={18} /> }]
       : []),
   ]

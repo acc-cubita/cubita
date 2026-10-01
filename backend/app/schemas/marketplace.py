@@ -362,6 +362,7 @@ class MessageOut(BaseModel):
     id: UUID
     sender_role: str
     sender_user_id: UUID | None = None
+    sender_name: str = ""
     body: str
     created_at: datetime
 

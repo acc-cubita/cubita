@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Store, Package, ClipboardList, Link2, Check, Boxes, RotateCw, ShoppingCart, Trash2, Plus, Minus, CreditCard, MessageSquare, Undo2 } from 'lucide-react'
 import {
-  fetchMpCatalog, fetchMpDistributors, fetchMpRetailerConnections, fetchMpRetailerOrders, payMpOrder, placeMpOrder, requestMpConnection,
+  fetchMpCatalog, fetchMpDistributors, fetchMpRetailerConnections, fetchMpRetailerOrders, payMpOrder, placeMpOrder, requestMpConnection, clearMpOrderRequest,
   fetchMpMessages, sendMpMessage, fetchMpOrderMessages, sendMpOrderMessage,
   type CatalogListing, type DistributorCard, type MpConnection, type MpConnectionStatus, type MpOrder, type MpOrderPlaceIn,
 } from '../api'
@@ -16,6 +16,7 @@ import { Pager, usePagination } from '../components/Pager'
 import { useTrades, labelOfTrade } from '../lib/useTrades'
 import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
 import { MpRetailerReturns } from '../components/MpRetailerReturns'
+import { EnterpriseMarketStatus } from '../components/EnterpriseMarketStatus'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
 const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
@@ -38,8 +39,9 @@ const STATUS_BADGE: Record<MpConnectionStatus, { label: string; tone: string }> 
 
 const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: string }> = {
   placed: { label: 'ثبت‌شده، در انتظارِ تأییدِ پخش‌کننده', tone: 'tone-warning' },
-  confirmed: { label: 'تأییدشده — به انبارتان اضافه شد', tone: 'tone-success' },
-  delivered: { label: 'تحویل‌شده — به انبارتان اضافه شد', tone: 'tone-success' },
+  sync_pending: { label: 'در انتظار همگام‌سازی مالی', tone: 'tone-warning' },
+  confirmed: { label: 'تأییدشده', tone: 'tone-success' },
+  delivered: { label: 'تحویل‌شده', tone: 'tone-success' },
   rejected: { label: 'ردشده', tone: 'tone-danger' },
   shipped: { label: 'ارسال‌شده', tone: 'tone-success' },
   received: { label: 'تحویل‌شده', tone: 'tone-success' },
@@ -51,7 +53,7 @@ const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: string }> = 
  * کشف/اتصال به پخش‌کننده‌ها، دیدنِ کاتالوگِ تأییدشده‌ها، ثبتِ سفارش، و «سفارش‌های من».
  * با تأییدِ پخش‌کننده، کالا خودکار در انبارِ فروشگاه ثبت و تعدادش اضافه می‌شود.
  */
-export function MarketplacePage({ token, trade }: { token: string; trade: string | null }) {
+export function MarketplacePage({ token, trade, enterprise = false }: { token: string; trade: string | null; enterprise?: boolean }) {
   return (
     <div className="page panels">
       <PageHeader
@@ -59,6 +61,7 @@ export function MarketplacePage({ token, trade }: { token: string; trade: string
         title="بازارِ خرید"
         description="از پخش‌کننده‌های متصل، محصولات و پک‌ها را ببینید و سفارش دهید. با تأییدِ پخش‌کننده، کالا خودکار به انبارتان می‌آید و تعدادش اضافه می‌شود."
       />
+      {enterprise && <EnterpriseMarketStatus token={token} side="buyer" />}
       <Tabs
         syncPage="marketplace"
         tabs={[
@@ -279,6 +282,7 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
     setPlacing(true); setError(null); setMsg(null)
     try {
       for (const payload of byDist.values()) await placeMpOrder(token, payload)
+      for (const payload of byDist.values()) clearMpOrderRequest(payload)
       setCart({})
       setMsg(`سفارش برای ${faNum(byDist.size)} پخش‌کننده ثبت شد. وضعیت را در تبِ «سفارش‌های من» ببینید.`)
     } catch (e) { setError(e instanceof Error ? e.message : 'خطای ناشناخته') }

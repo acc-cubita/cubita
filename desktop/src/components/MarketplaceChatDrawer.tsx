@@ -173,7 +173,7 @@ export function MarketplaceChatDrawer({
             messages.map((m) => (
               <div key={m.id} className={`mp-chat-msg ${m.sender_role === myRole ? 'mine' : 'theirs'}`}>
                 <div className="mp-chat-bubble">{m.body}</div>
-                <div className="mp-chat-time">{faTime(m.created_at)}</div>
+                <div className="mp-chat-time">{m.sender_name && <span>{m.sender_name} · </span>}{faTime(m.created_at)}</div>
               </div>
             ))
           )}

@@ -29,7 +29,6 @@ CLOUD_ONLY_PREFIXES = (
     "/api/purchases",
     "/api/shop",
     "/api/storefront",
-    "/api/marketplace",
     "/api/integration",
     "/api/devices",
     "/api/enterprise",
@@ -47,10 +46,44 @@ def test_enterprise_mounts_no_cloud_only_path():
     assert leaked == []
 
 
+def test_enterprise_market_mutations_are_scoped_local_catalog_or_broker_commands():
+    app = FastAPI()
+    routing.include_routers(app, "enterprise")
+    routes = [r for r in app.routes if hasattr(r, "methods") and r.path.startswith("/api/marketplace")]
+    assert routes
+    assert any(r.path == "/api/marketplace/retailer/orders" and "GET" in r.methods for r in routes)
+    assert any(r.path == "/api/marketplace/retailer/orders" and "POST" in r.methods for r in routes)
+    broker_mutations = {
+        "/api/marketplace/retailer/connections",
+        "/api/marketplace/retailer/orders",
+        "/api/marketplace/retailer/returns",
+        "/api/marketplace/distributor/connections/{connection_id}/status",
+        "/api/marketplace/distributor/orders/{order_id}/confirm",
+        "/api/marketplace/distributor/orders/{order_id}/deliver",
+        "/api/marketplace/distributor/orders/{order_id}/reject",
+        "/api/marketplace/distributor/returns/{return_id}/approve",
+        "/api/marketplace/distributor/returns/{return_id}/reject",
+        "/api/marketplace/connections/{connection_id}/messages",
+        "/api/marketplace/orders/{order_id}/messages",
+        "/api/marketplace/distributor/zones",
+        "/api/marketplace/distributor/zones/{zone_id}",
+        "/api/marketplace/distributor/connections/{connection_id}/zone",
+    }
+    assert all(
+        r.path in broker_mutations or
+        r.path.startswith("/api/marketplace/distributor/settings") or
+        r.path.startswith("/api/marketplace/distributor/listings") or
+        r.path.startswith("/api/marketplace/distributor/allocations")
+        for r in routes if r.methods & {"POST", "PUT", "PATCH", "DELETE"}
+    )
+
+
 def test_cloud_keeps_its_paths_and_hides_setup():
     paths = _paths("cloud")
     for prefix in CLOUD_ONLY_PREFIXES:
         assert any(p.startswith(prefix) for p in paths), prefix
+    assert "/api/marketplace/retailer/orders" in paths
+    assert not any(p.startswith("/api/local-market") for p in paths)
     assert not any(p.startswith("/api/setup") for p in paths)
 
 

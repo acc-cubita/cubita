@@ -60,6 +60,9 @@ export interface MeResponse {
   //: نوعِ حساب در بازارِ عمده‌فروشی: standard | distributor (پخش‌کننده) | retailer (فروشگاه).
   //: ماژول‌های «پخشِ من» / «بازارِ خرید» با این گیت می‌شوند.
   tenant_kind: string
+  //: نقش‌های بازارِ این عضو؛ در سازمانی خریدار و پخش‌کننده می‌توانند هم‌زمان باشند.
+  marketplace_roles: Array<'retailer' | 'distributor'>
+  market_bridge_available?: boolean
   //: حسابِ آزمایشیِ رایگان — نوارِ «X روز مانده»، باکسِ خرید و صفحه‌ی قفل از این مشتق می‌شوند.
   is_trial: boolean
   //: روزهای مانده تا انقضای آزمایشی (منفی = گذشته). برای مشتریِ واقعی null.
@@ -6171,6 +6174,7 @@ export interface MpMessage {
   id: string
   sender_role: 'distributor' | 'retailer'
   sender_user_id: string | null
+  sender_name?: string | null
   body: string
   created_at: string
 }
@@ -6253,7 +6257,7 @@ export const fetchMpDistributorConnections = (token: string) =>
   authedGet<MpConnection[]>(token, '/api/marketplace/distributor/connections')
 
 export const setMpConnectionStatus = (token: string, id: string, status: 'approved' | 'rejected' | 'blocked') =>
-  authedSend<MpConnection>(token, 'POST', `/api/marketplace/distributor/connections/${id}/status`, { status })
+  authedMarketSend<MpConnection>(token, `/api/marketplace/distributor/connections/${id}/status`, { status })
 
 // --- زونِ ارسال (پخش‌کننده) --------------------------------------
 export interface MpZone {
@@ -6265,16 +6269,16 @@ export interface MpZone {
 export const fetchMpZones = (token: string) =>
   authedGet<MpZone[]>(token, '/api/marketplace/distributor/zones')
 export const createMpZone = (token: string, data: { name: string; notes?: string }) =>
-  authedSend<MpZone>(token, 'POST', '/api/marketplace/distributor/zones', data)
+  authedMarketSend<MpZone>(token, '/api/marketplace/distributor/zones', data)
 export const updateMpZone = (token: string, id: string, data: { name: string; notes?: string }) =>
-  authedSend<MpZone>(token, 'PUT', `/api/marketplace/distributor/zones/${id}`, data)
+  authedMarketSend<MpZone>(token, `/api/marketplace/distributor/zones/${id}`, data, 'PUT')
 export const deleteMpZone = (token: string, id: string) =>
-  authedDelete(token, `/api/marketplace/distributor/zones/${id}`)
+  authedMarketDelete(token, `/api/marketplace/distributor/zones/${id}`)
 export const assignMpConnectionZone = (token: string, connectionId: string, zoneId: string | null) =>
-  authedSend<MpConnection>(token, 'POST', `/api/marketplace/distributor/connections/${connectionId}/zone`, { zone_id: zoneId })
+  authedMarketSend<MpConnection>(token, `/api/marketplace/distributor/connections/${connectionId}/zone`, { zone_id: zoneId })
 
 // --- مرجوعیِ بازار --------------------------------------
-export type MpReturnStatus = 'requested' | 'approved' | 'rejected'
+export type MpReturnStatus = 'requested' | 'sync_pending' | 'approved' | 'rejected'
 export interface MpReturnLine {
   order_line_id: string
   title: string
@@ -6307,14 +6311,14 @@ export interface MpReturnRequestIn {
 export const fetchMpRetailerReturns = (token: string) =>
   authedGet<MpReturn[]>(token, '/api/marketplace/retailer/returns')
 export const requestMpReturn = (token: string, data: MpReturnRequestIn) =>
-  authedSend<MpReturn>(token, 'POST', '/api/marketplace/retailer/returns', data)
+  authedMarketSend<MpReturn>(token, '/api/marketplace/retailer/returns', data)
 // سمتِ پخش‌کننده
 export const fetchMpDistributorReturns = (token: string) =>
   authedGet<MpReturn[]>(token, '/api/marketplace/distributor/returns')
 export const approveMpReturn = (token: string, id: string) =>
-  authedSend<MpReturn>(token, 'POST', `/api/marketplace/distributor/returns/${id}/approve`, {})
+  authedMarketSend<MpReturn>(token, `/api/marketplace/distributor/returns/${id}/approve`, {})
 export const rejectMpReturn = (token: string, id: string, response_note?: string) =>
-  authedSend<MpReturn>(token, 'POST', `/api/marketplace/distributor/returns/${id}/reject`, { response_note: response_note ?? '' })
+  authedMarketSend<MpReturn>(token, `/api/marketplace/distributor/returns/${id}/reject`, { response_note: response_note ?? '' })
 
 // سمتِ فروشگاه — کشف/اتصال/کاتالوگ
 export const fetchMpDistributors = (token: string) =>
@@ -6324,7 +6328,7 @@ export const fetchMpRetailerConnections = (token: string) =>
   authedGet<MpConnection[]>(token, '/api/marketplace/retailer/connections')
 
 export const requestMpConnection = (token: string, distributor_tenant_id: string) =>
-  authedSend<MpConnection>(token, 'POST', '/api/marketplace/retailer/connections', { distributor_tenant_id })
+  authedMarketSend<MpConnection>(token, '/api/marketplace/retailer/connections', { distributor_tenant_id })
 
 // گفتگوی اتصال (مشترک بین فروشگاه و پخش‌کننده) — رشته‌ی دائم به‌ازای هر اتصالِ approved.
 export const fetchMpMessages = (token: string, connectionId: string, afterIso?: string) =>
@@ -6334,7 +6338,7 @@ export const fetchMpMessages = (token: string, connectionId: string, afterIso?: 
   )
 
 export const sendMpMessage = (token: string, connectionId: string, body: string) =>
-  authedSend<MpMessage>(token, 'POST', `/api/marketplace/connections/${connectionId}/messages`, { body })
+  authedMarketSend<MpMessage>(token, `/api/marketplace/connections/${connectionId}/messages`, { body })
 
 // جمعِ پیام‌های خوانده‌نشده‌ی همه‌ی اتصال‌های approved — برای نشانِ نویگیشن.
 export const fetchMpUnread = (token: string) => authedGet<number>(token, '/api/marketplace/unread')
@@ -6347,7 +6351,53 @@ export const fetchMpCatalog = (token: string, distributorId?: string) =>
 
 // --- سفارش‌ها (M4) --------------------------------------------------------------
 
-export type MpOrderStatus = 'placed' | 'confirmed' | 'delivered' | 'rejected' | 'shipped' | 'received' | 'cancelled'
+export type MpOrderStatus = 'placed' | 'sync_pending' | 'confirmed' | 'delivered' | 'rejected' | 'shipped' | 'received' | 'cancelled'
+
+export interface EnterpriseMarketState {
+  status: 'unlinked' | 'pending' | 'active' | 'revoked'
+  cloud_tenant_id?: string | null
+  last_sync_at: string | null
+  last_error_code: string
+  catalog_approved: boolean
+}
+
+export const fetchEnterpriseMarketState = (token: string) =>
+  authedGet<EnterpriseMarketState>(token, '/api/local-market/state')
+
+export const startEnterpriseMarketPair = (token: string) =>
+  authedSend<{ link_id: string; pair_code: string; expires_at: string }>(token, 'POST', '/api/local-market/pair/start', {})
+
+export const completeEnterpriseMarketPair = (token: string) =>
+  authedSend<{ status: string; cloud_tenant_id?: string }>(token, 'POST', '/api/local-market/pair/complete', {})
+
+export const claimEnterpriseMarketPair = (token: string, code: string) =>
+  authedSend<{ link_id: string; status: string }>(token, 'POST', '/api/enterprise/market/pair/claim', { code })
+
+export interface EnterpriseMarketMappings {
+  approved: boolean
+  last_sync_at: string | null
+  last_error_code: string
+  listings: Array<{ local_listing_id: string; market_listing_ref: string }>
+  items: Array<{ local_item_id: string; market_item_ref: string }>
+}
+
+export const fetchEnterpriseMarketMappings = (token: string) =>
+  authedGet<EnterpriseMarketMappings>(token, '/api/local-market/catalog/mappings')
+
+export const mapEnterpriseMarketListing = (token: string, listing: Listing) =>
+  authedSend<{ market_listing_ref: string }>(token, 'POST', '/api/local-market/catalog/mappings', {
+    local_listing_id: listing.id,
+    items: listing.components.map(component => ({ local_item_id: component.item_id })),
+  })
+
+export const approveEnterpriseMarketCatalog = (token: string) =>
+  authedSend<{ approved: boolean }>(token, 'POST', '/api/local-market/catalog/approve', {})
+
+export const pauseEnterpriseMarketCatalog = (token: string) =>
+  authedSend<{ approved: boolean }>(token, 'POST', '/api/local-market/catalog/pause', {})
+
+export const removeEnterpriseMarketListingMapping = (token: string, listingId: string) =>
+  authedDelete(token, `/api/local-market/catalog/mappings/${listingId}`)
 
 export interface MpOrderLine {
   id: string | null
@@ -6395,7 +6445,7 @@ export interface MpOrderPlaceIn {
 
 // سمتِ فروشگاه
 export const placeMpOrder = (token: string, data: MpOrderPlaceIn) =>
-  authedSend<MpOrder>(token, 'POST', '/api/marketplace/retailer/orders', data)
+  authedMarketSend<MpOrder>(token, '/api/marketplace/retailer/orders', data)
 
 export const fetchMpRetailerOrders = (token: string) =>
   authedGet<MpOrder[]>(token, '/api/marketplace/retailer/orders')
@@ -6408,14 +6458,14 @@ export const fetchMpDistributorOrders = (token: string) =>
   authedGet<MpOrder[]>(token, '/api/marketplace/distributor/orders')
 
 export const confirmMpOrder = (token: string, id: string, cashPercent = 0) =>
-  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/confirm`, { cash_percent: cashPercent })
+  authedMarketSend<MpOrder>(token, `/api/marketplace/distributor/orders/${id}/confirm`, { cash_percent: cashPercent })
 
 // ثبتِ تحویل توسطِ مامور حمل/انتقال — ورودِ کالا به انبارِ فروشگاه اینجا انجام می‌شود.
 export const deliverMpOrder = (token: string, id: string, cashPercent = 0) =>
-  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/deliver`, { cash_percent: cashPercent })
+  authedMarketSend<MpOrder>(token, `/api/marketplace/distributor/orders/${id}/deliver`, { cash_percent: cashPercent })
 
 export const rejectMpOrder = (token: string, id: string) =>
-  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/reject`, {})
+  authedMarketSend<MpOrder>(token, `/api/marketplace/distributor/orders/${id}/reject`, {})
 
 // گفتگوی زیرِ هر سفارش — رشته‌ی جدا؛ هر دو سمتِ همان سفارش (بدونِ گیتِ وضعیت).
 export const fetchMpOrderMessages = (token: string, orderId: string, afterIso?: string) =>
@@ -6425,7 +6475,7 @@ export const fetchMpOrderMessages = (token: string, orderId: string, afterIso?: 
   )
 
 export const sendMpOrderMessage = (token: string, orderId: string, body: string) =>
-  authedSend<MpMessage>(token, 'POST', `/api/marketplace/orders/${orderId}/messages`, { body })
+  authedMarketSend<MpMessage>(token, `/api/marketplace/orders/${orderId}/messages`, { body })
 
 // ── کمیسیونِ پلتفرم (۲٪) ───────────────────────────────────────────────
 export interface MpCommissionPeriod {
@@ -10655,3 +10705,65 @@ export const updateJournalEntry = (token: string, entryId: string, data: Journal
 
 export const fetchJournalEditHistory = (token: string, entryId: string) =>
   authedGetAll<JournalEditEvent>(token, `/api/journal-entries/${entryId}/history`)
+
+// Keep one key for the same market intent across a lost response or manual
+// retry. The enterprise broker commits this key with the order mutation.
+const marketRequestKeys = new Map<string, string>()
+function marketIntent(path: string, body: unknown): string { return `cubita:market:${path}:${JSON.stringify(body)}` }
+function marketRequestKey(path: string, body: unknown): string {
+  const intent = marketIntent(path, body)
+  let key = marketRequestKeys.get(intent)
+  if (!key) {
+    try { key = sessionStorage.getItem(intent) ?? undefined } catch { /* private storage unavailable */ }
+  }
+  if (!key) key = globalThis.crypto.randomUUID()
+  marketRequestKeys.set(intent, key)
+  try { sessionStorage.setItem(intent, key) } catch { /* in-memory retry still works */ }
+  return key
+}
+async function authedMarketSend<T>(token: string, path: string, body: unknown, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
+  const result = await authedSend<T>(token, method, path, body, marketRequestKey(path, body))
+  // A basket spans multiple orders: retain those keys until the whole basket
+  // succeeds. Other commands may intentionally repeat after a successful reply.
+  if (path !== '/api/marketplace/retailer/orders') clearMarketRequest(path, body)
+  return result
+}
+export function clearMpOrderRequest(data: MpOrderPlaceIn): void {
+  clearMarketRequest('/api/marketplace/retailer/orders', data)
+}
+function clearMarketRequest(path: string, body: unknown): void {
+  const intent = marketIntent(path, body)
+  marketRequestKeys.delete(intent)
+  try { sessionStorage.removeItem(intent) } catch { /* in-memory key was removed */ }
+}
+
+async function authedMarketDelete(token: string, path: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': marketRequestKey(path, null) },
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw apiError(body, `حذف ناموفق بود (${res.status})`, res.status)
+  }
+  clearMarketRequest(path, null)
+}
+
+export interface EnterpriseMarketPostingError {
+  event_id: string
+  order_number: number
+  side: 'buyer' | 'seller'
+  kind: string
+  status: string
+  attempts: number
+  error_code: string
+  error_detail: string
+  lines: Array<{ market_item_ref: string; name: string; unit: string }>
+}
+export const fetchEnterpriseMarketSyncStatus = (token: string) =>
+  authedGet<{ last_sync_at: string | null; offline: boolean; access_denied: boolean }>(token, '/api/local-market/sync-status')
+export const fetchEnterpriseMarketPostingErrors = (token: string) =>
+  authedGet<EnterpriseMarketPostingError[]>(token, '/api/local-market/posting-errors')
+export const retryEnterpriseMarketPosting = (token: string, eventId: string) =>
+  authedSend<{ outcome: string }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/retry`, {})
+export const repairEnterpriseMarketPostingMapping = (token: string, eventId: string, marketRef: string, itemId: string) =>
+  authedSend<{ mapped: boolean }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/mapping`, { market_item_ref: marketRef, local_item_id: itemId })

@@ -11,6 +11,7 @@ import {
 import { PageHeader } from '../components/PageHeader'
 import { SectionCard } from '../components/SectionCard'
 import { setExperience, useExperienceMode } from '../lib/experienceMode'
+import { EnterpriseMarketClaimCard } from '../components/EnterpriseMarketPairCard'
 
 export function ProfilePage({
   token,
@@ -39,6 +40,7 @@ export function ProfilePage({
           {isOwner && <BusinessCard token={token} me={me} onMeUpdated={onMeUpdated} />}
         </div>
       </div>
+      {isOwner && me.edition === 'cloud' && me.market_bridge_available && <EnterpriseMarketClaimCard token={token} />}
     </div>
   )
 }

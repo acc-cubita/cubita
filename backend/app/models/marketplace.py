@@ -35,7 +35,7 @@ from app.models.base import TimestampMixin, UUIDPKMixin
 
 LISTING_KINDS = ("single", "pack")
 CONNECTION_STATUSES = ("pending", "approved", "rejected", "blocked")
-ORDER_STATUSES = ("placed", "confirmed", "delivered", "rejected", "shipped", "received", "cancelled")
+ORDER_STATUSES = ("placed", "sync_pending", "confirmed", "delivered", "rejected", "shipped", "received", "cancelled")
 SETTLEMENT_MODES = ("credit", "online")
 ORDER_PAYMENT_STATUSES = ("unpaid", "paid", "refunded")
 COMMISSION_STATUSES = ("pending", "settled")
@@ -264,6 +264,9 @@ class MarketplaceOrderLine(UUIDPKMixin, Base):
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     qty: Mapped[float] = mapped_column(Numeric(18, 3), default=1)
     line_total: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    # Frozen at placement. A later catalog sync must not change which items a
+    # previously accepted order will move or how its price is allocated.
+    fulfillment_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     order: Mapped["MarketplaceOrder"] = relationship(back_populates="lines")
 
@@ -351,6 +354,7 @@ class MarketplaceMessage(UUIDPKMixin, TimestampMixin, Base):
     sender_tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     sender_role: Mapped[str] = mapped_column(String(20))  # distributor | retailer
     sender_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    sender_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
     body: Mapped[str] = mapped_column(Text)
 
 
