@@ -35,6 +35,7 @@
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
 
+
 > **حادثه‌ی «دو سرِ زنجیره» — بسته شد (۱۴۰۵/۰۶/۲۴).**
 >
 > تنخواه `0151` گرفت و پیمانکاری هم `0152` را پشتِ `0150` گذاشت: **دو سر روی یک
@@ -117,6 +118,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+
 | Codex | `enterprise_market_local.py`، تست کش/پیوند؛ `pytest` آزاد | اصلاح نهایی #261: پیوند جدید کش گفتگو/بازار و تأیید انتشار قبلی را به ارث نمی‌برد؛ ۱۱ تست پیوند/کش پاس، انتشار همچنان OFF | ۱۴۰۵/۰۷/۰۹ |
 | Codex | بازار سازمانی، مهاجرت `0188`، رابط/ناوبری/ModulesPage، مستندات و تست‌ها؛ ادعای کد و `pytest/alembic` آزاد؛ probe حذف شد | کد و راستی‌آزمایی محلی آمادهٔ PR پیش‌نویس؛ ۴۲۴۸ بک‌اند + راه‌اندازی واقعی PostgreSQL + ۱۴۵ منتخب نهایی، ۱۰۵۲ فرانت‌اند + دو تست کارت، migration round-trip و تطبیق مدل موفق؛ feature OFF، QA بصری/دو نصب واقعی و انتشار باقی است | ۱۴۰۵/۰۷/۰۹ |
 | Codex | یادداشت هشدار و تاریخچهٔ استقرار production #258؛ منابع مستندات آزاد | کاربر `deploy.sh production` را اجرا کرد؛ پیش/پس backup و rollback موجود و خواندنی، hash کد برابر، سرویس فعال، Alembic 0187، health/وب/asset ۲۰۰ و دو مسیر بی‌احراز ۴۰۱. هشدار انجام‌شده پاک و نتیجه در تاریخچه ثبت شد؛ نصب دو رایانه و آزمون حساب کاربر انجام نشده | ۱۴۰۵/۰۷/۰۸ |
@@ -234,3 +236,5 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 | Claude Opus 5 | `services/check_search.py`, `check_ops.py`, `routers/check_ops.py`, `0115_cheque_traceability.py`, `CheckOpsPages.tsx` | جستجو و ردیابی چک (مهاجرت ۰۱۱۵) | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `models/inventory.py`, `advanced_inventory.py`, `services/items.py`, `units.py`, `pricing.py`, `0117`–`0120`, `ProductsPanel.tsx`, `UnitsPanel.tsx`, `ItemTaxonomyPanel.tsx` | تعریف کالا و خدمت — Item Master (مهاجرت‌های ۰۱۱۷ تا ۰۱۲۰) | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/warehouses.py`, `models/inventory.py`, `routers/inventory.py`, `0116_warehouse_master.py`, `WarehousesPanel.tsx` | تعریف و مدیریت انبار (مهاجرت ۰۱۱۶) | ۱۴۰۵/۰۶/۲۰ |
+
+| Codex | نسخه و مستندات انتشار ۱.۹.۱۰ | وب/API بارگذاری با SHA256 برابر؛ سرور کامل selftest موفق؛ بازار خاموش | ۱۴۰۵/۰۷/۰۹ |
