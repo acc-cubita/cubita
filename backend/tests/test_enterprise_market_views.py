@@ -53,3 +53,21 @@ def test_cache_cannot_hide_rejected_bridge_credentials(db, tenant_id):
     with pytest.raises(HTTPException) as exc:
         local_router._market_cache(db, tenant_id)
     assert exc.value.status_code == 403
+
+
+def test_new_pair_cannot_inherit_previous_cloud_cache_or_catalog_approval(db, tenant_id, monkeypatch):
+    state = EnterpriseMarketLocalState(tenant_id=tenant_id, link_id=uuid4(), status="revoked",
+        cloud_tenant_id=uuid4(), catalog_approved=True, market_snapshot={"old_account": True},
+        market_snapshot_at=datetime.now(timezone.utc), message_threads={"old_thread": {}},
+        last_sync_at=datetime.now(timezone.utc), pending_generation=uuid4(), last_error_code="access_denied")
+    db.add(state); db.flush()
+    monkeypatch.setattr(local_router, "_license_token", lambda _db: "signed-test")
+    next_link = uuid4()
+    monkeypatch.setattr(local_router, "cloud_post", lambda *args, **kwargs: {"link_id":str(next_link),"pair_code":"TEST"})
+    local_router.pair_start(SimpleNamespace(tenant_id=tenant_id), db)
+    assert state.link_id == next_link and state.status == "pending"
+    assert state.cloud_tenant_id is None
+    assert not state.catalog_approved
+    assert state.market_snapshot is state.market_snapshot_at is state.message_threads is None
+    assert state.pending_generation is state.last_sync_at is None
+    assert state.last_error_code == ""

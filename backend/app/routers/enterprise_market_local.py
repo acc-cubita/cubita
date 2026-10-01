@@ -564,6 +564,17 @@ def pair_start(principal: Principal = Depends(owner), db: Session = Depends(get_
         state.cloud_tenant_id = None
         state.credential_encrypted = None
         state.status = "pending"
+    # A different cloud owner/account may approve this new link. Neither the
+    # previous account's cached conversations nor its publication approval
+    # may become visible/active before a fresh sync and owner review.
+    state.catalog_approved = False
+    state.pending_generation = None
+    state.pending_started_at = None
+    state.market_snapshot = None
+    state.market_snapshot_at = None
+    state.message_threads = None
+    state.last_sync_at = None
+    state.last_error_code = ""
     db.flush()
     return {"link_id": link_id, "pair_code": pair_code, "expires_at": result.get("expires_at")}
 
