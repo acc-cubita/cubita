@@ -18,7 +18,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import EnteredQuantityMixin, CommercialQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
@@ -132,8 +135,12 @@ class SalesInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base
     )
 
 
-class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
+class SalesInvoiceLine(CommercialQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "sales_invoice_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_sales_invoice_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_sales_invoice_lines_base_unit_id"),
+    )
 
     invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_invoices.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
@@ -309,9 +316,13 @@ class WarehouseIssue(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Ba
         return sum((line.amount for line in self.lines), Decimal(0))
 
 
-class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
+class WarehouseIssueLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "warehouse_issue_lines"
-    __table_args__ = (CheckConstraint("qty > 0", name="ck_warehouse_issue_lines_qty_positive"),)
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_warehouse_issue_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_warehouse_issue_lines_base_unit_id"),
+        CheckConstraint("qty > 0", name="ck_warehouse_issue_lines_qty_positive"),
+    )
 
     issue_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_issues.id", ondelete="CASCADE"), index=True
@@ -510,8 +521,12 @@ class WarehouseReceipt(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, 
         )
 
 
-class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
+class WarehouseReceiptLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "warehouse_receipt_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_warehouse_receipt_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_warehouse_receipt_lines_base_unit_id"),
+    )
 
     receipt_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("warehouse_receipts.id", ondelete="CASCADE"), index=True
@@ -688,8 +703,12 @@ class PurchaseInvoice(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
         )
 
 
-class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
+class PurchaseInvoiceLine(CommercialQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "purchase_invoice_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_purchase_invoice_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_purchase_invoice_lines_base_unit_id"),
+    )
 
     invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_invoices.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))

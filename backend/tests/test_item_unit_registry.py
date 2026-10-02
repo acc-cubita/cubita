@@ -149,3 +149,13 @@ def test_twelve_digit_factor_survives_registry_and_legacy_projection(db,user,cli
     db.expire_all()
     assert item.conversion_factor==Decimal('1.000000000001')
     assert rule.factor==item.conversion_factor
+
+
+def test_legacy_item_factor_api_keeps_tiny_decimal_in_fixed_notation(db,user,client):
+    item,_,carton=configured(db)
+    response=client.patch(f'/api/items/{item.id}',json={'conversion_factor':'0.000000000001'})
+    assert response.status_code==200,response.text
+    assert response.json()['conversion_factor']=='0.000000000001'
+    response=client.post(f'/api/items/{item.id}/convert-quantity',json={'qty':'10000','unit_id':str(carton.id)})
+    assert response.status_code==200,response.text
+    assert response.json()['target_qty']=='0.00000001'

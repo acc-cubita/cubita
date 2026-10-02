@@ -849,7 +849,7 @@ def delete_unit(
     except IntegrityError:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"واحدِ «{unit.name}» روی کالایی نشسته و حذف نمی‌شود؛ به‌جای حذف، غیرفعالش کنید.",
+            f"واحدِ «{unit.name}» در کالا یا سند تاریخی استفاده شده و حذف نمی‌شود؛ به‌جای حذف، غیرفعالش کنید.",
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

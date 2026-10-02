@@ -19,7 +19,10 @@ from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, Numeric, Stri
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import EnteredQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.returns import RETURN_CONDITIONS
 from app.models.tenant import TenantMixin
@@ -82,9 +85,11 @@ class WarehouseIssueReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMix
         return sum((line.amount for line in self.lines), Decimal(0))
 
 
-class WarehouseIssueReturnLine(TenantMixin, UUIDPKMixin, Base):
+class WarehouseIssueReturnLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "warehouse_issue_return_lines"
     __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_warehouse_issue_return_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_warehouse_issue_return_lines_base_unit_id"),
         CheckConstraint("qty > 0", name="ck_warehouse_issue_return_lines_qty_positive"),
         CheckConstraint(f"return_condition IN {RETURN_CONDITIONS}", name="ck_warehouse_issue_return_lines_condition"),
     )

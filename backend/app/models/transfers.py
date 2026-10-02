@@ -6,7 +6,10 @@ from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, Text, UniqueC
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import EnteredQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
@@ -47,8 +50,12 @@ class StockTransfer(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Bas
     )
 
 
-class StockTransferLine(TenantMixin, UUIDPKMixin, Base):
+class StockTransferLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "stock_transfer_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_transfer_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_transfer_lines_base_unit_id"),
+    )
 
     transfer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("stock_transfers.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))

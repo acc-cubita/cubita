@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
 from app.models.company import ADDRESS_TYPES, CHANNEL_TYPES
 from app.models.inventory import (
@@ -742,7 +742,7 @@ class ItemIn(BaseModel):
     primary_unit_id: UUID | None = None
     #: §۲۰ §۲۱ §۲۲ — واحدِ فرعی و نسبتش.
     secondary_unit_id: UUID | None = None
-    conversion_factor: Decimal = Decimal(0)
+    conversion_factor: Decimal = Field(default=Decimal(0), ge=0, max_digits=30, decimal_places=12)
     conversion_mode: str = "fixed"
     #: §۲۳ — متادیتای حمل‌ونقل، نه موجودی.
     unit_weight: Decimal = Decimal(0)
@@ -868,6 +868,11 @@ class ItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+    @field_serializer("conversion_factor", when_used="json")
+    def exact_factor_json(self, value: Decimal) -> str:
+        return format(value, "f")
+
+
 class ItemUpdateIn(BaseModel):
     """آپدیت جزئی کالا؛ فقط فیلدهای ارسال‌شده تغییر می‌کنند (بقیه دست‌نخورده می‌مانند).
 
@@ -899,7 +904,7 @@ class ItemUpdateIn(BaseModel):
     expense_account_id: UUID | None = None
     primary_unit_id: UUID | None = None
     secondary_unit_id: UUID | None = None
-    conversion_factor: Decimal | None = None
+    conversion_factor: Decimal | None = Field(default=None, ge=0, max_digits=30, decimal_places=12)
     conversion_mode: str | None = None
     unit_weight: Decimal | None = None
     unit_volume: Decimal | None = None

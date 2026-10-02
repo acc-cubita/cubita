@@ -40,6 +40,7 @@
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from fractions import Fraction
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -77,6 +78,7 @@ from app.services.inventory import (
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 from app.services import valuation
+from app.services import units
 from app.services.voiding import reverse_journal_entry
 
 
@@ -136,6 +138,9 @@ def _invoice_backed_lines(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "یکی از ردیف‌ها متعلق به این فاکتور نیست")
 
     already = received_by_line(db, invoice.id)
+    prior = db.query(WarehouseReceiptLine).join(WarehouseReceipt).filter(
+        WarehouseReceiptLine.purchase_invoice_line_id.in_(requested),
+        WarehouseReceipt.voided_at.is_(None), WarehouseReceipt.status == "posted").all()
     rows = []
     for line in purchase_lines:
         if line.item.is_service:
@@ -146,12 +151,19 @@ def _invoice_backed_lines(
                 f"«{line.item_name_snapshot or line.item.name}» خدمت است و رسید انبار نمی‌خواهد؛ "
                 "هزینه‌اش با خودِ فاکتور ثبت شده است.",
             )
-        remaining = Decimal(line.qty) - already.get(line.id, Decimal(0))
-        if requested[line.id] > remaining:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                f"مقدار تحویل «{line.item_name_snapshot or line.item.name}» از مانده {remaining} بیشتر است",
-            )
+        incoming = next(row for row in data.lines if row.purchase_invoice_line_id == line.id)
+        if incoming.observations:
+            raise HTTPException(400, "نسبت رسید از فاکتور اصلی محفوظ است؛ نسبت تازه نفرستید")
+        original = units.document_conversion(db, line, line.item)
+        consumed = sum((Fraction(p.entered_qty) if p.entered_unit_id == original.source_unit_id
+            and p.entered_qty is not None else Fraction(p.qty) / original.ratio
+            for p in prior if p.purchase_invoice_line_id == line.id), Fraction(0))
+        try:
+            conversion = units.historical_return_conversion(original, requested[line.id],
+                incoming.unit_id or original.source_unit_id,
+                returned_base=already.get(line.id, Decimal(0)), returned_in_source=consumed)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         #: بهای ورود از **خالصِ ردیفِ فاکتور** می‌آید (پس از تخفیف، با اضافات و
         #: عوارض) — نه از قیمتِ فهرستِ تأمین‌کننده. وگرنه انبار گران‌تر از چیزی
         #: که پول داده‌ایم ارزش‌گذاری می‌شود.
@@ -165,11 +177,12 @@ def _invoice_backed_lines(
             {
                 "purchase_invoice_line_id": line.id,
                 "item": line.item,
-                "qty": requested[line.id],
-                "unit_cost": line_value / Decimal(line.qty),
+                "qty": conversion.target_qty,
+                "conversion": conversion,
+                "unit_cost": line_value / original.target_qty,
                 "code": line.item_code_snapshot or line.item.sku,
                 "name": line.item_name_snapshot or line.item.name,
-                "unit": line.unit_snapshot or line.item.unit,
+                "unit": original.target_unit_name,
                 "description": next(
                     row.description
                     for row in data.lines
@@ -195,15 +208,20 @@ def _direct_lines(db: Session, data: WarehouseReceiptIn) -> list[dict]:
         item = items.get(row.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {row.item_id} یافت نشد")
+        context = "production" if data.receipt_type == "production" else (
+            "inventory" if data.receipt_type == "opening" else "purchase")
+        conversion = units.convert_transaction(db, item, row.qty, row.unit_id,
+            context=context, observations=row.observations)
         rows.append(
             {
                 "purchase_invoice_line_id": None,
                 "item": item,
-                "qty": Decimal(row.qty),
-                "unit_cost": Decimal(row.unit_cost or 0),
+                "qty": conversion.target_qty,
+                "conversion": conversion,
+                "unit_cost": Decimal(row.qty) * Decimal(row.unit_cost or 0) / conversion.target_qty,
                 "code": item.sku,
                 "name": item.name,
-                "unit": item.unit,
+                "unit": conversion.target_unit_name,
                 "description": row.description,
             }
         )
@@ -424,7 +442,7 @@ def _reclassification_lines(
         #: و چند ریال در «کالای در راه» جا می‌ماند — حسابی که باید صفر شود و
         #: هرگز نمی‌شد.
         before = _reclassified_so_far(db, line.id) - moved
-        if Decimal(row["qty"]) + _received_before(db, line.id, receipt.id) >= Decimal(line.qty):
+        if Decimal(row["qty"]) + _received_before(db, line.id, receipt.id) >= Decimal(line.base_qty if line.base_qty is not None else line.qty):
             moved = line_net - before
         if moved <= 0:
             continue
@@ -531,7 +549,7 @@ def _apply_tax(
             continue
         line = db.get(PurchaseInvoiceLine, row["purchase_invoice_line_id"])
         row["tax_rate"] = Decimal(line.tax_rate_snapshot or 0)
-        line_qty = Decimal(line.qty)
+        line_qty = Decimal(line.base_qty if line.base_qty is not None else line.qty)
         row["tax_amount"] = (
             (Decimal(line.tax_amount_snapshot or 0) * Decimal(row["qty"]) / line_qty).quantize(
                 Decimal(1)
@@ -614,6 +632,7 @@ def create_warehouse_receipt(
         item = row["item"]
         receipt.lines.append(
             WarehouseReceiptLine(
+                **units.snapshot_fields(row["conversion"]),
                 purchase_invoice_line_id=row["purchase_invoice_line_id"],
                 seq=index,
                 item_id=item.id,
@@ -646,6 +665,7 @@ def create_warehouse_receipt(
                 (old_qty * Decimal(item.average_cost)) + landed_amount
             ) / new_qty
         move = StockLedger(
+            **units.movement_snapshot_fields(row["conversion"], row["qty"]),
             item_id=item.id,
             warehouse_id=data.warehouse_id,
             qty=row["qty"],
@@ -760,6 +780,7 @@ def void_warehouse_receipt(
             raise HTTPException(status.HTTP_409_CONFLICT, "ابطال رسید، موجودی انبار را منفی می‌کند")
         db.add(
             StockLedger(
+                **units.negated_snapshot_fields(move),
                 item_id=move.item_id,
                 warehouse_id=move.warehouse_id,
                 qty=-Decimal(move.qty),

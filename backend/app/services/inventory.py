@@ -32,6 +32,7 @@ from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import pricing
 from app.services import valuation
+from app.services import units
 from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
@@ -652,6 +653,9 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
         line_discount = Decimal(line.discount or 0) + allocated[idx]
+        conversion = units.convert_transaction(db, item, line.qty, line.unit_id,
+            context="purchase", observations=line.observations)
+        base_qty = conversion.target_qty
         line_addition = Decimal(line.addition or 0) + allocated_additions[idx]
         line_duty = line_duties_own[idx] + allocated_duties[idx]
         line_net = (line.qty * line.unit_cost) - line_discount + line_addition + line_duty
@@ -659,11 +663,12 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         # بهای واقعیِ تمام‌شده‌ی هر واحد پس از تخفیف. موجودی باید به همین ارزش‌گذاری
         # شود، وگرنه انبار گران‌تر از چیزی که پول داده‌ایم در دفاتر می‌نشیند و سودِ
         # فروشِ بعدی کمتر از واقع گزارش می‌شود.
-        effective_unit_cost = (line_net / line.qty) if line.qty else Decimal(0)
+        effective_unit_cost = (line_net / base_qty) if base_qty else Decimal(0)
         total_amount += line_net
         total_discount += line_discount
         invoice_lines.append(
             PurchaseInvoiceLine(
+                **units.snapshot_fields(conversion, commercial=True),
                 item_id=line.item_id,
                 qty=line.qty,
                 unit_cost=line.unit_cost,  # قیمتِ فهرستِ تأمین‌کننده، همان‌طور که در فاکتورش هست
@@ -680,7 +685,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 vat_status=item.purchase_vat_status,
                 item_code_snapshot=item.sku,
                 item_name_snapshot=item.name,
-                unit_snapshot=item.unit,
+                unit_snapshot=conversion.source_unit_name,
                 #: معینِ هزینه‌ی ردیفِ خدمت همین حالا حل و قفل می‌شود (فصلِ خرید خدمات
                 #: §۱۳ §۴۹): انتخابِ صریحِ کاربر، وگرنه معینِ خودِ خدمت، وگرنه پیش‌فرضِ نقش.
                 #: کالا `NULL` می‌ماند — بهایش به موجودیِ انبار می‌نشیند.
@@ -703,14 +708,15 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         # هیچ حرکت فیزیکی ندارند و بعداً از WarehouseReceipt وارد می‌شوند.
         if data.warehouse_id is not None and not item.is_service:
             existing_qty = get_total_stock_qty(db, item.id)
-            new_qty = existing_qty + line.qty
+            new_qty = existing_qty + base_qty
             if new_qty > 0:
                 item.average_cost = ((existing_qty * item.average_cost) + line_net) / new_qty
             stock_moves.append(
                 StockLedger(
+                    **units.movement_snapshot_fields(conversion, base_qty),
                     item_id=line.item_id,
                     warehouse_id=data.warehouse_id,
-                    qty=line.qty,
+                    qty=base_qty,
                     unit_cost=effective_unit_cost,
                     entry_date=data.invoice_date,
                     source_type="purchase_invoice",
@@ -719,7 +725,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             batch_seeds.append(
                 {
                     "item_id": line.item_id,
-                    "qty": Decimal(line.qty),
+                    "qty": base_qty,
                     "unit_cost": effective_unit_cost.quantize(Decimal(1)),
                     "idx": idx + 1,
                     #: ردیفِ متناظر، تا حرکتِ دفتر بداند از کدام ردیف آمده. شیء

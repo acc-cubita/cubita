@@ -5,6 +5,7 @@ document or ledger quantity is recalculated using today's conversion factor.
 """
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 from app.migration_utils import rls_disabled
 from app.tenancy import rls_statements
 
@@ -16,6 +17,7 @@ TABLES = ("item_units", "item_unit_conversions", "batch_unit_conversions")
 PARENTS = ("items", "units_of_measure", "stock_batches")
 QUANTITY_COLUMNS = (('batch_substitutions', 'qty'), ('bom_lines', 'qty'), ('boms', 'yield_qty'), ('enterprise_market_catalog', 'available_qty'), ('enterprise_market_catalog', 'staged_available_qty'), ('inventory_valuation_adjustments', 'qty'), ('item_warehouses', 'max_stock'), ('item_warehouses', 'min_stock'), ('items', 'max_stock'), ('items', 'min_stock'), ('items', 'reorder_point'), ('marketplace_catalog_allocations', 'qty'), ('marketplace_listing_components', 'qty'), ('marketplace_listings', 'bonus_qty'), ('marketplace_listings', 'bonus_threshold_qty'), ('marketplace_listings', 'max_order_qty'), ('marketplace_listings', 'min_order_qty'), ('marketplace_order_lines', 'qty'), ('marketplace_return_lines', 'qty'), ('product_bundle_lines', 'qty'), ('production_order_lines', 'qty'), ('production_orders', 'qty_produced'), ('production_plans', 'qty_planned'), ('production_plans', 'qty_produced'), ('purchase_invoice_lines', 'bonus_qty'), ('purchase_invoice_lines', 'qty'), ('purchase_return_lines', 'qty'), ('sales_invoice_lines', 'qty'), ('sales_quotation_lines', 'qty'), ('sales_return_lines', 'qty'), ('stock_adjustments', 'qty_diff'), ('stock_batches', 'qty'), ('stock_batches', 'received_qty'), ('stock_count_lines', 'counted_qty'), ('stock_count_lines', 'system_qty'), ('stock_ledger', 'qty'), ('stock_reservations', 'qty'), ('stock_transfer_lines', 'qty'), ('storefront_order_lines', 'qty'), ('warehouse_issue_lines', 'qty'), ('warehouse_issue_lines', 'secondary_qty'), ('warehouse_issue_return_lines', 'qty'), ('warehouse_issue_return_lines', 'secondary_qty'), ('warehouse_receipt_lines', 'qty'))
 QUANTITY_TABLES = tuple(sorted({table for table, column in QUANTITY_COLUMNS}))
+SNAPSHOT_TABLES = (('bom_lines', 'component_item_id', 'qty', False, False), ('production_order_lines', 'component_item_id', 'qty', False, False), ('purchase_invoice_lines', 'item_id', 'qty', True, True), ('purchase_return_lines', 'item_id', 'qty', True, False), ('sales_invoice_lines', 'item_id', 'qty', True, True), ('sales_quotation_lines', 'item_id', 'qty', True, True), ('sales_return_lines', 'item_id', 'qty', True, False), ('stock_adjustments', 'item_id', 'qty_diff', False, False), ('stock_ledger', 'item_id', 'qty', False, False), ('stock_transfer_lines', 'item_id', 'qty', False, False), ('warehouse_issue_lines', 'item_id', 'qty', False, True), ('warehouse_issue_return_lines', 'item_id', 'qty', False, True), ('warehouse_receipt_lines', 'item_id', 'qty', False, True))
 DDL = (
     "CREATE TABLE item_units (\n\titem_id UUID NOT NULL, \n\tunit_id UUID NOT NULL, \n\tpurchase_allowed BOOLEAN DEFAULT 'true' NOT NULL, \n\tsale_allowed BOOLEAN DEFAULT 'true' NOT NULL, \n\tinventory_allowed BOOLEAN DEFAULT 'true' NOT NULL, \n\tproduction_allowed BOOLEAN DEFAULT 'true' NOT NULL, \n\tdecimal_allowed BOOLEAN DEFAULT 'true' NOT NULL, \n\tis_active BOOLEAN DEFAULT 'true' NOT NULL, \n\ttenant_id UUID NOT NULL, \n\tid UUID NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, \n\tupdated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_item_units_identity UNIQUE (tenant_id, item_id, unit_id), \n\tCONSTRAINT fk_item_unit_item FOREIGN KEY(tenant_id, item_id) REFERENCES items (tenant_id, id) ON DELETE CASCADE, \n\tCONSTRAINT fk_item_unit_unit FOREIGN KEY(tenant_id, unit_id) REFERENCES units_of_measure (tenant_id, id), \n\tFOREIGN KEY(tenant_id) REFERENCES tenants (id) ON DELETE CASCADE\n)",
     'CREATE INDEX ix_item_units_tenant_id ON item_units (tenant_id)',
@@ -28,7 +30,7 @@ DDL = (
 
 def upgrade():
     conn = op.get_bind()
-    with rls_disabled(conn, (*PARENTS, *QUANTITY_TABLES)):
+    with rls_disabled(conn, tuple(dict.fromkeys((*PARENTS, *QUANTITY_TABLES, *(row[0] for row in SNAPSHOT_TABLES))))):
         invalid = conn.execute(sa.text("""
             SELECT i.id FROM items i
             LEFT JOIN units_of_measure p ON p.id=i.primary_unit_id AND p.tenant_id=i.tenant_id
@@ -63,6 +65,29 @@ def upgrade():
         for table, column in QUANTITY_COLUMNS:
             op.alter_column(table, column, type_=sa.Numeric(24, 8), existing_type=sa.Numeric(18, 3))
         op.alter_column("items", "conversion_factor", type_=sa.Numeric(30, 12), existing_type=sa.Numeric(18, 6))
+        for table, item_column, qty_column, commercial, has_name in SNAPSHOT_TABLES:
+            op.add_column(table, sa.Column("entered_qty", sa.Numeric(24, 8), nullable=True))
+            op.add_column(table, sa.Column("entered_unit_id", postgresql.UUID(as_uuid=True), nullable=True))
+            op.add_column(table, sa.Column("base_unit_id", postgresql.UUID(as_uuid=True), nullable=True))
+            op.add_column(table, sa.Column("unit_conversion_snapshot", postgresql.JSONB(), nullable=True))
+            for field in ("entered_unit_id", "base_unit_id"):
+                op.create_foreign_key(f"fk_{table}_{field}", table, "units_of_measure", ["tenant_id", field], ["tenant_id", "id"])
+            if commercial:
+                op.add_column(table, sa.Column("base_qty", sa.Numeric(24, 8), nullable=True))
+            historical_name = "coalesce(nullif(d.unit_snapshot,''),i.unit)" if has_name else "i.unit"
+            base_assignment = f', base_qty=d."{qty_column}"' if commercial else ''
+            conn.execute(sa.text(f"""
+                UPDATE "{table}" d SET entered_qty=d."{qty_column}",
+                  entered_unit_id=(SELECT u.id FROM units_of_measure u WHERE u.tenant_id=i.tenant_id AND u.name={historical_name}),
+                  base_unit_id=(SELECT u.id FROM units_of_measure u WHERE u.tenant_id=i.tenant_id AND u.name={historical_name}),
+                  unit_conversion_snapshot=jsonb_build_object(
+                    'schema_version',1,'source','legacy_base','original_input_known',false,
+                    'source_qty',d."{qty_column}"::text,'target_qty',d."{qty_column}"::text,
+                    'source_unit_name',{historical_name},'target_unit_name',{historical_name},
+                    'numerator','1','denominator','1','path','[]'::jsonb,'scale',8,'rounding','ROUND_HALF_UP')
+                  {base_assignment}
+                FROM items i WHERE i.id=d."{item_column}" AND i.tenant_id=d.tenant_id
+            """))
         for statement in DDL:
             conn.execute(sa.text(statement))
         conn.execute(sa.text("""
@@ -83,12 +108,16 @@ def upgrade():
 
 def downgrade():
     conn = op.get_bind()
-    with rls_disabled(conn, (*TABLES, *PARENTS, *QUANTITY_TABLES)):
+    with rls_disabled(conn, tuple(dict.fromkeys((*TABLES, *PARENTS, *QUANTITY_TABLES, *(row[0] for row in SNAPSHOT_TABLES))))):
         for table, column in QUANTITY_COLUMNS:
             # Identifiers are a frozen migration-owned list, never user input.
             changed = conn.execute(sa.text(f'SELECT EXISTS(SELECT 1 FROM "{table}" WHERE "{column}" <> round("{column}",3) OR abs("{column}")>=1000000000000000)')).scalar_one()
             if changed:
                 raise RuntimeError(f"INV-02 downgrade loses quantity precision: {table}.{column}; restore a verified backup")
+        for table, item_column, qty_column, commercial, has_name in SNAPSHOT_TABLES:
+            used = conn.execute(sa.text(f"SELECT EXISTS(SELECT 1 FROM \"{table}\" WHERE unit_conversion_snapshot IS NOT NULL AND unit_conversion_snapshot->>'source' IS DISTINCT FROM 'legacy_base')")).scalar_one()
+            if used:
+                raise RuntimeError(f"INV-02 downgrade discards historical conversion snapshots: {table}; restore a verified backup")
         incompatible = conn.execute(sa.text("""
             SELECT EXISTS(SELECT 1 FROM items WHERE conversion_factor <> round(conversion_factor,6) OR abs(conversion_factor)>=1000000000000)
              OR EXISTS(SELECT 1 FROM batch_unit_conversions)
@@ -103,6 +132,11 @@ def downgrade():
         """)).scalar_one()
         if incompatible:
             raise RuntimeError("INV-02 downgrade would discard multi-unit data; restore a verified pre-upgrade backup instead")
+    for table, item_column, qty_column, commercial, has_name in SNAPSHOT_TABLES:
+        for column in ("unit_conversion_snapshot", "base_unit_id", "entered_unit_id", "entered_qty"):
+            op.drop_column(table, column)
+        if commercial:
+            op.drop_column(table, "base_qty")
     for table, column in QUANTITY_COLUMNS:
         op.alter_column(table, column, type_=sa.Numeric(18, 3), existing_type=sa.Numeric(24, 8))
     op.alter_column("items", "conversion_factor", type_=sa.Numeric(18, 6), existing_type=sa.Numeric(30, 12))

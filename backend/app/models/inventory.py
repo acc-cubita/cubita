@@ -22,7 +22,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import EnteredQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
@@ -688,10 +691,14 @@ class ItemWarehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     warehouse: Mapped["Warehouse"] = relationship()
 
 
-class StockLedger(TenantMixin, UUIDPKMixin, Base):
+class StockLedger(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     """دفتر موجودی: هر رکورد یک حرکت ورود(+)/خروج(-) است. موجودی فعلی = SUM(qty) به تفکیک کالا/انبار."""
 
     __tablename__ = "stock_ledger"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_ledger_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_ledger_base_unit_id"),
+    )
 
     #: ترتیب قطعیِ ثبت. کلید اصلی UUID تصادفی است و مرتب کردن بر اساسش بی‌معناست،
     #: و `entry_date` فقط روز را دارد — پس چند حرکت در یک روز هیچ ترتیب مشخصی
@@ -743,7 +750,7 @@ class StockLedger(TenantMixin, UUIDPKMixin, Base):
     warehouse: Mapped["Warehouse"] = relationship()
 
 
-class StockAdjustment(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
+class StockAdjustment(EnteredQuantityMixin, TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     """انبارگردانی/تعدیل موجودی دستی (کسری یا اضافی) با سند حسابداری خودکار متناظر.
 
     **ابطال‌پذیر است، و دیرتر از بقیه شد.** تعدیلِ انبار سندی است که کارش اصلاحِ
@@ -753,6 +760,10 @@ class StockAdjustment(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     """
 
     __tablename__ = "stock_adjustments"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_adjustments_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_adjustments_base_unit_id"),
+    )
 
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))

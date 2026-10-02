@@ -143,7 +143,7 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
                 line.received_qty = Decimal(0)
                 line.remaining_qty = Decimal(0)
                 continue
-            ordered = Decimal(line.qty)
+            ordered = Decimal(line.base_qty if line.base_qty is not None else line.qty)
             got = received.get(line.id, ordered if invoice.id in legacy_ids else Decimal(0))
             line.received_qty = got
             line.remaining_qty = max(ordered - got, Decimal(0))

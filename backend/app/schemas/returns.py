@@ -115,6 +115,7 @@ class PurchaseReturnLineIn(BaseModel):
     #: باید معلوم باشد کدام ورود برگشت می‌خورد.
     warehouse_receipt_line_id: UUID | None = None
     qty: Decimal
+    unit_id: UUID | None = None
     #: «فیِ مرجوعی توافقی». `None` یعنی «همان ارزشِ دفتری» — پس گردشِ عادی
     #: هیچ عددی وارد نمی‌کند و هیچ اختلافی نمی‌سازد.
     agreed_unit_value: Decimal | None = None
@@ -182,6 +183,11 @@ class PurchaseReturnLineOut(BaseModel):
     purchase_invoice_line_id: UUID | None = None
     warehouse_receipt_line_id: UUID | None = None
     qty: Decimal
+    base_qty: Decimal | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     #: «فی» و «فی تمام‌شده» هر دو — یکی نیستند.
     unit_cost: Decimal
     freight_share: Decimal = Decimal(0)

@@ -95,16 +95,18 @@ class QuantityConversion:
     path: tuple[ConversionStep, ...]
     source_unit_name: str = ""
     target_unit_name: str = ""
+    rounding_adjustment: Decimal = Decimal(0)
 
     def snapshot(self) -> dict:
         def ratio_row(ratio):
             return {"numerator": str(ratio.numerator), "denominator": str(ratio.denominator)}
         return {
-            "schema_version": 1, "source_qty": str(self.source_qty),
-            "source_unit_id": str(self.source_unit_id), "target_qty": str(self.target_qty),
+            "schema_version": 1, "source_qty": format(self.source_qty, "f"),
+            "source_unit_id": str(self.source_unit_id), "target_qty": format(self.target_qty, "f"),
             "target_unit_id": str(self.target_unit_id), **ratio_row(self.ratio),
             "source_unit_name": self.source_unit_name, "target_unit_name": self.target_unit_name,
             "rounding": "ROUND_HALF_UP", "scale": 8,
+            "rounding_adjustment": format(self.rounding_adjustment, "f"),
             "path": [{"rule_id": str(step.rule_id), "version": step.version,
                       "from_unit_id": str(step.from_unit_id), "to_unit_id": str(step.to_unit_id),
                       "source": step.source, **ratio_row(step.ratio)} for step in self.path],
@@ -198,17 +200,74 @@ def historical_return_quantity(snapshot: dict, entered_qty: Decimal, *, returned
                                returned_base: Decimal = Decimal(0)) -> Decimal:
     """Final partial return closes the original rounded quantity exactly."""
     qty, used, used_base = map(exact_decimal, (entered_qty, returned_entered, returned_base))
-    original, original_base = map(exact_decimal, (snapshot["source_qty"], snapshot["target_qty"]))
-    if original <= 0 or qty <= 0 or used < 0 or used_base < 0 or used + qty > original or used_base > original_base:
-        raise ValueError("مقدار برگشت از مقدار باقیماندهٔ سند اصلی بیشتر است")
-    if qty + used == original:
-        result = original_base - used_base
+    original = conversion_from_snapshot(snapshot)
+    return historical_return_conversion(original, entered_qty, original.source_unit_id,
+        returned_base=returned_base, returned_in_source=Fraction(exact_decimal(returned_entered))).target_qty
+
+
+def conversion_from_snapshot(snapshot: dict, *, source_unit_id: UUID | None = None,
+                             target_unit_id: UUID | None = None) -> QuantityConversion:
+    source = UUID(snapshot["source_unit_id"]) if snapshot.get("source_unit_id") else source_unit_id
+    target = UUID(snapshot["target_unit_id"]) if snapshot.get("target_unit_id") else target_unit_id
+    if source is None or target is None:
+        raise ValueError("هویت واحد تاریخی مشخص نیست؛ برگشت را با واحد پایهٔ سند اصلی ثبت کنید")
+    ratio = Fraction(int(snapshot["numerator"]), int(snapshot["denominator"]))
+    steps = tuple(ConversionStep(UUID(step["rule_id"]), int(step["version"]),
+        UUID(step["from_unit_id"]), UUID(step["to_unit_id"]),
+        Fraction(int(step["numerator"]), int(step["denominator"])), step["source"])
+        for step in snapshot.get("path", []))
+    return QuantityConversion(exact_decimal(snapshot["source_qty"]), source,
+        exact_decimal(snapshot["target_qty"]), target, ratio, steps,
+        snapshot.get("source_unit_name", ""), snapshot.get("target_unit_name", ""),
+        exact_decimal(snapshot.get("rounding_adjustment", "0")))
+
+
+def historical_return_conversion(original: QuantityConversion, qty: Decimal, unit_id: UUID | None, *,
+                                 returned_base: Decimal = Decimal(0),
+                                 returned_in_source: Fraction = Fraction(0)) -> QuantityConversion:
+    qty = exact_decimal(qty)
+    source = unit_id or original.target_unit_id
+    used_base = exact_decimal(returned_base)
+    if used_base < 0 or returned_in_source < 0 or original.source_qty <= 0 or original.target_qty <= 0 or original.ratio <= 0:
+        raise ValueError("مقادیر تاریخی برگشت نامعتبرند؛ سند اصلی را بررسی کنید")
+    remaining_base = original.target_qty - used_base
+    if qty <= 0 or remaining_base <= 0:
+        raise ValueError("مقدار برگشت باید مثبت و کمتر از باقیماندهٔ سند اصلی باشد")
+    if source == original.target_unit_id:
+        target = qty
+        ratio, path = Fraction(1), ()
+        name = original.target_unit_name
+    elif source == original.source_unit_id:
+        remaining_source = Fraction(original.source_qty) - returned_in_source
+        if remaining_source <= 0:
+            raise ValueError("مقدار واردشدهٔ سند اصلی قبلاً کامل برگشت داده شده است")
+        last_source = rounded_quantity(remaining_source)
+        if qty > last_source:
+            raise ValueError("مقدار برگشت از باقیماندهٔ واحد واردشدهٔ سند اصلی بیشتر است")
+        # The final slice closes base rounding exactly, including mixed-unit returns.
+        target = remaining_base if qty == last_source else rounded_quantity(Fraction(qty) * original.ratio)
+        ratio, path = original.ratio, original.path
+        name = original.source_unit_name
     else:
-        ratio = Fraction(int(snapshot["numerator"]), int(snapshot["denominator"]))
-        result = rounded_quantity(Fraction(qty) * ratio)
-    if result <= 0 or used_base + result > original_base:
+        raise ValueError("این واحد در تبدیل تاریخی سند اصلی نیست؛ واحد واردشده یا پایهٔ همان سند را انتخاب کنید")
+    if target <= 0 or target > remaining_base:
         raise ValueError("مقدار پایهٔ برگشت از باقیماندهٔ سند اصلی بیشتر است")
-    return result
+    return QuantityConversion(qty, source, target, original.target_unit_id, ratio, path,
+                              name, original.target_unit_name, target - rounded_quantity(Fraction(qty) * ratio))
+
+
+def document_conversion(db: Session, line, item: Item) -> QuantityConversion:
+    """Read frozen document conversion; legacy quantities are already base quantities."""
+    snapshot = getattr(line, "unit_conversion_snapshot", None)
+    if snapshot and snapshot.get("source_unit_id") and snapshot.get("target_unit_id"):
+        return conversion_from_snapshot(snapshot)
+    # Legacy input is unknown. Do not apply a live secondary-unit factor to it.
+    base_id = getattr(line, "base_unit_id", None) or item.primary_unit_id
+    if base_id is None:
+        base_id = get_or_create(db, getattr(line, "unit_snapshot", "") or item.unit).id
+    qty = exact_decimal(getattr(line, "base_qty", None) or line.qty)
+    name = getattr(line, "unit_snapshot", "") or item.unit
+    return QuantityConversion(qty, base_id, qty, base_id, Fraction(1), (), name, name)
 
 
 def item_graph(db: Session, item: Item, *, batch_id: UUID | None = None,
@@ -400,7 +459,7 @@ def _configure_rule(db: Session, item: Item, data, *, rule_id: UUID | None = Non
 
 def rule_row(row) -> dict:
     result = {key: getattr(row, key) for key in ("id", "from_unit_id", "to_unit_id", "mode", "version", "is_active")}
-    result["factor"] = str(row.factor) if row.factor is not None else None
+    result["factor"] = format(row.factor, "f") if row.factor is not None else None
     return result
 
 
@@ -435,7 +494,7 @@ def _configure_batch_ratio(db: Session, item: Item, batch_id: UUID, data, user_i
         row.from_qty, row.to_qty, row.approved_by_id = data.from_qty, data.to_qty, user_id
     db.flush()
     item_graph(db, item, batch_id=batch_id)
-    return {"rule_id": row.rule_id, "from_qty": str(row.from_qty), "to_qty": str(row.to_qty)}
+    return {"rule_id": row.rule_id, "from_qty": format(row.from_qty, "f"), "to_qty": format(row.to_qty, "f")}
 
 
 def resolve(db: Session, unit_id: UUID) -> UnitOfMeasure:
@@ -531,12 +590,64 @@ def assert_conversion(item: Item) -> None:
         )
 
 
-def to_primary(db: Session, item: Item, qty: Decimal, unit_id: UUID | None) -> Decimal:
-    """Compatibility entry point delegates to the exact graph, never a second formula."""
+def convert_transaction(db: Session, item: Item, qty: Decimal, unit_id: UUID | None = None, *,
+                        context: str = "inventory", batch_id: UUID | None = None,
+                        observations=()) -> QuantityConversion:
+    """One posting entry point for legacy-created items and explicit observations."""
     from app.models.item_units import ItemUnit
+    db.query(Item).filter(Item.id == item.id).with_for_update().one()
     if not db.query(ItemUnit.id).filter_by(item_id=item.id, tenant_id=item.tenant_id).first():
         configure_legacy(db, item)
-    return convert_item_quantity(db, item, qty, unit_id).target_qty
+    overrides = {row.rule_id: ObservedRatio(row.from_qty, row.to_qty) for row in observations}
+    if len(overrides) != len(observations):
+        raise HTTPException(400, "برای یک قاعده دو نسبت واقعی نفرستید؛ نسبت درست را انتخاب کنید")
+    return convert_item_quantity(db, item, qty, unit_id, context=context,
+                                 batch_id=batch_id, transaction_overrides=overrides)
+
+
+def snapshot_fields(conversion: QuantityConversion, *, commercial: bool = False) -> dict:
+    snapshot = conversion.snapshot()
+    snapshot["source"] = "transaction"
+    result = {"entered_qty": conversion.source_qty, "entered_unit_id": conversion.source_unit_id,
+              "base_unit_id": conversion.target_unit_id, "unit_conversion_snapshot": snapshot}
+    if commercial:
+        result["base_qty"] = conversion.target_qty
+    return result
+
+
+def movement_snapshot_fields(conversion: QuantityConversion, signed_base_qty: Decimal) -> dict:
+    signed = exact_decimal(signed_base_qty)
+    if abs(signed) == abs(conversion.target_qty):
+        direction = signed / conversion.target_qty
+        moved = replace(conversion, source_qty=conversion.source_qty * direction, target_qty=signed,
+                        rounding_adjustment=conversion.rounding_adjustment * direction)
+    else:
+        # A split stores exact base quantity, with its whole document conversion as provenance.
+        moved = QuantityConversion(signed, conversion.target_unit_id, signed, conversion.target_unit_id,
+            Fraction(1), (), conversion.target_unit_name, conversion.target_unit_name)
+    result = snapshot_fields(moved)
+    if abs(signed) != abs(conversion.target_qty):
+        result["unit_conversion_snapshot"]["document_conversion"] = conversion.snapshot()
+        result["unit_conversion_snapshot"]["source"] = "allocated_base"
+    return result
+
+
+def negated_snapshot_fields(move) -> dict:
+    from copy import deepcopy
+    snapshot = deepcopy(move.unit_conversion_snapshot)
+    if snapshot is not None:
+        for key in ("source_qty", "target_qty", "rounding_adjustment"):
+            if snapshot.get(key) is not None:
+                snapshot[key] = format(-exact_decimal(snapshot[key]), "f")
+        snapshot["source"] = "void"
+    return {"entered_qty": -move.entered_qty if move.entered_qty is not None else None,
+            "entered_unit_id": move.entered_unit_id, "base_unit_id": move.base_unit_id,
+            "unit_conversion_snapshot": snapshot}
+
+
+def to_primary(db: Session, item: Item, qty: Decimal, unit_id: UUID | None) -> Decimal:
+    """Compatibility entry point delegates to the exact graph, never a second formula."""
+    return convert_transaction(db, item, qty, unit_id).target_qty
 
 
 def row(db: Session, item: Item) -> dict:

@@ -129,6 +129,7 @@ def recompute_average_cost(db: Session, item: Item) -> None:
 
 def _compensating_moves(db: Session, source_type: str, source_id: UUID, void_date: date_) -> list[StockLedger]:
     """برای هر حرکت انبارِ سند، یک حرکت قرینه می‌سازد."""
+    from app.services.units import negated_snapshot_fields
     original = (
         db.query(StockLedger)
         .filter(StockLedger.source_type == source_type, StockLedger.source_id == source_id)
@@ -136,6 +137,7 @@ def _compensating_moves(db: Session, source_type: str, source_id: UUID, void_dat
     )
     return [
         StockLedger(
+            **negated_snapshot_fields(move),
             item_id=move.item_id,
             warehouse_id=move.warehouse_id,
             qty=-Decimal(move.qty),

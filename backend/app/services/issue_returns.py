@@ -22,6 +22,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from fractions import Fraction
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -59,7 +60,7 @@ from app.services.voiding import (
     _guard_stock_stays_valid,
     reverse_journal_entry,
 )
-from app.services.warehouse_issues import _secondary, _user_label, returned_by_issue_line
+from app.services.warehouse_issues import _user_label, returned_by_issue_line
 
 SOURCE_TYPE = "warehouse_issue_return"
 
@@ -86,6 +87,7 @@ class _Row:
     #: §۱۴ — حالِ کالای برگشتی. **آخرِ فهرست** است و این عمدی است: سه فراخوانِ
     #: `_Row(...)` موضعی‌اند و درجِ وسط بی‌صدا `description` را جابه‌جا می‌کرد.
     return_condition: str = "sellable"
+    conversion: units.QuantityConversion | None = None
 
 
 # ─────────────────────────── مانده‌های مشتق ───────────────────────────
@@ -283,8 +285,12 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
             cogs_id = cogs_id or get_account(db, cc.COGS).id
             account_id = cogs_id
         cost_center_id = row.issue.cost_center_id
-        secondary_qty, secondary_unit = _secondary(db, item, row.qty)
+        secondary_qty = (units.rounded_quantity(Fraction(row.qty) * Fraction(source.secondary_qty) / Fraction(source.qty))
+                         if source.secondary_qty is not None and source.qty else None)
+        secondary_unit = source.secondary_unit_snapshot if secondary_qty is not None else ""
+        conversion = row.conversion or units.convert_transaction(db, item, row.qty)
         line = WarehouseIssueReturnLine(
+            **units.snapshot_fields(conversion),
             seq=seq,
             warehouse_issue_line_id=source.id,
             sales_return_line_id=row.sales_return_line_id,
@@ -310,6 +316,7 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
         splits = back or [(None, row.qty)]
         for batch_id, take in splits:
             move = StockLedger(
+                **units.movement_snapshot_fields(conversion, take),
                 item_id=item.id, warehouse_id=ret.warehouse_id, qty=take, unit_cost=unit_cost,
                 entry_date=ret.return_date, source_type=SOURCE_TYPE, source_id=ret.id,
                 batch_id=batch_id,
@@ -387,6 +394,10 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
 # ─────────────────────────── ثبت ───────────────────────────
 
 
+def item_units_for_legacy(db: Session, source: WarehouseIssueLine, item: Item) -> UUID:
+    return item.primary_unit_id or units.get_or_create(db, item.unit or "عدد").id
+
+
 def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
     sr_line_ids = [line.sales_return_line_id for line in data.lines if line.sales_return_line_id]
     issue_line_ids = [line.warehouse_issue_line_id for line in data.lines if line.warehouse_issue_line_id]
@@ -411,6 +422,30 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
     item_ids = {l.item_id for l in sr_lines.values()} | {l.item_id for l in lines.values()}
     items = {item.id: item for item in db.query(Item).filter(Item.id.in_(item_ids)).all()} if item_ids else {}
 
+    historical_used: dict[UUID, Fraction] = defaultdict(Fraction)
+    original_conversions = {}
+    for source in lines.values():
+        snapshot = source.unit_conversion_snapshot
+        if snapshot is None:
+            base = source.base_unit_id or item_units_for_legacy(db, source, items[source.item_id])
+            snapshot = {"source_qty": str(source.qty), "target_qty": str(source.qty),
+                "source_unit_name": source.unit_snapshot, "target_unit_name": source.unit_snapshot,
+                "numerator": "1", "denominator": "1", "path": []}
+        try:
+            original_conversions[source.id] = units.conversion_from_snapshot(snapshot,
+                source_unit_id=source.entered_unit_id or source.base_unit_id,
+                target_unit_id=source.base_unit_id)
+        except ValueError:
+            base = item_units_for_legacy(db, source, items[source.item_id])
+            original_conversions[source.id] = units.conversion_from_snapshot(snapshot, source_unit_id=base, target_unit_id=base)
+    previous_rows = db.query(WarehouseIssueReturnLine).join(WarehouseIssueReturn,
+        WarehouseIssueReturn.id == WarehouseIssueReturnLine.return_id).filter(
+        WarehouseIssueReturnLine.warehouse_issue_line_id.in_(list(lines)), WarehouseIssueReturn.voided_at.is_(None)).all() if lines else []
+    for prior in previous_rows:
+        original = original_conversions[prior.warehouse_issue_line_id]
+        historical_used[prior.warehouse_issue_line_id] += (Fraction(prior.entered_qty)
+            if prior.entered_unit_id == original.source_unit_id and prior.entered_qty is not None
+            else Fraction(prior.qty) / original.ratio)
     planned_issue: dict[UUID, Decimal] = defaultdict(Decimal)
     planned_sr: dict[UUID, Decimal] = defaultdict(Decimal)
     label = ISSUE_RETURN_TYPE_LABELS[data.return_type]
@@ -473,7 +508,16 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
                 "آن را ثبت کنید و مبنای این برگشت قرار دهید.",
             )
         item = items[source.item_id]
-        qty = units.to_primary(db, item, Decimal(req.qty), req.unit_id)
+        original = original_conversions[source.id]
+        try:
+            conversion = units.historical_return_conversion(original, Decimal(req.qty), req.unit_id,
+                returned_base=returned.get(source.id, Decimal(0)) + planned_issue[source.id],
+                returned_in_source=historical_used[source.id])
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        qty = conversion.target_qty
+        historical_used[source.id] += (Fraction(conversion.source_qty)
+            if conversion.source_unit_id == original.source_unit_id else Fraction(qty) / original.ratio)
         remaining = Decimal(source.qty) - returned.get(source.id, Decimal(0)) - planned_issue[source.id]
         if qty > remaining:
             raise HTTPException(
@@ -482,7 +526,7 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
                 f"(باقیمانده: {_q(max(remaining, Decimal(0)))})",
             )
         planned_issue[source.id] += qty
-        rows.append(_Row(source, issue, qty, None, description, req.return_condition))
+        rows.append(_Row(source, issue, qty, None, description, req.return_condition, conversion=conversion))
     return rows
 
 

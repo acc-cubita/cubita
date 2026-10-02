@@ -26,7 +26,10 @@ from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, Stri
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import EnteredQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
 
@@ -54,10 +57,14 @@ class Bom(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class BomLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class BomLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک جزء از فرمول — کالای جزء + مقدارِ لازم برای هر «بازده»."""
 
     __tablename__ = "bom_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_bom_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_bom_lines_base_unit_id"),
+    )
 
     bom_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("boms.id", ondelete="CASCADE"), index=True
@@ -126,10 +133,14 @@ class ProductionOrder(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class ProductionOrderLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class ProductionOrderLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """عکس‌برداری از یک جزءِ مصرف‌شده در یک سفارشِ تولید (مقدار و بهای لحظه‌ای)."""
 
     __tablename__ = "production_order_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_order_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_order_lines_base_unit_id"),
+    )
 
     production_order_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("production_orders.id", ondelete="CASCADE"), index=True

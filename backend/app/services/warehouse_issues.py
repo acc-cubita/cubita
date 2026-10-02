@@ -14,6 +14,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from fractions import Fraction
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -101,6 +102,7 @@ class _Row:
     #: «خودت تصمیم بگیر» و سرور FEFO می‌زند. کالای بی‌ردیابی اصلاً واردِ این مسیر
     #: نمی‌شود و تخصیصش خالی می‌ماند — همان رفتارِ دیروز.
     batch_allocations: list[tuple[UUID, Decimal]] | None = None
+    conversion: units.QuantityConversion | None = None
 
 
 # ─────────────────────────── قاعده‌های مشترک ───────────────────────────
@@ -197,7 +199,7 @@ def _secondary(db: Session, item: Item, qty: Decimal) -> tuple[Decimal | None, s
     if factor <= 0:
         return None, ""
     unit = db.get(UnitOfMeasure, item.secondary_unit_id)
-    return (qty / factor).quantize(Decimal("0.001")), unit.name if unit else ""
+    return units.rounded_quantity(Fraction(qty) / Fraction(factor)), unit.name if unit else ""
 
 
 def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User) -> WarehouseIssue:
@@ -254,7 +256,9 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
         #: خریدِ بیستم را بخورد. سندِ هم‌تاریخ یا تازه‌تر همان میانگینِ ذخیره‌شده را.
         unit_cost = valuation.cost_for_posting(db, item, issue.issue_date)
         secondary_qty, secondary_unit = _secondary(db, item, row.qty)
+        conversion = row.conversion or units.convert_transaction(db, item, row.qty)
         line = WarehouseIssueLine(
+            **units.snapshot_fields(conversion),
             seq=seq,
             sales_invoice_line_id=row.sales_invoice_line_id,
             item_id=item.id,
@@ -279,6 +283,7 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
         splits = plan or [(None, row.qty)]
         for batch_id, take in splits:
             move = StockLedger(
+                **units.movement_snapshot_fields(conversion, -take),
                 item_id=item.id, warehouse_id=issue.warehouse_id, qty=-take, unit_cost=unit_cost,
                 entry_date=issue.issue_date, source_type="warehouse_issue", source_id=issue.id,
                 batch_id=batch_id,
@@ -423,7 +428,11 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
         if item.is_service:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"«{item.name}» خدمت است و خروجِ انبار ندارد")
         items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
-        qty = units.to_primary(db, item, Decimal(line.qty), line.unit_id)
+        selected_batch = line.batch_allocations[0].batch_id if line.batch_allocations and len(line.batch_allocations) == 1 else None
+        conversion = units.convert_transaction(db, item, Decimal(line.qty), line.unit_id,
+            context="sale" if sale else "production" if data.issue_type == "production" else "inventory",
+            batch_id=selected_batch, observations=line.observations)
+        qty = conversion.target_qty
         if auto_account:
             account_id = auto_account_id
         else:
@@ -432,7 +441,7 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
                 checked[wanted] = _debit_account(db, wanted, inventory_ids).id
             account_id = checked[wanted]
         rows.append(_Row(
-            item=item, qty=qty, account_id=account_id, description=line.description.strip(),
+            item=item, qty=qty, account_id=account_id, description=line.description.strip(), conversion=conversion,
             batch_allocations=[(a.batch_id, Decimal(a.qty)) for a in (line.batch_allocations or [])] or None,
         ))
     if sale:
@@ -504,6 +513,7 @@ def void_warehouse_issue(
     valuation.guard_void(db, ("warehouse_issue",), issue.id)
     for move in moves:
         db.add(StockLedger(
+            **units.negated_snapshot_fields(move),
             item_id=move.item_id, warehouse_id=move.warehouse_id, qty=-Decimal(move.qty),
             unit_cost=move.unit_cost, entry_date=effective, source_type="void", source_id=issue.id,
         ))
