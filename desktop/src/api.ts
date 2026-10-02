@@ -1854,6 +1854,10 @@ export interface SalesQuotationLine {
   id: string
   item_id: string
   qty: string
+  entered_unit_id?: string | null
+  base_qty?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
   unit_price: string
   description: string
 }
@@ -1883,7 +1887,7 @@ export interface SalesQuotationInput {
   contact_id?: string | null
   customer_name?: string | null
   description: string
-  lines: { item_id: string; qty: number; unit_price: number; description: string }[]
+  lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[]; unit_price: number; description: string }[]
 }
 
 export const createSalesQuotation = (token: string, data: SalesQuotationInput) =>
@@ -10806,7 +10810,8 @@ export interface QuantityConversionSnapshot {
   rounding_adjustment?: string
   numerator: string
   denominator: string
-  path: Array<{ rule_id: string; version: number; source: string }>
+  path: Array<{ rule_id: string; version: number; source: string;
+    observation?: { from_qty: string; to_qty: string; from_unit_id: string; to_unit_id: string } }>
 }
 export interface UnitObservation { rule_id: string; from_qty: string; to_qty: string }
 export type ItemConversionInput = Pick<ItemConversionRule, 'from_unit_id' | 'to_unit_id' | 'mode' | 'factor'>

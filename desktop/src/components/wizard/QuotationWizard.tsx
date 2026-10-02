@@ -4,6 +4,8 @@ import type { ItemCache, WarehouseCache } from '../../electron.d'
 import type { SalesQuotationRecord } from '../../api'
 import { useQuotationDraft, type QuotationDraft } from '../../lib/quotationDraft'
 import { NumberInput } from '../NumberInput'
+import { TransactionUnitPicker } from '../TransactionUnitPicker'
+import { toFaDigits } from '../../lib/jalali'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { ItemPicker } from '../ItemPicker'
 import { TaskFlow, type WizardStep } from './TaskFlow'
@@ -151,7 +153,7 @@ function LinesStep({ q, items }: { q: QuotationDraft; items: ItemCache[] }) {
             {q.lines.map((line, i) => {
               const service = q.isService(line.itemId)
               const avail = q.stockMode === 'warehouse' && !service ? q.availableStock(line.itemId) : null
-              const over = avail != null && Number(line.qty) > avail
+              const over = avail != null && line.baseQtyPreview != null && Number(line.baseQtyPreview) > avail
               return (
                 <tr key={i}>
                   <td data-label="کالا">
@@ -160,8 +162,10 @@ function LinesStep({ q, items }: { q: QuotationDraft; items: ItemCache[] }) {
                   <td data-label="تعداد">
                     <div className="qty-with-unit">
                       <NumberInput allowDecimal value={line.qty} onChange={(v) => q.updateLine(i, { qty: v })} />
-                      {line.itemId && <span className="unit-suffix">{q.unitOf(line.itemId)}</span>}
                     </div>
+                    <TransactionUnitPicker token={q.token} itemId={line.itemId} qty={line.qty}
+                      context="sale" unitId={line.unitId} observations={line.observations}
+                      onChange={patch => q.changeLineUnit(i, patch)} />
                   </td>
                   {q.stockMode === 'warehouse' && (
                     <td data-label="موجودی انبار">
@@ -170,7 +174,7 @@ function LinesStep({ q, items }: { q: QuotationDraft; items: ItemCache[] }) {
                       ) : (
                         <div className="stock-cell">
                           <span className={over ? 'stock-over' : 'stock-ok'}>{avail != null ? fa(avail) : '—'} {q.unitOf(line.itemId)}</span>
-                          {avail != null && avail > 0 && (
+                          {avail != null && avail > 0 && (!line.unitId || line.unitName === q.unitOf(line.itemId)) && (
                             <button type="button" className="link-like" onClick={() => q.updateLine(i, { qty: String(avail) })}>استفاده</button>
                           )}
                           {over && <div className="stock-warn">بیش از موجودی</div>}
@@ -183,7 +187,7 @@ function LinesStep({ q, items }: { q: QuotationDraft; items: ItemCache[] }) {
                       <NumberInput
                         value={line.unitPrice}
                         onChange={(v) => q.updateLine(i, { unitPrice: v })}
-                        title={line.itemId ? `قیمت هر ${q.unitOf(line.itemId)}` : 'قیمت واحد'}
+                        title={line.itemId ? `قیمت هر ${line.unitName ?? q.unitOf(line.itemId)}` : 'قیمت واحد'}
                       />
                       {line.itemId && (
                         <button type="button" className="link-like" title="قیمتِ انبار" onClick={() => q.useInventoryPrice(i, line.itemId)}>
@@ -241,7 +245,7 @@ function ReviewStep({ q, items, warehouses }: { q: QuotationDraft; items: ItemCa
               return (
                 <tr key={i}>
                   <td data-label="کالا">{it?.name ?? '—'}</td>
-                  <td data-label="تعداد">{Number(line.qty).toLocaleString('fa-IR')} {it?.unit ?? ''}</td>
+                  <td data-label="تعداد">{toFaDigits(line.qty)} {line.unitName ?? it?.unit ?? ''}</td>
                   <td data-label="قیمت واحد">{Number(line.unitPrice || 0).toLocaleString('fa-IR')}</td>
                   <td data-label="مبلغ">{amount.toLocaleString('fa-IR')}</td>
                 </tr>
