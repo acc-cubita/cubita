@@ -1627,7 +1627,7 @@ export interface ItemIn {
   expense_account_id?: string | null
   primary_unit_id?: string | null
   secondary_unit_id?: string | null
-  conversion_factor?: number
+  conversion_factor?: string | number
   conversion_mode?: string
   unit_weight?: number
   unit_volume?: number

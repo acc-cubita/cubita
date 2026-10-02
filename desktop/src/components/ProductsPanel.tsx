@@ -1,3 +1,4 @@
+import { toFaDigits } from '../lib/jalali'
 import { useEffect, useMemo, useState } from 'react'
 import { Package, Pencil, Plus, Save, Trash2, X, Camera } from 'lucide-react'
 import {
@@ -260,7 +261,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       expenseAccountId: p.expense_account_id ?? '',
       primaryUnitId: p.primary_unit_id ?? '',
       secondaryUnitId: p.secondary_unit_id ?? '',
-      conversionFactor: String(Number(p.conversion_factor) || ''),
+      conversionFactor: p.conversion_factor ?? '',
       conversionMode: p.conversion_mode ?? 'fixed',
       unitWeight: String(Number(p.unit_weight) || ''),
       unitVolume: String(Number(p.unit_volume) || ''),
@@ -308,7 +309,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       unit: form.unit.trim() || 'عدد',
       primary_unit_id: form.primaryUnitId || null,
       secondary_unit_id: form.secondaryUnitId || null,
-      conversion_factor: Number(form.conversionFactor) || 0,
+      conversion_factor: form.conversionFactor || '0',
       conversion_mode: form.conversionMode,
       unit_weight: Number(form.unitWeight) || 0,
       unit_volume: Number(form.unitVolume) || 0,
@@ -1010,7 +1011,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                           <div className="entity-sub">
                             {p.conversion_mode === 'variable'
                               ? `۱ ${p.secondary_unit_name} = متغیر`
-                              : `۱ ${p.secondary_unit_name} = ${faMoney(Number(p.conversion_factor))} ${p.primary_unit_name || p.unit}`}
+                              : `۱ ${p.secondary_unit_name} = ${toFaDigits(p.conversion_factor.replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1'))} ${p.primary_unit_name || p.unit}`}
                           </div>
                         )}
                       </td>
