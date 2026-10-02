@@ -305,7 +305,8 @@ def remaining_entered_quantity(line, movements) -> Decimal:
     quantity = line.qty if quantity is None else quantity
     consumed = sum((Fraction(move.entered_qty)
         if move.entered_unit_id == source_id and move.entered_qty is not None
-        else Fraction(move.qty) / ratio for move in movements), Fraction(0))
+        else Fraction(getattr(move, "base_qty", None) if getattr(move, "base_qty", None) is not None
+                      else move.qty) / ratio for move in movements), Fraction(0))
     remaining = Fraction(quantity) - consumed
     return rounded_quantity(remaining) if remaining > 0 else Decimal(0)
 

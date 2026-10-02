@@ -20,6 +20,48 @@ def seed_stock(db,user,item,qty):
         lines=[PurchaseInvoiceLineIn(item_id=item.id,qty=Decimal(qty),unit_cost=Decimal(100))]),user)
 
 
+def test_quotation_partial_invoices_keep_original_unit_and_factor(db, user):
+    from app.schemas.quotations import SalesQuotationIn, SalesQuotationConvertIn
+    from app.services import quotations
+    item, piece, carton = configured(db)
+    quote = quotations.create_quotation(db, SalesQuotationIn(quotation_date=date.today(),
+        warehouse_id=main_warehouse(db).id, lines=[{'item_id': item.id, 'qty': '2',
+            'unit_id': carton.id, 'unit_price': '2400'}]), user)
+    line = quote.lines[0]
+    assert line.qty == 2 and line.base_qty == 48 and line.unit_snapshot == 'کارتن'
+    rule = db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
+    units.configure_rule(db, item, ConversionRuleIn(from_unit_id=carton.id,
+        to_unit_id=piece.id, factor='30'), rule_id=rule.id)
+    carton.name = 'کارتن تازه'; carton.is_active = False; db.flush()
+    for remaining in (Decimal(1), Decimal(0)):
+        invoice = quotations.convert_quotation_to_invoice(db, quote.id,
+            SalesQuotationConvertIn(lines=[{'quotation_line_id': line.id, 'qty': '1'}]), user)
+        assert invoice.lines[0].base_qty == 24 and invoice.lines[0].qty == 1
+        assert invoice.lines[0].unit_price == 2400
+        assert invoice.lines[0].unit_snapshot == 'کارتن'
+        assert invoice.lines[0].unit_conversion_snapshot['path'][0]['version'] == 1
+        assert line.remaining_invoiceable_qty == remaining
+    assert quote.commercial_status == 'fully_invoiced'
+
+
+def test_variable_quotation_partial_invoices_close_base_residual(db, user):
+    from app.schemas.quotations import SalesQuotationIn, SalesQuotationConvertIn
+    from app.services import quotations
+    item, meter, kg = configured(db, variable=True)
+    rule = db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
+    quote = quotations.create_quotation(db, SalesQuotationIn(quotation_date=date.today(),
+        warehouse_id=main_warehouse(db).id, lines=[{'item_id': item.id, 'qty': '3',
+            'unit_id': kg.id, 'unit_price': '100',
+            'observations': [{'rule_id': rule.id, 'from_qty': '3', 'to_qty': '1'}]}]), user)
+    quantities = []
+    for _ in range(3):
+        invoice = quotations.convert_quotation_to_invoice(db, quote.id,
+            SalesQuotationConvertIn(lines=[{'quotation_line_id': quote.lines[0].id, 'qty': '1'}]), user)
+        quantities.append(invoice.lines[0].base_qty)
+    assert quantities == [Decimal('0.33333333'), Decimal('0.33333333'), Decimal('0.33333334')]
+    assert quote.commercial_status == 'fully_invoiced'
+
+
 def issue(db,user,item,qty,unit,observations=()):
     return create_direct_warehouse_issue(db,DirectWarehouseIssueIn(issue_date=date.today(),issue_type='sale',
         warehouse_id=main_warehouse(db).id,receiver_id=make_contact(db).id,
