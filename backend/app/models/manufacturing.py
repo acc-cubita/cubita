@@ -18,6 +18,7 @@
 اجرای واقعی‌ست که همیشه بود؛ فقط یک FKِ اختیاریِ `production_plan_id` گرفت تا اگر
 از رویِ یک برنامه اجرا شد، ردش بماند.
 """
+from decimal import Decimal
 import uuid
 from datetime import date as date_
 
@@ -43,7 +44,7 @@ class Bom(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(200), default="", server_default="")
     #: هر «اجرای» این فرمول چند واحدِ محصول می‌سازد (مثلاً یک قالب = ۱۲ عدد).
-    yield_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=1, server_default="1")
+    yield_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=1, server_default="1")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -62,7 +63,7 @@ class BomLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("boms.id", ondelete="CASCADE"), index=True
     )
     component_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
 
     bom: Mapped["Bom"] = relationship(back_populates="lines")
 
@@ -80,10 +81,10 @@ class ProductionPlan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     finished_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     planned_date: Mapped[date_] = mapped_column(Date)
-    qty_planned: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty_planned: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: جمعِ qty_produced همه‌ی اسنادِ تولیدی که به این برنامه وصل شده‌اند — برای
     #: نمایشِ «چقدر از این برنامه اجرا شد»، نه مبنای محاسبه‌ی چیزِ دیگری.
-    qty_produced: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    qty_produced: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
     #: جمعِ بهای همه‌ی حواله‌های موادِ متصل به این برنامه — مبنای بهای رسیدِ
     #: محصول (`material_cost_issued ÷ qty_planned`)، پیش از افزودنِ دستمزد/سربار.
     material_cost_issued: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -111,7 +112,7 @@ class ProductionOrder(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("production_plans.id"), nullable=True, index=True
     )
     production_date: Mapped[date_] = mapped_column(Date)
-    qty_produced: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty_produced: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     component_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     overhead_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -134,7 +135,7 @@ class ProductionOrderLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("production_orders.id", ondelete="CASCADE"), index=True
     )
     component_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     order: Mapped["ProductionOrder"] = relationship(back_populates="lines")

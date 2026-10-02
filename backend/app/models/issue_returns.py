@@ -114,7 +114,7 @@ class WarehouseIssueReturnLine(TenantMixin, UUIDPKMixin, Base):
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     #: به واحدِ اصلی.
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: بهای همان ردیفِ خروج — نه قیمتِ فروش، نه میانگینِ امروز.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 4))
     #: حسابی که **بستانکار** شد: همان که خروج بدهکار کرده بود.
@@ -124,7 +124,7 @@ class WarehouseIssueReturnLine(TenantMixin, UUIDPKMixin, Base):
     cost_center_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("cost_centers.id"), nullable=True
     )
-    secondary_qty: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    secondary_qty: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     secondary_unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
     item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")

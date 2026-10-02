@@ -137,7 +137,7 @@ class SalesInvoiceLine(TenantMixin, UUIDPKMixin, Base):
 
     invoice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_invoices.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
     #: تخفیفِ این ردیف به مبلغ (نه درصد). خالصِ ردیف = qty×unit_price − discount.
     discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -324,7 +324,7 @@ class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     #: مقدار **به واحدِ اصلی** — تنها مقداری که دفترِ انبار می‌شناسد.
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: هم‌دقتِ `stock_ledger.unit_cost` (مهاجرتِ ۰۱۳۱)؛ دو گِردکردنِ متفاوتِ یک عدد
     #: همان واگراییِ دفتر و کاردکس را می‌سازد.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 4))
@@ -335,7 +335,7 @@ class WarehouseIssueLine(TenantMixin, UUIDPKMixin, Base):
     )
     #: مقدارِ فرعی **برای نمایش و چاپ** (§۱۱)، از نسبتِ ثابتِ همان کالا در لحظه‌ی
     #: ثبت. نسبتِ متغیر عدد ندارد و خالی می‌ماند — حدس‌زدنش بدتر از نبودنش است.
-    secondary_qty: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    secondary_qty: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     secondary_unit_snapshot: Mapped[str] = mapped_column(String(20), default="", server_default="")
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
     item_name_snapshot: Mapped[str] = mapped_column(String(300), default="", server_default="")
@@ -524,7 +524,7 @@ class WarehouseReceiptLine(TenantMixin, UUIDPKMixin, Base):
     #: که ترتیبش بازیابی‌شدنی نبود.
     seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: §۲۰ — **«فی»**، نه «فی تمام‌شده». بهای خریدِ واحد، پیش از حمل.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
 
@@ -703,7 +703,7 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     expense_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True
     )
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
     #: تخفیفِ این ردیف به مبلغ. خالصِ ردیف = qty×unit_cost − discount.
     discount: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -728,7 +728,7 @@ class PurchaseInvoiceLine(TenantMixin, UUIDPKMixin, Base):
     #: چرا. به‌جایش تعداد ۱۱ با تخفیفی برابرِ بهای ۱ واحد ثبت می‌شود، و آن‌وقت
     #: `total_paid / 11` — همان `effective_unit_cost`ِ §۲۵ — خودبه‌خود درست
     #: درمی‌آید. این ستون فقط می‌گوید از آن ۱۱ تا، ۱ تا رایگان بوده.
-    bonus_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    bonus_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
 
     invoice: Mapped["PurchaseInvoice"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()

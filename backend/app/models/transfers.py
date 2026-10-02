@@ -1,3 +1,4 @@
+from decimal import Decimal
 import uuid
 from datetime import date as date_
 
@@ -51,7 +52,7 @@ class StockTransferLine(TenantMixin, UUIDPKMixin, Base):
 
     transfer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("stock_transfers.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
 
     transfer: Mapped["StockTransfer"] = relationship(back_populates="lines")
     item: Mapped["Item"] = relationship()

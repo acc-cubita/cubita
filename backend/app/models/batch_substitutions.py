@@ -11,6 +11,7 @@
 دنبالش می‌گردد. دلیل از هیچ داده‌ی موجودی درنمی‌آید، پس ستونِ خودش را دارد و
 اجباری است.
 """
+from decimal import Decimal
 import uuid
 from datetime import datetime
 
@@ -40,7 +41,7 @@ class BatchSubstitution(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     new_batch_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="RESTRICT"), index=True
     )
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: سندی که جایگزینی در آن رخ داد — چندریختی، مثلِ `source_id`ِ دفتر.
     source_type: Mapped[str] = mapped_column(String(50), default="", server_default="")
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

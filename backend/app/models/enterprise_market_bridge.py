@@ -64,11 +64,11 @@ class EnterpriseMarketCatalog(UUIDPKMixin, TimestampMixin, Base):
     #: Schema validated by MarketListingSnapshot at ingress and egress.  Its keys
     #: are deliberately allowlisted rather than derived from local ORM models.
     public_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    available_qty: Mapped[Decimal] = mapped_column(Numeric(18, 3), nullable=False)
+    available_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     sync_generation: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     staged_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    staged_available_qty: Mapped[Decimal | None] = mapped_column(Numeric(18, 3), nullable=True)
+    staged_available_qty: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

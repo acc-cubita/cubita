@@ -135,7 +135,7 @@ class SalesReturnLine(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("sales_invoice_lines.id"), nullable=True, index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
     #: علتِ برگشت — **جدا از `description`**. یکی بُعدِ گزارش است و دیگری یادداشتِ
@@ -284,7 +284,7 @@ class PurchaseReturnLine(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("warehouse_receipt_lines.id"), nullable=True, index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: «فی» — بهای خریدِ واحد، پیش از حمل.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
     #: سهمِ حملی که با این کالا برمی‌گردد (از سهمِ همان ردیفِ رسید، به نسبتِ مقدار).

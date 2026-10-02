@@ -1,3 +1,4 @@
+from decimal import Decimal
 import uuid
 from datetime import date as date_, datetime
 
@@ -58,7 +59,7 @@ class SalesQuotationLine(TenantMixin, UUIDPKMixin, Base):
 
     quotation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_quotations.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
     description: Mapped[str] = mapped_column(Text, default="")
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")
