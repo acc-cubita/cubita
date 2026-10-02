@@ -278,10 +278,10 @@ try {
   //
   // کپیِ سمتِ سرور است نه آپلودِ دوباره: فایل همین الان آن‌جاست، پس نه ۱۱۶
   // مگابایت دوباره می‌رود و نه شبکه فرصتِ خراب‌کردنش را دارد.
-  if (!ENTERPRISE) {
-    console.log('  به‌روزرسانی Cubita-Setup.exe (لینکِ دانلود) …')
-    ssh(`cp "${REMOTE}/${installer}" "${REMOTE}/Cubita-Setup.exe"`)
-  }
+  const downloadName = ENTERPRISE ? 'Cubita-Enterprise-Setup.exe' : 'Cubita-Setup.exe'
+  console.log(`  به‌روزرسانی ${downloadName} (لینکِ دانلود) …`)
+  // جابه‌جایی اتمی نمی‌گذارد دانلودِ نصب تازه فایلِ نیمه‌کپی‌شده بگیرد.
+  ssh(`cp "${REMOTE}/${installer}" "${REMOTE}/${downloadName}.new" && mv "${REMOTE}/${downloadName}.new" "${REMOTE}/${downloadName}"`)
 
   ssh(`chown -R hesabdari:hesabdari ${REMOTE} && ls -la ${REMOTE}`)
 } finally {
@@ -310,14 +310,19 @@ function headStatus(url) {
 
 const base = ENTERPRISE ? 'https://acc.cubita.ir/updates/enterprise' : 'https://acc.cubita.ir/updates'
 if (ENTERPRISE) {
-  const [eYml, eSig, eExe] = await Promise.all([
+  const [eYml, eSig, eExe, eDownload] = await Promise.all([
     headStatus(`${base}/latest.yml`),
     headStatus(`${base}/latest.yml.sig`),
     headStatus(`${base}/${installer}`),
+    headStatus(`${base}/Cubita-Enterprise-Setup.exe`),
   ])
   console.log(`\nراستی‌آزمایی:  latest.yml → ${eYml.status}   امضا → ${eSig.status}   نصب‌کننده → ${eExe.status}`)
-  if (eYml.status !== 200 || eSig.status !== 200 || eExe.status !== 200) {
+  if (eYml.status !== 200 || eSig.status !== 200 || eExe.status !== 200 || eDownload.status !== 200) {
     console.error('انتشار ناقص است: فایل‌های کانالِ سازمانی از بیرون در دسترس نیستند.')
+    process.exit(1)
+  }
+  if (eDownload.length !== eExe.length || eDownload.length !== statSync(path.join(RELEASE, installer)).size) {
+    console.error('لینک دانلود سازمانی با نصاب همین نسخه یکسان نیست؛ انتشار ناقص است.')
     process.exit(1)
   }
   console.log(`\nمنتشر شد: ${base}/latest.yml`)
