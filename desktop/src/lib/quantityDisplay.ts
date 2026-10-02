@@ -16,3 +16,13 @@ export function quantityTotals(rows: { qty: string; unitKey: string; unitName: s
       qty: `${group.quantity / 100000000n}${fraction ? `.${fraction}` : ''}` }
   })
 }
+/** Increment the entered quantity without passing through a binary float. */
+export function stepQuantity(qty: string, delta: 1 | -1): string {
+  const match = /^(\d+)(?:\.(\d{0,8}))?$/.exec(qty.trim())
+  if (!match) return qty
+  const scale = 100000000n
+  const value = BigInt(match[1]) * scale + BigInt((match[2] ?? '').padEnd(8, '0')) + BigInt(delta) * scale
+  if (value <= 0n) return '0'
+  const fraction = (value % scale).toString().padStart(8, '0').replace(/0+$/, '')
+  return `${value / scale}${fraction ? `.${fraction}` : ''}`
+}

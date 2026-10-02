@@ -65,7 +65,7 @@ def create_bom(
         yield_qty=data.yield_qty,
         notes=data.notes,
         created_by_id=user.id,
-        lines=[BomLine(component_item_id=line.component_item_id, qty=line.qty) for line in data.lines],
+        lines=service.build_bom_lines(db, data.lines),
     )
     db.add(bom)
     db.flush()
@@ -96,8 +96,7 @@ def update_bom(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ نهایی نمی‌تواند جزءِ خودش باشد")
         bom.lines.clear()
         db.flush()
-        for line in lines:
-            bom.lines.append(BomLine(component_item_id=line["component_item_id"], qty=line["qty"]))
+        bom.lines.extend(service.build_bom_lines(db, data.lines))
 
     db.flush()
     db.refresh(bom)

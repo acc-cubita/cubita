@@ -10,6 +10,8 @@
 """
 from datetime import date
 from decimal import Decimal
+from fractions import Fraction
+from app.services.units import rounded_quantity
 from uuid import UUID
 
 from sqlalchemy import func
@@ -77,13 +79,13 @@ def material_variance(db: Session, *, plan_id: UUID | None = None) -> list[dict]
     for plan in plans:
         bom = boms.get(plan.bom_id)
         produced = Decimal(plan.qty_produced)
-        batches = produced / Decimal(bom.yield_qty) if bom and Decimal(bom.yield_qty) else Decimal(0)
+        batches = Fraction(produced) / Fraction(bom.yield_qty) if bom and Decimal(bom.yield_qty) else Fraction(0)
 
         standard: dict[UUID, Decimal] = {}
         if bom:
             for line in bom.lines:
                 standard[line.component_item_id] = (
-                    standard.get(line.component_item_id, Decimal(0)) + Decimal(line.qty) * batches
+                    standard.get(line.component_item_id, Decimal(0)) + rounded_quantity(Fraction(line.qty) * batches)
                 )
 
         #: اجزایی که یا استاندارد دارند یا واقعاً مصرف شده‌اند — مصرفِ یک کالای

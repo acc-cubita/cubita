@@ -2,7 +2,8 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+from app.schemas.item_units import ObservedRatioIn
 
 from app.models.manufacturing import PRODUCTION_PLAN_STATUSES
 
@@ -10,7 +11,9 @@ from app.models.manufacturing import PRODUCTION_PLAN_STATUSES
 # ── فرمولِ ساخت (BOM) ───────────────────────────────────
 class BomLineIn(BaseModel):
     component_item_id: UUID
-    qty: Decimal
+    qty: Decimal = Field(max_digits=24, decimal_places=8)
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
 
     @field_validator("qty")
     @classmethod
@@ -23,7 +26,7 @@ class BomLineIn(BaseModel):
 class BomIn(BaseModel):
     finished_item_id: UUID
     name: str = ""
-    yield_qty: Decimal = Decimal(1)
+    yield_qty: Decimal = Field(default=Decimal(1), max_digits=24, decimal_places=8)
     notes: str = ""
     lines: list[BomLineIn]
 
@@ -44,7 +47,7 @@ class BomIn(BaseModel):
 
 class BomUpdateIn(BaseModel):
     name: str | None = None
-    yield_qty: Decimal | None = None
+    yield_qty: Decimal | None = Field(default=None, max_digits=24, decimal_places=8)
     is_active: bool | None = None
     notes: str | None = None
     #: اگر داده شود، همه‌ی اجزای فرمول با این فهرست جایگزین می‌شوند.
@@ -62,6 +65,10 @@ class BomLineOut(BaseModel):
     id: UUID
     component_item_id: UUID
     qty: Decimal
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -83,7 +90,7 @@ class ProductionPlanIn(BaseModel):
     bom_id: UUID
     warehouse_id: UUID
     planned_date: date
-    qty_planned: Decimal
+    qty_planned: Decimal = Field(max_digits=24, decimal_places=8)
     notes: str = ""
 
     @field_validator("qty_planned")
@@ -131,7 +138,7 @@ class ProductionMaterialIssueIn(BaseModel):
     """
 
     issue_date: date
-    qty: Decimal | None = None
+    qty: Decimal | None = Field(default=None, max_digits=24, decimal_places=8)
 
     @field_validator("qty")
     @classmethod
@@ -143,7 +150,9 @@ class ProductionMaterialIssueIn(BaseModel):
 
 class ProductionReceiptIn(BaseModel):
     receipt_date: date
-    qty: Decimal
+    qty: Decimal = Field(max_digits=24, decimal_places=8)
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
 
     @field_validator("qty")
     @classmethod
@@ -224,7 +233,9 @@ class ProductionOrderIn(BaseModel):
     bom_id: UUID
     warehouse_id: UUID
     production_date: date
-    qty_produced: Decimal
+    qty_produced: Decimal = Field(max_digits=24, decimal_places=8)
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
     overhead_cost: Decimal = Decimal(0)
     #: اگر این سند از رویِ یک سفارش (برنامه) اجرا می‌شود — اختیاری.
     production_plan_id: UUID | None = None
@@ -248,6 +259,10 @@ class ProductionOrderLineOut(BaseModel):
     component_item_id: UUID
     qty: Decimal
     unit_cost: Decimal
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
 
     model_config = {"from_attributes": True}
 

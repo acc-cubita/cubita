@@ -42,6 +42,7 @@ import { useNavSection } from '../components/navContext'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
 import { FormField } from '../components/form/FormKit'
+import { TransactionUnitPicker, type TransactionUnitPatch } from '../components/TransactionUnitPicker'
 
 const PLAN_STATUS_LABELS: Record<ProductionPlanStatus, string> = {
   draft: 'پیش‌نویس',
@@ -225,7 +226,7 @@ function OrdersTab({
     try {
       const p = await createProductionPlan(
         token,
-        { bom_id: bomId, warehouse_id: warehouseId, planned_date: date, qty_planned: Number(qty), notes },
+        { bom_id: bomId, warehouse_id: warehouseId, planned_date: date, qty_planned: qty, notes },
         `production-plan-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       )
       setQty('')
@@ -392,10 +393,10 @@ function BomsTab({
   const [finishedId, setFinishedId] = useState('')
   const [name, setName] = useState('')
   const [yieldQty, setYieldQty] = useState('1')
-  const [lines, setLines] = useState<{ componentId: string; qty: string }[]>([{ componentId: '', qty: '' }])
+  const [lines, setLines] = useState<({ componentId: string; qty: string } & TransactionUnitPatch)[]>([{ componentId: '', qty: '' }])
   const [msg, setMsg] = useState<string | null>(null)
 
-  function setLine(i: number, patch: Partial<{ componentId: string; qty: string }>) {
+  function setLine(i: number, patch: Partial<{ componentId: string; qty: string } & TransactionUnitPatch>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
   }
   function addLine() {
@@ -418,8 +419,9 @@ function BomsTab({
     setEditingId(b.id)
     setFinishedId(b.finished_item_id)
     setName(b.name)
-    setYieldQty(String(Number(b.yield_qty)))
-    setLines(b.lines.map((l) => ({ componentId: l.component_item_id, qty: String(Number(l.qty)) })))
+    setYieldQty(b.yield_qty)
+    setLines(b.lines.map((l) => ({ componentId: l.component_item_id, qty: l.entered_qty || l.qty, unitId: l.entered_unit_id || undefined,
+      observations: l.unit_conversion_snapshot?.path.flatMap((step) => step.observation ? [{ rule_id: step.rule_id, from_qty: step.observation.from_qty, to_qty: step.observation.to_qty }] : []) })))
     setMsg(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -447,16 +449,16 @@ function BomsTab({
       setMsg('محصولِ نهایی نمی‌تواند جزءِ خودش باشد.')
       return
     }
-    const linePayload = valid.map((l) => ({ component_item_id: l.componentId, qty: Number(l.qty) }))
+    const linePayload = valid.map((l) => ({ component_item_id: l.componentId, qty: l.qty, unit_id: l.unitId, observations: l.observations }))
     try {
       if (editingId) {
-        await updateBom(token, editingId, { name, yield_qty: Number(yieldQty) || 1, lines: linePayload })
+        await updateBom(token, editingId, { name, yield_qty: yieldQty || '1', lines: linePayload })
         setMsg('فرمولِ ساخت ویرایش شد.')
       } else {
         await createBom(token, {
           finished_item_id: finishedId,
           name: name || undefined,
-          yield_qty: Number(yieldQty) || 1,
+          yield_qty: yieldQty || '1',
           lines: linePayload,
         })
         setMsg('فرمولِ ساخت ثبت شد.')
@@ -517,7 +519,7 @@ function BomsTab({
                 {lines.map((l, i) => (
                   <tr key={i}>
                     <td data-label="جزء">
-                      <SearchSelect value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value })}>
+                      <SearchSelect value={l.componentId} onChange={(e) => setLine(i, { componentId: e.target.value, unitId: undefined, observations: [], baseQtyPreview: undefined })}>
                         <option value="">— انتخاب کالا —</option>
                         {goodsItems.map((it) => (
                           <option key={it.id} value={it.id}>{it.name}</option>
@@ -525,7 +527,8 @@ function BomsTab({
                       </SearchSelect>
                     </td>
                     <td data-label="مقدار">
-                      <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v })} />
+                      <NumberInput allowDecimal value={l.qty} onChange={(v) => setLine(i, { qty: v, baseQtyPreview: undefined })} />
+                      <TransactionUnitPicker token={token} itemId={l.componentId} qty={l.qty} unitId={l.unitId} observations={l.observations} context="production" onChange={(patch) => setLine(i, patch)} />
                     </td>
                     <td className="card-actions">
                       <button type="button" className="icon-btn-danger" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="حذف">
@@ -737,7 +740,7 @@ function MaterialIssueTab({
     try {
       const issue = await issueMaterialsToProduction(
         token, planId,
-        { issue_date: date, qty: Number(qty) > 0 ? Number(qty) : null },
+        { issue_date: date, qty: Number(qty) > 0 ? qty : null },
         `production-issue-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       )
       setQty('')
@@ -861,6 +864,7 @@ function ProductReceiptTab({
 }) {
   const [planId, setPlanId] = useState('')
   const [qty, setQty] = useState('')
+  const [unit, setUnit] = useState<TransactionUnitPatch>({})
   const [date, setDate] = useState(todayIso())
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -874,6 +878,7 @@ function ProductReceiptTab({
 
   function pickPlan(id: string) {
     setPlanId(id)
+    setUnit({})
     const p = plans.find((x) => x.id === id)
     if (p) setQty(String(remainingOf(p)))
   }
@@ -893,7 +898,7 @@ function ProductReceiptTab({
     try {
       const receipt = await receiveProductionOutput(
         token, planId,
-        { receipt_date: date, qty: Number(qty) },
+        { receipt_date: date, qty, unit_id: unit.unitId, observations: unit.observations },
         `production-receipt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       )
       setQty('')
@@ -932,10 +937,11 @@ function ProductReceiptTab({
               </label>
               <label>
                 مقدارِ دریافتی
-                <NumberInput allowDecimal value={qty} onChange={setQty} required />
+                <NumberInput allowDecimal value={qty} onChange={(value) => { setQty(value); setUnit((prev) => ({ ...prev, baseQtyPreview: undefined })) }} required />
               </label>
             </div>
 
+            {plan && <TransactionUnitPicker token={token} itemId={plan.finished_item_id} qty={qty} unitId={unit.unitId} observations={unit.observations} context="production" onChange={(patch) => setUnit((prev) => ({ ...prev, ...patch }))} />}
             {plan && (
               <div className="pos-summary" style={{ marginTop: 4 }}>
                 <div className="pos-row"><span>نرخِ موادِ هر واحد (تا امروز)</span><strong>{fa(previewUnitCost)}</strong></div>

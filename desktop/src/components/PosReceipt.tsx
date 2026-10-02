@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { toFaDigits } from '../lib/jalali'
 
 /**
  * رسیدِ فروشِ حرارتی (۸۰م‌م) برای صندوقِ فروشگاهی.
@@ -13,7 +14,7 @@ import { createPortal } from 'react-dom'
 export interface ReceiptLine {
   name: string
   unit?: string
-  qty: number
+  qty: number | string
   unitPrice: number
   total: number
 }
@@ -39,7 +40,7 @@ export interface ReceiptData {
 }
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
-const faQty = (n: number) => n.toLocaleString('fa-IR')
+const faQty = (n: number | string) => toFaDigits(String(n))
 
 export function PosReceipt({ data }: { data: ReceiptData }) {
   return createPortal(

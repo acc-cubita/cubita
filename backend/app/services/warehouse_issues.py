@@ -411,7 +411,8 @@ def create_warehouse_issue(
 # ─────────────────────────── خروجِ مستقل ───────────────────────────
 
 
-def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, user: User) -> WarehouseIssue:
+def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, user: User, *,
+                                  frozen_conversions: dict[int, units.QuantityConversion] | None = None) -> WarehouseIssue:
     """خروجی که فاکتور ندارد — فروشی که تحویلش جلوتر از فاکتور است، مصرف، یا سایر."""
     assert_period_open(db, data.issue_date)
     warehouses.assert_usable(db, data.warehouse_id, action="خروج انبار")
@@ -439,7 +440,7 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
     rows: list[_Row] = []
     unit_registry = units.OperationUnitRegistry(db, items_by_id.values(),
         batch_ids=[allocation.batch_id for line in data.lines for allocation in (line.batch_allocations or [])])
-    for line in data.lines:
+    for line_index, line in enumerate(data.lines):
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "کالای ردیفِ خروج یافت نشد")
@@ -447,7 +448,7 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"«{item.name}» خدمت است و خروجِ انبار ندارد")
         items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
         selected_batch = line.batch_allocations[0].batch_id if line.batch_allocations and len(line.batch_allocations) == 1 else None
-        conversion = units.convert_transaction(db, item, Decimal(line.qty), line.unit_id,
+        conversion = (frozen_conversions or {}).get(line_index) or units.convert_transaction(db, item, Decimal(line.qty), line.unit_id,
             context="sale" if sale else "production" if data.issue_type == "production" else "inventory",
             batch_id=selected_batch, observations=line.observations, registry=unit_registry)
         qty = conversion.target_qty

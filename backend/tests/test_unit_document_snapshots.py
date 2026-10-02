@@ -322,3 +322,111 @@ def test_variable_purchase_batch_ratio_survives_transfer(db, user):
     assert get_stock_qty(db, item.id, other_warehouse(db).id) == 50
     void_stock_transfer(db, document.id, reason='آزمون بار', user=user)
     assert on_hand(db, [original.id, mirror.id]) == {original.id: Decimal('150'), mirror.id: Decimal('0')}
+
+def test_production_consumes_frozen_bom_unit_after_rule_change(db, user):
+    from app.models.manufacturing import Bom
+    from app.schemas.manufacturing import BomLineIn, ProductionOrderIn
+    from app.services import manufacturing
+    from tests.factories import make_item
+    item, piece, carton = configured(db)
+    finished = make_item(db, name='محصول آزمون واحد')
+    seed_stock(db, user, item, '100')
+    bom = Bom(finished_item_id=finished.id, name='فرمول واحد', yield_qty=Decimal(2),
+        notes='', created_by_id=user.id,
+        lines=manufacturing.build_bom_lines(db, [BomLineIn(component_item_id=item.id,
+            qty='2', unit_id=carton.id)]))
+    db.add(bom); db.flush()
+    assert bom.lines[0].qty == 48 and bom.lines[0].entered_qty == 2
+    rule = db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
+    units.configure_rule(db, item, ConversionRuleIn(from_unit_id=carton.id,
+        to_unit_id=piece.id, factor='30'), rule_id=rule.id)
+    order = manufacturing.post_production_order(db, ProductionOrderIn(bom_id=bom.id,
+        warehouse_id=main_warehouse(db).id, production_date=date.today(), qty_produced='1'), user)
+    line = order.lines[0]
+    assert line.qty == 24 and line.entered_qty == 1 and line.entered_unit_id == carton.id
+    assert line.unit_conversion_snapshot['path'][0]['version'] == 1
+    assert get_stock_qty(db, item.id, main_warehouse(db).id) == 76
+    move = db.query(StockLedger).filter_by(item_id=item.id, source_type='production').one()
+    assert move.qty == -24 and move.entered_qty == -1
+    assert move.unit_conversion_snapshot['source_unit_name'] == 'کارتن'
+
+def test_production_uses_meter_stock_from_measured_kg_purchase(db, user):
+    from app.models.manufacturing import Bom
+    from app.schemas.manufacturing import BomLineIn, ProductionOrderIn
+    from app.services import manufacturing
+    from tests.factories import make_item
+    fabric, meter, kg = configured(db, variable=True)
+    rule = db.query(ItemUnitConversion).filter_by(item_id=fabric.id).one()
+    post_purchase_invoice(db, PurchaseInvoiceIn(invoice_date=date.today(), warehouse_id=main_warehouse(db).id,
+        lines=[PurchaseInvoiceLineIn(item_id=fabric.id, qty='36', unit_id=kg.id, unit_cost='500',
+            observations=[ObservedRatioIn(rule_id=rule.id, from_qty='36', to_qty='150')])]), user)
+    finished = make_item(db, name='پیراهن آزمون واحد')
+    bom = Bom(finished_item_id=finished.id, name='پارچه', yield_qty=Decimal(1), notes='',
+        created_by_id=user.id, lines=manufacturing.build_bom_lines(db, [
+            BomLineIn(component_item_id=fabric.id, qty='1.5', unit_id=meter.id)]))
+    db.add(bom); db.flush()
+    order = manufacturing.post_production_order(db, ProductionOrderIn(bom_id=bom.id,
+        warehouse_id=main_warehouse(db).id, production_date=date.today(), qty_produced='100'), user)
+    assert order.lines[0].qty == 150
+    assert get_stock_qty(db, fabric.id, main_warehouse(db).id) == 0
+    assert get_stock_qty(db, finished.id, main_warehouse(db).id) == 100
+    assert order.component_cost == 18000 and order.unit_cost == 180
+
+
+def test_production_output_accepts_alternate_unit_and_keeps_ledger_input(db, user):
+    from app.models.manufacturing import Bom
+    from app.schemas.manufacturing import BomLineIn, ProductionOrderIn
+    from app.services import manufacturing
+    from tests.factories import make_item
+    finished, piece, carton = configured(db)
+    component = make_item(db, name='جزء آزمون خروجی')
+    component.is_batch_tracked = True; db.flush()
+    seed_stock(db, user, component, '100')
+    bom = Bom(finished_item_id=finished.id, name='خروجی بسته', yield_qty=Decimal(1), notes='',
+        created_by_id=user.id, lines=manufacturing.build_bom_lines(db, [
+            BomLineIn(component_item_id=component.id, qty='0.5'),
+            BomLineIn(component_item_id=component.id, qty='0.5')]))
+    db.add(bom); db.flush()
+    order = manufacturing.post_production_order(db, ProductionOrderIn(bom_id=bom.id,
+        warehouse_id=main_warehouse(db).id, production_date=date.today(), qty_produced='2', unit_id=carton.id), user)
+    assert order.qty_produced == 48 and sum(line.qty for line in order.lines) == 48
+    move = db.query(StockLedger).filter_by(item_id=finished.id, source_type='production', source_id=order.id).one()
+    assert move.qty == 48 and move.entered_qty == 2 and move.entered_unit_id == carton.id
+    assert move.unit_conversion_snapshot['source_unit_name'] == 'کارتن'
+    from app.services import batches
+    from app.models.advanced_inventory import StockBatch
+    source_batch = db.query(StockBatch).filter_by(item_id=component.id).one()
+    assert batches.on_hand(db, [source_batch.id])[source_batch.id] == 52
+    assert batches.on_hand(db, [move.batch_id])[move.batch_id] == 48
+    consumed = db.query(StockLedger).filter_by(item_id=component.id, source_type='production').all()
+    assert len(consumed) == 2 and all(row.batch_id == source_batch.id and row.source_line_id for row in consumed)
+
+
+def test_production_plan_material_issue_and_alternate_receipt_keep_snapshots(db, user):
+    from app.models.manufacturing import Bom
+    from app.schemas.manufacturing import BomLineIn, ProductionPlanIn, ProductionMaterialIssueIn, ProductionReceiptIn
+    from app.services import manufacturing
+    from tests.factories import make_item
+    component, piece, carton = configured(db)
+    finished, _, finished_carton = configured(db)
+    seed_stock(db, user, component, '100')
+    bom = Bom(finished_item_id=finished.id, name='سفارش بسته', yield_qty=Decimal(24), notes='',
+        created_by_id=user.id, lines=manufacturing.build_bom_lines(db, [
+            BomLineIn(component_item_id=component.id, qty='1', unit_id=carton.id)]))
+    db.add(bom); db.flush()
+    plan = manufacturing.create_production_plan(db, ProductionPlanIn(bom_id=bom.id,
+        warehouse_id=main_warehouse(db).id, planned_date=date.today(), qty_planned='48'), user)
+    plan.status = 'started'; db.flush()
+    rule = db.query(ItemUnitConversion).filter_by(item_id=component.id).one()
+    units.configure_rule(db, component, ConversionRuleIn(from_unit_id=carton.id,
+        to_unit_id=piece.id, factor='30'), rule_id=rule.id)
+    issued = manufacturing.issue_materials_to_production(db, plan.id,
+        ProductionMaterialIssueIn(issue_date=date.today(), qty='48'), user)
+    assert issued.lines[0].qty == 48 and issued.lines[0].entered_qty == 2
+    assert issued.lines[0].unit_conversion_snapshot['path'][0]['version'] == 1
+    receipt = manufacturing.receive_production_output(db, plan.id,
+        ProductionReceiptIn(receipt_date=date.today(), qty='2', unit_id=finished_carton.id), user)
+    assert receipt.lines[0].qty == 48 and receipt.lines[0].entered_qty == 2
+    assert receipt.lines[0].entered_unit_id == finished_carton.id and plan.qty_produced == 48
+    move = db.query(StockLedger).filter_by(source_type='warehouse_receipt', source_id=receipt.id).one()
+    assert move.qty == 48 and move.entered_qty == 2

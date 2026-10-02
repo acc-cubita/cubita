@@ -5686,8 +5686,8 @@ export interface BomInput {
 }
 
 export const fetchBoms = (token: string) => authedGet<BomRecord[]>(token, '/api/boms')
-export const createBom = (token: string, data: BomInput) => authedSend<BomRecord>(token, 'POST', '/api/boms', data)
-export const updateBom = (token: string, id: string, patch: Partial<BomInput> & { is_active?: boolean }) =>
+export const createBom = (token: string, data: UnitAwareBomInput) => authedSend<BomRecord>(token, 'POST', '/api/boms', data)
+export const updateBom = (token: string, id: string, patch: Partial<UnitAwareBomInput> & { is_active?: boolean }) =>
   authedSend<BomRecord>(token, 'PATCH', `/api/boms/${id}`, patch)
 export const deleteBom = (token: string, id: string) => authedDelete(token, `/api/boms/${id}`)
 
@@ -5697,7 +5697,7 @@ export const fetchProductionPlans = (token: string, query?: { status?: string })
   const suffix = qs.toString()
   return authedGetAll<ProductionPlanRecord>(token, `/api/production-plans${suffix ? `?${suffix}` : ''}`)
 }
-export const createProductionPlan = (token: string, data: ProductionPlanIn, idempotencyKey?: string) =>
+export const createProductionPlan = (token: string, data: Omit<ProductionPlanIn, 'qty_planned'> & { qty_planned: number | string }, idempotencyKey?: string) =>
   authedSend<ProductionPlanRecord>(token, 'POST', '/api/production-plans', data, idempotencyKey)
 export const changeProductionPlanStatus = (token: string, planId: string, status: ProductionPlanStatus) =>
   authedSend<ProductionPlanRecord>(token, 'PATCH', `/api/production-plans/${planId}/status`, { status })
@@ -5706,14 +5706,14 @@ export const changeProductionPlanStatus = (token: string, planId: string, status
 export const issueMaterialsToProduction = (
   token: string,
   planId: string,
-  data: { issue_date: string; qty?: number | null },
+  data: { issue_date: string; qty?: number | string | null },
   idempotencyKey?: string,
 ) => authedSend<WarehouseIssueRecord>(token, 'POST', `/api/production-plans/${planId}/issue-materials`, data, idempotencyKey)
 
 export const receiveProductionOutput = (
   token: string,
   planId: string,
-  data: { receipt_date: string; qty: number },
+  data: ProductionOutputInput,
   idempotencyKey?: string,
 ) => authedSend<WarehouseReceiptFull>(token, 'POST', `/api/production-plans/${planId}/receive-output`, data, idempotencyKey)
 
@@ -8810,7 +8810,7 @@ export const createSalesInvoiceCommercial = (
 
 export const createImmediateSalesInvoice = (
   token: string,
-  data: Parameters<typeof createSalesInvoiceDirect>[1],
+  data: ImmediateSalesInvoiceInput,
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/sales-invoices/immediate', data, idempotencyKey)
 
@@ -10831,3 +10831,30 @@ export const previewItemQuantity = (token: string, itemId: string, data: {
   qty: string; unit_id: string; context: 'purchase' | 'sale' | 'inventory' | 'production'
   batch_id?: string; observations?: Array<{ rule_id: string; from_qty: string; to_qty: string }>
 }) => authedSend<QuantityConversionSnapshot>(token, 'POST', `/api/items/${itemId}/convert-quantity`, data)
+
+/** POS quantities retain entered decimal strings and transaction units. */
+export type ImmediateSalesInvoiceInput = Omit<Parameters<typeof createSalesInvoiceDirect>[1], 'lines'> & { lines: SalesInvoiceCommercialInput['lines'] }
+
+export interface BomLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+export interface ProductionOrderLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+export type UnitAwareBomInput = Omit<BomInput, 'yield_qty' | 'lines'> & {
+  yield_qty?: string | number
+  lines: { component_item_id: string; qty: string | number; unit_id?: string; observations?: UnitObservation[] }[]
+}
+
+export interface ProductionOutputInput {
+  receipt_date: string
+  qty: string | number
+  unit_id?: string
+  observations?: UnitObservation[]
+}

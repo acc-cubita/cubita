@@ -8,6 +8,8 @@
      سند می‌خورد: بدهکار موجودی، بستانکار صندوق (سربار سرمایه‌ای می‌شود در بهای کالا).
 """
 from decimal import ROUND_HALF_UP, Decimal
+from fractions import Fraction
+from collections import deque
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -17,8 +19,10 @@ from app.models.accounting import JournalEntry, JournalLine
 from app.services import tafsili
 from app.models.counters import DOC_JOURNAL_ENTRY, DOC_PRODUCTION_ORDER, DOC_PRODUCTION_PLAN
 from app.models.inventory import Item, StockLedger
+from app.models.advanced_inventory import StockBatch
 from app.models.invoices import WarehouseIssue, WarehouseReceipt
-from app.models.manufacturing import Bom, ProductionOrder, ProductionOrderLine, ProductionPlan
+from app.models.manufacturing import Bom, BomLine, ProductionOrder, ProductionOrderLine, ProductionPlan
+from app.services import units
 from app.models.user import User
 from app.schemas.invoices import (
     DirectWarehouseIssueIn,
@@ -39,6 +43,7 @@ from app.services import warehouse_receipts as warehouse_receipts_svc
 from app.services.common import get_account, number_lines
 from app.services.inventory import get_stock_qty, get_total_stock_qty, lock_items
 from app.services import valuation
+from app.services import batches as batches_svc
 from app.services.numbering import next_document_number
 from app.services.period_close import assert_period_open
 
@@ -59,6 +64,41 @@ _PLAN_TRANSITIONS: dict[str, tuple[str, ...]] = {
 
 def _whole(v: Decimal) -> Decimal:
     return Decimal(v).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
+def build_bom_lines(db: Session, lines) -> list[BomLine]:
+    ids = {line.component_item_id for line in lines}
+    items = {item.id: item for item in db.query(Item).filter(Item.id.in_(ids)).all()}
+    if set(items) != ids:
+        raise HTTPException(400, "کالای جزء یافت نشد")
+    registry = units.OperationUnitRegistry(db, items.values())
+    result = []
+    for line in lines:
+        item = items[line.component_item_id]
+        if item.is_service:
+            raise HTTPException(400, "کالای جزء معتبر و انباری نیست")
+        conversion = units.convert_transaction(db, item, line.qty, line.unit_id,
+            context="production", observations=line.observations, registry=registry)
+        result.append(BomLine(component_item_id=item.id, qty=conversion.target_qty,
+            **units.snapshot_fields(conversion)))
+    return result
+
+
+def scaled_bom_components(db: Session, bom: Bom, produced: Decimal):
+    """Scale the frozen recipe with rational arithmetic, never live item rules."""
+    scale = Fraction(units.exact_quantity(produced)) / Fraction(units.exact_quantity(bom.yield_qty))
+    result = []
+    for line in bom.lines:
+        item = db.get(Item, line.component_item_id)
+        if item is None:
+            raise HTTPException(400, "کالای جزء یافت نشد")
+        original = units.document_conversion(db, line, item)
+        try:
+            conversion = units.scale_document_conversion(original, scale)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        result.append((item.id, conversion))
+    return result
 
 
 def create_production_plan(db: Session, data: ProductionPlanIn, user: User) -> ProductionPlan:
@@ -122,20 +162,22 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
     if finished.is_service:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ خدماتی تولید نمی‌شود")
 
-    qty_produced = Decimal(data.qty_produced)
-    batches = qty_produced / Decimal(bom.yield_qty)
+    lock_items(db, {line.component_item_id for line in bom.lines} | {finished.id})
+    output_conversion = units.convert_transaction(db, finished, data.qty_produced, data.unit_id,
+        context="production", observations=data.observations)
+    qty_produced = output_conversion.target_qty
+    scaled = scaled_bom_components(db, bom, qty_produced)
 
     # مقدارِ لازم از هر جزء (چند ردیفِ یک جزء با هم جمع می‌شوند)
     needs: dict[UUID, Decimal] = {}
-    for line in bom.lines:
-        needs[line.component_item_id] = needs.get(line.component_item_id, Decimal(0)) + Decimal(line.qty) * batches
+    for cid, conversion in scaled:
+        needs[cid] = needs.get(cid, Decimal(0)) + conversion.target_qty
 
     if finished.id in needs:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ نهایی نمی‌تواند جزءِ خودش باشد")
 
     # قفلِ همه‌ی کالاهای درگیر (اجزا + محصول) پیش از خواندنِ موجودی و بها — جلوی مسابقه‌ی
     # هم‌زمانیِ موجودی و read-modify-writeِ average_cost را می‌گیرد.
-    lock_items(db, set(needs.keys()) | {finished.id})
 
     components = {i.id: i for i in db.query(Item).filter(Item.id.in_(needs.keys())).all()}
     for cid, need in needs.items():
@@ -151,26 +193,33 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
                 f"موجودیِ «{comp.name}» برای تولید کافی نیست (موجود: {available}, لازم: {need})",
             )
 
+    allocations = {cid: deque(batches_svc.plan_outflow(db, components[cid], data.warehouse_id,
+        need, data.production_date) or [(None, need)]) for cid, need in needs.items()}
+
     # مصرفِ اجزا + جمعِ بها
     component_cost = Decimal(0)
     order_lines: list[ProductionOrderLine] = []
     stock_moves: list[StockLedger] = []
-    for cid, need in needs.items():
+    material_links = []
+    for cid, conversion in scaled:
+        need = conversion.target_qty
         comp = components[cid]
         #: تولیدِ پیش‌تاریخ اجزا را با میانگینِ همان روز مصرف می‌کند.
         unit = valuation.cost_for_posting(db, comp, data.production_date)
         component_cost += need * unit
-        order_lines.append(ProductionOrderLine(component_item_id=cid, qty=need, unit_cost=_whole(unit)))
-        stock_moves.append(
-            StockLedger(
-                item_id=cid,
-                warehouse_id=data.warehouse_id,
-                qty=-need,
-                unit_cost=_whole(unit),
-                entry_date=data.production_date,
-                source_type="production",
-            )
-        )
+        order_lines.append(ProductionOrderLine(component_item_id=cid, qty=need, unit_cost=_whole(unit), **units.snapshot_fields(conversion)))
+        remaining = need
+        while remaining > 0:
+            batch_id, available = allocations[cid].popleft()
+            take = min(remaining, available)
+            move = StockLedger(item_id=cid, warehouse_id=data.warehouse_id, qty=-take,
+                **units.movement_snapshot_fields(conversion, -take), unit_cost=_whole(unit),
+                entry_date=data.production_date, source_type="production", batch_id=batch_id)
+            stock_moves.append(move)
+            material_links.append((move, order_lines[-1]))
+            remaining -= take
+            if available > take:
+                allocations[cid].appendleft((batch_id, available - take))
 
     overhead = Decimal(data.overhead_cost or 0)
     total_value = component_cost + overhead
@@ -186,6 +235,7 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
             item_id=finished.id,
             warehouse_id=data.warehouse_id,
             qty=qty_produced,
+            **units.snapshot_fields(output_conversion),
             unit_cost=finished_unit_cost,
             entry_date=data.production_date,
             source_type="production",
@@ -228,7 +278,19 @@ def post_production_order(db: Session, data: ProductionOrderIn, user: User) -> P
         lines=order_lines,
     )
     db.add(order)
+    db.flush()
+    output_batch = StockBatch(item_id=finished.id, warehouse_id=data.warehouse_id,
+        batch_number=f"PR{number}", qty=qty_produced, received_qty=qty_produced,
+        unit_cost=finished_unit_cost, source_type="production", source_id=order.id,
+        received_date=data.production_date, production_date=data.production_date,
+        created_by_id=user.id)
+    db.add(output_batch); db.flush()
+    stock_moves[-1].batch_id = output_batch.id
+    units.record_batch_observations(db, output_batch, output_conversion, user)
+    for move, line in material_links:
+        move.source_line_id = line.id
     for move in stock_moves:
+        move.source_id = order.id
         db.add(move)
     valuation.settle_posting(db, stock_moves)
     db.refresh(order)
@@ -265,23 +327,19 @@ def issue_materials_to_production(
             status.HTTP_400_BAD_REQUEST,
             f"مقدار باید بین صفر و باقی‌مانده‌ی سفارش باشد (باقی‌مانده: {remaining})",
         )
-    batches = qty / Decimal(bom.yield_qty)
-
-    needs: dict[UUID, Decimal] = {}
-    for line in bom.lines:
-        needs[line.component_item_id] = (
-            needs.get(line.component_item_id, Decimal(0)) + Decimal(line.qty) * batches
-        )
+    scaled = scaled_bom_components(db, bom, qty)
 
     issue_data = DirectWarehouseIssueIn(
         issue_date=data.issue_date,
         issue_type="production",
         warehouse_id=plan.warehouse_id,
         production_plan_id=plan.id,
-        lines=[WarehouseIssueLineIn(item_id=cid, qty=need) for cid, need in needs.items()],
+        lines=[WarehouseIssueLineIn(item_id=cid, qty=conversion.source_qty, unit_id=conversion.source_unit_id)
+            for cid, conversion in scaled],
         description=f"تحویلِ مواد برای سفارشِ تولیدِ شماره‌ی {plan.number}",
     )
-    issue = warehouse_issues_svc.create_direct_warehouse_issue(db, issue_data, user)
+    issue = warehouse_issues_svc.create_direct_warehouse_issue(db, issue_data, user,
+        frozen_conversions={index: conversion for index, (_, conversion) in enumerate(scaled)})
     plan.material_cost_issued = Decimal(plan.material_cost_issued) + issue.total_cost
     db.flush()
     return issue
@@ -303,16 +361,17 @@ def receive_production_output(
             f"سفارش در وضعیتِ «{plan.status}» رسیدِ محصول نمی‌پذیرد",
         )
     remaining = Decimal(plan.qty_planned) - Decimal(plan.qty_produced)
-    qty = Decimal(data.qty)
+    finished = db.get(Item, plan.finished_item_id)
+    if finished is None:
+        raise HTTPException(400, "محصول نهایی یافت نشد")
+    conversion = units.convert_transaction(db, finished, data.qty, data.unit_id,
+        context="production", observations=data.observations)
+    qty = conversion.target_qty
     if qty <= 0 or qty > remaining:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"مقدار باید بین صفر و باقی‌مانده‌ی سفارش باشد (باقی‌مانده: {remaining})",
         )
-    finished = db.get(Item, plan.finished_item_id)
-    if finished is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ نهایی یافت نشد")
-
     #: نرخِ موادِ هر واحد = کلِ موادِ تحویل‌شده به این سفارش ÷ تعدادِ برنامه —
     #: یکسان روی هر رسیدِ همین سفارش، حتی اگر رسید چندبار جزئی انجام شود.
     unit_cost = (
@@ -330,6 +389,14 @@ def receive_production_output(
         description=f"رسیدِ محصول از سفارشِ تولیدِ شماره‌ی {plan.number}",
     )
     receipt = warehouse_receipts_svc.create_warehouse_receipt(db, None, receipt_data, user)
+    for line in receipt.lines:
+        for key, value in units.snapshot_fields(conversion).items():
+            setattr(line, key, value)
+    for move in db.query(StockLedger).filter_by(source_type="warehouse_receipt", source_id=receipt.id).all():
+        for key, value in units.movement_snapshot_fields(conversion, move.qty).items():
+            setattr(move, key, value)
+    for batch in db.query(StockBatch).filter_by(source_type="warehouse_receipt", source_id=receipt.id).all():
+        units.record_batch_observations(db, batch, conversion, user)
     plan.qty_produced = Decimal(plan.qty_produced) + qty
     db.flush()
     return receipt

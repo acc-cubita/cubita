@@ -26,13 +26,15 @@ import { CardPaymentButton } from '../components/CardPaymentDialog'
 import { PosReceipt, type ReceiptData } from '../components/PosReceipt'
 import { todayIso, formatJalali } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
+import { TransactionUnitPicker, type TransactionUnitPatch } from '../components/TransactionUnitPicker'
+import { stepQuantity } from '../lib/quantityDisplay'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
-interface CartLine {
+interface CartLine extends TransactionUnitPatch {
   item: ItemRecord
-  qty: number
-  unitPrice: number
+  qty: string
+  unitPrice: number | null
 }
 
 export function PosPage({ token, me }: { token: string; me: MeResponse }) {
@@ -50,7 +52,6 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   //: ولی از همان حل‌کننده‌ای می‌گذرد که سرور اعتبارسنجی می‌کند.
   const [saleTypes, setSaleTypes] = useState<SaleType[]>([])
   const [saleTypeId, setSaleTypeId] = useState('')
-  const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map())
   const [stockLevels, setStockLevels] = useState<StockLevel[]>([])
   const [taxRate, setTaxRate] = useState('10')
   const [discount, setDiscount] = useState('')
@@ -108,7 +109,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
       time: now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
       invoiceNumber: num != null ? num.toLocaleString('fa-IR') : '—',
       customer: contacts.find((c) => c.id === contactId)?.name ?? 'مشتریِ نقدی',
-      lines: cart.map((l) => ({ name: l.item.name, unit: l.item.unit, qty: l.qty, unitPrice: l.unitPrice, total: l.qty * l.unitPrice })),
+      lines: cart.map((l) => ({ name: l.item.name, unit: l.unitName || l.item.unit, qty: l.qty, unitPrice: l.unitPrice ?? 0, total: Number(l.qty) * (l.unitPrice ?? 0) })),
       subtotal,
       discount: discountAmount,
       taxRate: taxRateNum,
@@ -146,52 +147,50 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   // فیِ کالاهای سبد از حل‌کننده‌ی مشترک می‌آید — با نوعِ فروش و مشتریِ همین لحظه.
   // تنها کالاهایی حل می‌شوند که در سبدند یا تازه اسکن شده‌اند؛ کلِ فهرست نه، چون
   // یک صندوقِ چندهزارکالایی نباید سرِ هر تغییرِ نوعِ فروش هزار درخواست بفرستد.
-  const [pricedKey, setPricedKey] = useState('')
+  const cartRef = useRef(cart)
+  cartRef.current = cart
+  const priceContext = `${token}|${saleTypeId}|${contactId}`
+  const priceContextRef = useRef(priceContext)
+  priceContextRef.current = priceContext
   useEffect(() => {
-    const key = `${saleTypeId}|${contactId}`
-    if (key === pricedKey) return
-    const ids = [...new Set(cart.map((l) => l.item.id))]
-    setPricedKey(key)
-    if (ids.length === 0) {
-      setPriceMap(new Map())
-      return
-    }
+    const ids = [...new Map(cartRef.current.map((l) => [`${l.item.id}|${l.unitId || ""}`, l])).values()]
+    if (ids.length === 0) return
+    setCart((prev) => prev.map((line) => ({ ...line, unitPrice: null })))
     let cancelled = false
     void Promise.all(
-      ids.map(async (id) => {
+      ids.map(async (line) => {
+        const id = line.item.id
         const got = await resolvePrice(token, id, {
+          unitId: line.unitId || null,
           saleTypeId: saleTypeId || null,
           contactId: contactId || null,
         }).catch(() => null)
-        return [id, got ? Number(got.unit_price) : null] as const
+        return [`${id}|${line.unitId || ""}`, got ? Number(got.unit_price) : null] as const
       }),
     ).then((pairs) => {
       if (cancelled) return
-      const next = new Map(pairs.filter(([, p]) => p != null) as [string, number][])
-      setPriceMap(next)
+      const next = new Map(pairs)
       setCart((prev) =>
-        prev.map((l) => ({ ...l, unitPrice: next.get(l.item.id) ?? (Number(l.item.sales_price) || 0) })),
+        prev.map((l) => ({ ...l, unitPrice: next.get(`${l.item.id}|${l.unitId || ""}`) ?? (!l.unitId || l.unitId === l.item.primary_unit_id ? Number(l.item.sales_price) || 0 : null) })),
       )
     })
     return () => {
       cancelled = true
     }
-  }, [token, saleTypeId, contactId, cart, pricedKey])
+  }, [token, saleTypeId, contactId])
 
   /** فیِ یک کالا: از اعلامیه اگر قاعده‌ای بخواند، وگرنه قیمتِ پایه (§۵۸). */
-  async function priceFor(it: ItemRecord): Promise<number> {
-    const cached = priceMap.get(it.id)
-    if (cached != null) return cached
+  async function priceFor(it: ItemRecord, unitId?: string): Promise<number | null> {
     const got = await resolvePrice(token, it.id, {
+      unitId: unitId || null,
       saleTypeId: saleTypeId || null,
       contactId: contactId || null,
     }).catch(() => null)
     if (got) {
       const value = Number(got.unit_price)
-      setPriceMap((prev) => new Map(prev).set(it.id, value))
       return value
     }
-    return Number(it.sales_price) || 0
+    return !unitId || unitId === it.primary_unit_id ? Number(it.sales_price) || 0 : null
   }
 
   // نگاشتِ بارکد و کدِ کالا برای جست‌وجوی فوریِ سمتِ کلاینت (بدونِ رفت‌وبرگشتِ شبکه در هر اسکن)
@@ -205,21 +204,21 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   }, [items])
 
   function addItem(it: ItemRecord) {
-    let isNew = false
+    const isNew = !cartRef.current.some((line) => line.item.id === it.id)
     setCart((prev) => {
       const idx = prev.findIndex((l) => l.item.id === it.id)
       if (idx >= 0) {
         const copy = [...prev]
-        copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 }
+        copy[idx] = { ...copy[idx], qty: stepQuantity(copy[idx].qty, 1), baseQtyPreview: undefined }
         return copy
       }
-      isNew = true
       // قیمتِ پایه فوراً می‌نشیند تا اسکن کُند نشود؛ فیِ مصوب پشتِ سر می‌رسد.
-      return [...prev, { item: it, qty: 1, unitPrice: Number(it.sales_price) || 0 }]
+      return [...prev, { item: it, qty: '1', unitPrice: Number(it.sales_price) || 0 }]
     })
     if (!isNew) return
+    const requestedContext = priceContext
     void priceFor(it).then((price) =>
-      setCart((prev) => prev.map((l) => (l.item.id === it.id ? { ...l, unitPrice: price } : l))),
+      requestedContext === priceContextRef.current && setCart((prev) => prev.map((l) => (l.item.id === it.id && !l.unitId ? { ...l, unitPrice: price } : l))),
     )
   }
 
@@ -244,17 +243,28 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
     scanRef.current?.focus()
   }
 
-  function setQty(id: string, qty: number) {
-    setCart((prev) => prev.map((l) => (l.item.id === id ? { ...l, qty: Math.max(0, qty) } : l)).filter((l) => l.qty > 0))
+  function setQty(id: string, qty: string) {
+    setCart((prev) => prev.map((l) => (l.item.id === id ? { ...l, qty, baseQtyPreview: undefined } : l)).filter((l) => l.qty !== '0'))
   }
-  function setPrice(id: string, price: number) {
-    setCart((prev) => prev.map((l) => (l.item.id === id ? { ...l, unitPrice: Math.max(0, price) } : l)))
+  function updateUnit(id: string, patch: TransactionUnitPatch) {
+    setCart((prev) => prev.map((line) => line.item.id === id ? { ...line, ...patch, ...(patch.unitId !== undefined ? { unitPrice: null } : {}) } : line))
+    if (patch.unitId === undefined) return
+    const line = cart.find((row) => row.item.id === id)
+    if (!line) return
+    const requestedContext = priceContext
+    void priceFor(line.item, patch.unitId).then((price) => {
+      if (requestedContext !== priceContextRef.current) return
+      setCart((prev) => prev.map((row) => row.item.id === id && row.unitId === patch.unitId ? { ...row, unitPrice: price } : row))
+    })
+  }
+  function setPrice(id: string, price: number | null) {
+    setCart((prev) => prev.map((l) => (l.item.id === id ? { ...l, unitPrice: price === null ? null : Math.max(0, price) } : l)))
   }
   function remove(id: string) {
     setCart((prev) => prev.filter((l) => l.item.id !== id))
   }
 
-  const subtotal = cart.reduce((s, l) => s + l.qty * l.unitPrice, 0)
+  const subtotal = cart.reduce((s, l) => s + Number(l.qty) * (l.unitPrice ?? 0), 0)
   const taxRateNum = Math.min(Math.max(Number(taxRate) || 0, 0), 100)
   const discountInput = Number(discount) || 0
   const discountAmount = Math.min(
@@ -268,12 +278,18 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   const roundAdjust = roundStep > 0 ? Math.floor(grandBeforeRound / roundStep) * roundStep - grandBeforeRound : 0
   const total = grandBeforeRound + roundAdjust
   const change = Number(received) ? Number(received) - total : 0
-  const itemCount = cart.reduce((s, l) => s + l.qty, 0)
+  const itemCount = cart.length
+
+  const checkoutReady = cart.length > 0 && cart.every((line) => line.unitPrice !== null && line.baseQtyPreview != null && Number(line.qty) > 0)
 
   async function complete() {
     setMessage(null)
     if (cart.length === 0) {
       setMessage('سبد خالی است.')
+      return
+    }
+    if (!checkoutReady) {
+      setMessage('مقدار، تبدیل واحد و قیمت تمام ردیف‌ها را تکمیل کنید.')
       return
     }
     if (!warehouseId) {
@@ -294,7 +310,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
           sale_type_id: saleTypeId || null,
           invoice_discount: discountAmount,
           rounding: roundAdjust,
-          lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
+          lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_id: l.unitId, observations: l.observations, unit_price: l.unitPrice! })),
         },
         idem.current,
       )) as { number?: number; created_by_name?: string | null }
@@ -320,7 +336,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
   // پرداختِ کارتی: رسیدِ بانکی از قبل (در مودال) ثبت شده؛ حالا فاکتورِ فروش را علیهِ
   // همان طرف‌حساب (انتخاب‌شده یا طرف‌حسابِ گذریِ برگشتی) می‌سازیم تا دریافتنی صفر شود.
   async function completeAfterCard(txn: TreasuryTransactionRecord) {
-    if (cart.length === 0 || !warehouseId) return
+    if (!checkoutReady || !warehouseId) return
     setBusy(true)
     setMessage(null)
     try {
@@ -334,7 +350,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
           sale_type_id: saleTypeId || null,
           invoice_discount: discountAmount,
           rounding: roundAdjust,
-          lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_price: l.unitPrice })),
+          lines: cart.map((l) => ({ item_id: l.item.id, qty: l.qty, unit_id: l.unitId, observations: l.observations, unit_price: l.unitPrice! })),
         },
         idem.current,
       )) as { number?: number; created_by_name?: string | null }
@@ -456,12 +472,13 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
                   <tbody>
                     {cart.map((l) => {
                       const avail = availableStock(l.item.id)
-                      const over = avail != null && l.qty > avail
+                      const over = avail != null && l.baseQtyPreview != null && Number(l.baseQtyPreview) > avail
                       return (
                       <tr key={l.item.id}>
                         <td className="entity-name" data-label="کالا">
                           {l.item.name}
-                          {l.item.unit && l.item.unit !== 'عدد' && <span className="unit-suffix"> / {l.item.unit}</span>}
+                          {(l.unitName || l.item.unit) !== 'عدد' && <span className="unit-suffix"> / {l.unitName || l.item.unit}</span>}
+                          <TransactionUnitPicker token={token} itemId={l.item.id} qty={l.qty} unitId={l.unitId} observations={l.observations} context="sale" onChange={(patch) => updateUnit(l.item.id, patch)} />
                           {avail != null && (
                             <div className={over ? 'stock-warn' : 'unit-suffix'}>
                               موجودی: {avail.toLocaleString('fa-IR')}{over ? ' — بیش از موجودی' : ''}
@@ -470,15 +487,15 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
                         </td>
                         <td data-label="تعداد">
                           <div className="pos-qty">
-                            <button type="button" onClick={() => setQty(l.item.id, l.qty - 1)} aria-label="کم"><Minus size={13} /></button>
-                            <NumberInput allowDecimal value={l.qty} onChange={(v) => setQty(l.item.id, Number(v))} />
-                            <button type="button" onClick={() => setQty(l.item.id, l.qty + 1)} aria-label="زیاد"><Plus size={13} /></button>
+                            <button type="button" onClick={() => setQty(l.item.id, stepQuantity(l.qty, -1))} aria-label="کم"><Minus size={13} /></button>
+                            <NumberInput allowDecimal value={l.qty} onChange={(v) => setQty(l.item.id, v)} />
+                            <button type="button" onClick={() => setQty(l.item.id, stepQuantity(l.qty, 1))} aria-label="زیاد"><Plus size={13} /></button>
                           </div>
                         </td>
                         <td data-label="قیمت واحد">
-                          <NumberInput className="pos-price" value={l.unitPrice} onChange={(v) => setPrice(l.item.id, Number(v))} />
+                          <NumberInput className="pos-price" value={l.unitPrice ?? ''} onChange={(v) => setPrice(l.item.id, v === '' ? null : Number(v))} />
                         </td>
-                        <td data-label="جمع" className="money-cell">{fa(l.qty * l.unitPrice)}</td>
+                        <td data-label="جمع" className="money-cell">{fa(Number(l.qty) * (l.unitPrice ?? 0))}</td>
                         <td className="pos-remove-cell card-actions">
                           <button type="button" className="icon-btn-danger" onClick={() => remove(l.item.id)} aria-label="حذف"><Trash2 size={13} /> <span className="pos-remove-text">حذف</span></button>
                         </td>
@@ -535,7 +552,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
           )}
 
           <div className="pos-checkout-actions">
-            <button type="button" className="btn-primary pos-checkout" onClick={() => void complete()} disabled={busy || cart.length === 0}>
+            <button type="button" className="btn-primary pos-checkout" onClick={() => void complete()} disabled={busy || !checkoutReady}>
               <CheckCircle2 size={16} /> تکمیل فروش (نقدی)
             </button>
             <CardPaymentButton
@@ -544,7 +561,7 @@ export function PosPage({ token, me }: { token: string; me: MeResponse }) {
               contactId={contactId || null}
               description="فروشِ صندوقِ فروشگاهی — پرداختِ کارتی"
               className="btn-ghost pos-card-btn"
-              disabled={busy || cart.length === 0 || !warehouseId}
+              disabled={busy || !checkoutReady || !warehouseId}
               onPaid={(txn) => void completeAfterCard(txn)}
             />
           </div>

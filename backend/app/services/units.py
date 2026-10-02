@@ -751,6 +751,16 @@ def convert_transaction(db: Session, item: Item, qty: Decimal, unit_id: UUID | N
                                  batch_id=batch_id, registry=registry, transaction_overrides=overrides)
 
 
+def scale_document_conversion(original: QuantityConversion, scale: Fraction) -> QuantityConversion:
+    """Scale a frozen recipe/output while retaining its historical conversion path."""
+    if scale <= 0:
+        raise ValueError("مقیاس تولید باید مثبت باشد")
+    source = rounded_quantity(Fraction(original.source_qty) * scale)
+    target = rounded_quantity(Fraction(original.target_qty) * scale)
+    return replace(original, source_qty=source, target_qty=target,
+        rounding_adjustment=target - rounded_quantity(Fraction(source) * original.ratio))
+
+
 def snapshot_fields(conversion: QuantityConversion, *, commercial: bool = False) -> dict:
     snapshot = conversion.snapshot()
     snapshot["source"] = "transaction"
