@@ -19,8 +19,9 @@ import { isElectron } from '../platform'
 import type { PickableItem } from '../components/ItemPicker'
 import { todayIso } from './jalali'
 import { usePersistentState } from './usePersistentState'
+import type { TransactionUnitPatch } from '../components/TransactionUnitPicker'
 
-export interface PurchaseDraftLine {
+export interface PurchaseDraftLine extends TransactionUnitPatch {
   itemId: string
   qty: string
   unitCost: string
@@ -151,7 +152,7 @@ export function usePurchaseInvoiceDraft({
     setLines(
       prefill.lines.map((l) => ({
         itemId: l.item_id,
-        qty: String(Number(l.qty)),
+        qty: String(l.qty),
         unitCost: String(Number(l.unit_cost)),
         discount: Number(l.discount) ? String(Number(l.discount)) : '',
         addition: Number(l.addition) ? String(Number(l.addition)) : '',
@@ -171,7 +172,11 @@ export function usePurchaseInvoiceDraft({
     return items.find((it) => it.id === itemId)?.unit || ''
   }
   function updateLine(index: number, patch: Partial<PurchaseDraftLine>) {
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+    setLines((prev) => prev.map((line, i) => (i === index ? {
+      ...line, ...(patch.itemId !== undefined && patch.itemId !== line.itemId ? {
+        unitId: undefined, unitName: undefined, observations: [], baseQtyPreview: undefined,
+      } : {}), ...(patch.qty !== undefined && patch.qty !== line.qty ? { baseQtyPreview: undefined } : {}), ...patch,
+    } : line)))
   }
   function addLine() {
     setLines((prev) => [...prev, { ...emptyLine }])
@@ -243,7 +248,9 @@ export function usePurchaseInvoiceDraft({
       duty_amount: Math.round((Number(dutyAmount) || 0) * rate),
       lines: validLines.map((l) => ({
         item_id: l.itemId,
-        qty: Number(l.qty),
+        qty: l.qty,
+        unit_id: l.unitId || null,
+        observations: l.observations || [],
         unit_cost: Math.round((Number(l.unitCost) || 0) * rate),
         discount: Math.round((Number(l.discount) || 0) * rate),
         addition: Math.round((Number(l.addition) || 0) * rate),
@@ -282,6 +289,7 @@ export function usePurchaseInvoiceDraft({
   }
 
   return {
+    token,
     warehouseId,
     setWarehouseId,
     effectiveWarehouseId,

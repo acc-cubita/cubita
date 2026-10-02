@@ -4,6 +4,7 @@ import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { useTransferDraft, type TransferDraft } from '../lib/transferDraft'
+import { TransactionUnitPicker } from './TransactionUnitPicker'
 import { SearchSelect } from '../components/SearchSelect'
 
 /** فرمِ کلاسیکِ «انتقال بین انبار» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ [useTransferDraft]. */
@@ -95,6 +96,9 @@ export function TransferLinesTable({ d }: { d: TransferDraft }) {
               </td>
               <td data-label="تعداد">
                 <NumberInput allowDecimal value={line.qty} onChange={(v) => d.updateLine(i, { qty: v })} />
+                <TransactionUnitPicker token={d.token} itemId={line.itemId} qty={line.qty}
+                  unitId={line.unitId} observations={line.observations} context="inventory"
+                  onChange={(patch) => d.updateLine(i, patch)} />
               </td>
               <td className="card-actions">
                 <button type="button" className="icon-btn-danger" onClick={() => d.removeLine(i)} disabled={d.lines.length === 1} aria-label="حذف ردیف">

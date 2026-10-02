@@ -2222,7 +2222,7 @@ export const createStockTransfer = (
     from_warehouse_id: string
     to_warehouse_id: string
     description: string
-    lines: { item_id: string; qty: number }[]
+    lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[] }[]
   },
   //: تکرارِ شبکه‌ای نباید دو انتقال بسازد — کلید به همین حواله گره می‌خورد.
   idempotencyKey?: string,
@@ -2762,7 +2762,7 @@ export const createPurchaseInvoiceDirect = (
     invoice_discount?: number
     invoice_addition?: number
     duty_amount?: number
-    lines: { item_id: string; qty: number; unit_cost: number; discount?: number; addition?: number; duty_amount?: number; description?: string }[]
+    lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[]; unit_cost: number; discount?: number; addition?: number; duty_amount?: number; description?: string }[]
   },
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/purchase-invoices', data, idempotencyKey)
@@ -8747,6 +8747,11 @@ export interface SalesInvoiceRecord {
 }
 
 export interface InvoiceLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  base_qty?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
   addition: string
   duty_amount: string
   item_code_snapshot: string
@@ -8781,7 +8786,9 @@ export interface SalesInvoiceCommercialInput {
   source_warehouse_issue_id?: string | null
   lines: Array<{
     item_id: string
-    qty: number
+    qty: number | string
+    unit_id?: string | null
+    observations?: UnitObservation[]
     unit_price: number
     discount?: number
     addition?: number
@@ -10794,10 +10801,14 @@ export interface QuantityConversionSnapshot {
   source_unit_id: string
   target_qty: string
   target_unit_id: string
+  source_unit_name?: string
+  target_unit_name?: string
+  rounding_adjustment?: string
   numerator: string
   denominator: string
   path: Array<{ rule_id: string; version: number; source: string }>
 }
+export interface UnitObservation { rule_id: string; from_qty: string; to_qty: string }
 export type ItemConversionInput = Pick<ItemConversionRule, 'from_unit_id' | 'to_unit_id' | 'mode' | 'factor'>
 export const fetchItemUnits = (token: string, itemId: string) =>
   authedGet<ItemUnitRecord[]>(token, `/api/items/${itemId}/units`)
