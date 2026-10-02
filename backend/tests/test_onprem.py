@@ -33,6 +33,7 @@ def test_env_connects_app_as_restricted_role(tmp_path):
     env = prov.render_env(s, 5433, 8420, tmp_path)
     lines = dict(line.split("=", 1) for line in env.splitlines() if line and not line.startswith("#"))
     assert lines["EDITION"] == "enterprise"
+    assert lines["MARKET_BRIDGE_ENABLED"] == "true"
     assert lines["ENV"] == "production"
     assert lines["DATABASE_URL"].startswith(f"postgresql+psycopg://{prov.APP_ROLE}:")
     assert lines["MIGRATION_DATABASE_URL"].startswith(f"postgresql+psycopg://{prov.MIGRATE_ROLE}:")
@@ -40,6 +41,31 @@ def test_env_connects_app_as_restricted_role(tmp_path):
     assert f"://{prov.SUPERUSER}:" not in lines["DATABASE_URL"]
     assert s["superuser_password"] not in env
     assert lines["LICENSE_DIR"] == str(tmp_path)
+
+
+@pytest.mark.parametrize("existing, expected", [(None, "true"), ("false", "false"), ("true", "true")])
+def test_market_upgrade_preserves_explicit_admin_choice(tmp_path, existing, expected):
+    layout = _layout(tmp_path)
+    layout.home.mkdir()
+    original = "EDITION=enterprise\nJWT_SECRET=unchanged\n"
+    if existing is not None:
+        original += f"MARKET_BRIDGE_ENABLED={existing}\n"
+    layout.env_file.write_text(original)
+    prov.enable_market_for_upgrade(layout)
+    prov.enable_market_for_upgrade(layout)
+    assert prov.read_env(layout)["MARKET_BRIDGE_ENABLED"] == expected
+    assert layout.env_file.read_text().count("MARKET_BRIDGE_ENABLED=") == 1
+    assert prov.read_env(layout)["JWT_SECRET"] == "unchanged"
+
+
+def test_market_upgrade_does_not_change_cloud_or_missing_config(tmp_path):
+    layout = _layout(tmp_path)
+    prov.enable_market_for_upgrade(layout)
+    assert not layout.env_file.exists()
+    layout.home.mkdir()
+    layout.env_file.write_text("EDITION=cloud\n")
+    prov.enable_market_for_upgrade(layout)
+    assert layout.env_file.read_text() == "EDITION=cloud\n"
 
 
 def test_env_passes_the_production_guard(tmp_path, monkeypatch):

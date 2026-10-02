@@ -121,11 +121,12 @@ def cmd_serve(args) -> int:
 def cmd_migrate(args) -> int:
     home = Path(args.home)
     _enter_home(home)
-    from app.onprem.provision import Layout, read_env, run_migrations, verify_isolation
+    from app.onprem.provision import Layout, read_env, run_migrations, verify_isolation, enable_market_for_upgrade
 
     env = read_env(Layout(home))
     version = run_migrations(env["MIGRATION_DATABASE_URL"], _resource_dir() / "alembic")
     verify_isolation(env["DATABASE_URL"])
+    enable_market_for_upgrade(Layout(home))
     print(f"دیتابیس در نسخه‌ی {version}.")
     return 0
 
