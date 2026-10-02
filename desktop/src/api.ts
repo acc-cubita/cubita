@@ -2046,7 +2046,7 @@ export const fetchWarehouseReceipts = (token: string, invoiceId: string) =>
 export const createWarehouseReceipt = (
   token: string,
   invoiceId: string,
-  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number | string }[] },
 ) => authedSend<WarehouseReceiptRecord>(token, 'POST', `/api/purchase-invoices/${invoiceId}/warehouse-receipts`, data)
 
 export interface PurchasePricePoint {
@@ -8638,7 +8638,7 @@ export const voidWarehouseReceipt = (token: string, id: string, reason: string) 
 export const createWarehouseReceiptIdempotent = (
   token: string,
   invoiceId: string,
-  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number | string }[] },
   idempotencyKey: string,
 ) => authedSend<WarehouseReceiptRecord>(
   token,
@@ -8865,7 +8865,7 @@ export const createWarehouseIssueIdempotent = (
     issue_date: string
     warehouse_id: string
     description?: string
-    lines: { sales_invoice_line_id: string; qty: number }[]
+    lines: { sales_invoice_line_id: string; qty: number | string }[]
   },
   idempotencyKey: string,
 ) => authedSend<WarehouseIssueRecord>(

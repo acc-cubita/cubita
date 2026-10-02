@@ -31,7 +31,7 @@ import {
 import type { WarehouseCache } from '../electron.d'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { NumberInput } from './NumberInput'
-import { todayIso } from '../lib/jalali'
+import { todayIso, toFaDigits } from '../lib/jalali'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
@@ -597,8 +597,8 @@ function WarehouseIssueEditor({
 
   async function submit() {
     const lines = pending
-      .map((line) => ({ sales_invoice_line_id: line.id, qty: Number(qty[line.id] ?? line.remaining_issueable_qty) }))
-      .filter((line) => line.qty > 0)
+      .map((line) => ({ sales_invoice_line_id: line.id, qty: qty[line.id] ?? line.remaining_issueable_qty }))
+      .filter((line) => Number(line.qty) > 0)
     if (!warehouseId || lines.length === 0) {
       setMessage('انبار و حداقل یک مقدار خروج لازم است.')
       return
@@ -658,8 +658,8 @@ function WarehouseIssueEditor({
           <label>تاریخ خروج<JalaliDatePicker value={issueDate} onChange={setIssueDate} /></label>
           {pending.map((line) => (
             <label key={line.id}>
-              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {Number(line.remaining_issueable_qty).toLocaleString('fa-IR')} {line.unit_snapshot}
-              <NumberInput allowDecimal value={qty[line.id] ?? String(Number(line.remaining_issueable_qty))} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
+              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {toFaDigits(line.remaining_issueable_qty)} {line.unit_snapshot}
+              <NumberInput allowDecimal value={qty[line.id] ?? line.remaining_issueable_qty} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
             </label>
           ))}
           <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>ثبت خروج</button>
@@ -726,8 +726,8 @@ function WarehouseReceiptEditor({
 
   async function submit() {
     const lines = pending
-      .map((line) => ({ purchase_invoice_line_id: line.id, qty: Number(qty[line.id] ?? line.remaining_qty) }))
-      .filter((line) => line.qty > 0)
+      .map((line) => ({ purchase_invoice_line_id: line.id, qty: qty[line.id] ?? line.remaining_qty }))
+      .filter((line) => Number(line.qty) > 0)
     if (!warehouseId || lines.length === 0) {
       setMessage('انبار و حداقل یک مقدار تحویل لازم است.')
       return
@@ -789,8 +789,8 @@ function WarehouseReceiptEditor({
           <label>تاریخ رسید<JalaliDatePicker value={receiptDate} onChange={setReceiptDate} /></label>
           {pending.map((line) => (
             <label key={line.id}>
-              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {Number(line.remaining_qty).toLocaleString('fa-IR')} {line.unit_snapshot}
-              <NumberInput allowDecimal value={qty[line.id] ?? String(Number(line.remaining_qty))} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
+              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {toFaDigits(line.remaining_qty)} {line.unit_snapshot}
+              <NumberInput allowDecimal value={qty[line.id] ?? line.remaining_qty} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
             </label>
           ))}
           <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>ثبت رسید</button>
