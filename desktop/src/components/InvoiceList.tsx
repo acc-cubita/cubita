@@ -38,11 +38,18 @@ import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
 import { SearchSelect } from '../components/SearchSelect'
+import { quantityTotals } from '../lib/quantityDisplay'
 
 export type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
 type NamedItem = { id: string; name: string }
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
+
+function QuantitySummary({ lines }: { lines: { item_id: string; qty: string; unit_snapshot?: string }[] }) {
+  const totals = quantityTotals(lines.map(line => ({ qty: line.qty,
+    unitKey: line.unit_snapshot || `unknown-${line.item_id}`, unitName: line.unit_snapshot || 'واحد نامشخص' })))
+  return <>{totals.map(total => <div key={total.unitKey}>{toFaDigits(total.qty)} {total.unitName}</div>)}</>
+}
 
 /** فهرست فاکتورها با جزئیاتِ بازشونده، سودِ ناخالص (فروش)، چاپ، PDF، ابطال و رونوشت.
  *
@@ -674,7 +681,7 @@ function WarehouseIssueEditor({
                 <td data-label="شماره خروج">{issue.number.toLocaleString('fa-IR')}</td>
                 <td data-label="تاریخ">{formatJalali(issue.issue_date)}</td>
                 <td data-label="انبار">{warehouses.find((warehouse) => warehouse.id === issue.warehouse_id)?.name ?? '—'}</td>
-                <td data-label="مقدار">{issue.lines.reduce((sum, line) => sum + Number(line.qty), 0).toLocaleString('fa-IR')}</td>
+                <td data-label="مقدار"><QuantitySummary lines={issue.lines} /></td>
                 <td data-label="وضعیت">{issue.voided_at ? 'باطل‌شده' : 'معتبر'}</td>
                 <td className="card-actions" data-label="عملیات">
                   {canVoid && !issue.voided_at ? <button type="button" className="icon-btn-danger" disabled={busy} onClick={() => void handleVoid(issue)}><Ban size={13} /> ابطال خروج</button> : '—'}
@@ -806,7 +813,7 @@ function WarehouseReceiptEditor({
                   <td data-label="شماره رسید">{receipt.number.toLocaleString('fa-IR')}</td>
                   <td data-label="تاریخ">{formatJalali(receipt.receipt_date)}</td>
                   <td data-label="انبار">{warehouses.find((warehouse) => warehouse.id === receipt.warehouse_id)?.name ?? '—'}</td>
-                  <td data-label="مقدار">{receipt.lines.reduce((sum, line) => sum + Number(line.qty), 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="مقدار"><QuantitySummary lines={receipt.lines} /></td>
                   <td data-label="وضعیت">{receipt.voided_at ? 'باطل‌شده' : 'معتبر'}</td>
                   <td className="card-actions" data-label="عملیات">
                     {canVoid && !receipt.voided_at ? (
