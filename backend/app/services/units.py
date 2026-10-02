@@ -40,6 +40,16 @@ def exact_decimal(value: Decimal | str | int) -> Decimal:
     return result
 
 
+def exact_quantity(value: Decimal | str | int) -> Decimal:
+    """Reject input that cannot be stored unchanged in Numeric(24, 8)."""
+    result = exact_decimal(value)
+    if result.copy_abs() >= QUANTITY_LIMIT:
+        raise ValueError("مقدار واردشده از ظرفیت ذخیره‌سازی بیشتر است")
+    if (Fraction(result) * 100000000).denominator != 1:
+        raise ValueError("مقدار واردشده حداکثر هشت رقم اعشار دارد؛ مقدار را اصلاح کنید")
+    return result
+
+
 def rounded_quantity(value: Fraction | Decimal) -> Decimal:
     ratio = value if isinstance(value, Fraction) else Fraction(exact_decimal(value))
     with localcontext() as ctx:
@@ -83,6 +93,10 @@ class ConversionStep:
     to_unit_id: UUID
     ratio: Fraction
     source: str
+    observed_from_qty: Decimal | None = None
+    observed_to_qty: Decimal | None = None
+    observed_from_unit_id: UUID | None = None
+    observed_to_unit_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -109,7 +123,12 @@ class QuantityConversion:
             "rounding_adjustment": format(self.rounding_adjustment, "f"),
             "path": [{"rule_id": str(step.rule_id), "version": step.version,
                       "from_unit_id": str(step.from_unit_id), "to_unit_id": str(step.to_unit_id),
-                      "source": step.source, **ratio_row(step.ratio)} for step in self.path],
+                      "source": step.source, **ratio_row(step.ratio),
+                      **({"observation": {"from_qty": format(step.observed_from_qty, "f"),
+                          "to_qty": format(step.observed_to_qty, "f"),
+                          "from_unit_id": str(step.observed_from_unit_id),
+                          "to_unit_id": str(step.observed_to_unit_id)}}
+                         if step.observed_from_qty is not None else {})} for step in self.path],
         }
 
 
@@ -135,6 +154,7 @@ class ConversionGraph:
             if key not in by_id or by_id[key].mode != "variable":
                 raise ValueError("نسبت واقعی فقط برای قاعدهٔ متغیر همین کالا مجاز است")
         for rule in rules:
+            observation = None
             if rule.from_unit_id not in self.units or rule.to_unit_id not in self.units:
                 raise ValueError("دو سر تبدیل باید از واحدهای مجاز همان کالا باشند")
             if rule.from_unit_id == rule.to_unit_id:
@@ -153,8 +173,10 @@ class ConversionGraph:
                     continue
                 ratio = observation.fraction()
                 source = "transaction" if rule.id in transaction else "batch"
-            self.edges[rule.from_unit_id].append(ConversionStep(rule.id, rule.version, rule.from_unit_id, rule.to_unit_id, ratio, source))
-            self.edges[rule.to_unit_id].append(ConversionStep(rule.id, rule.version, rule.to_unit_id, rule.from_unit_id, 1 / ratio, source))
+            measured = ((exact_decimal(observation.from_qty), exact_decimal(observation.to_qty),
+                rule.from_unit_id, rule.to_unit_id) if observation is not None else (None, None, None, None))
+            self.edges[rule.from_unit_id].append(ConversionStep(rule.id, rule.version, rule.from_unit_id, rule.to_unit_id, ratio, source, *measured))
+            self.edges[rule.to_unit_id].append(ConversionStep(rule.id, rule.version, rule.to_unit_id, rule.from_unit_id, 1 / ratio, source, *measured))
         for edges in self.edges.values():
             edges.sort(key=lambda step: (str(step.to_unit_id), str(step.rule_id)))
         self._validate()
@@ -178,7 +200,7 @@ class ConversionGraph:
                         queue.append(edge.to_unit_id)
 
     def convert(self, qty: Decimal, source: UUID, target: UUID, *, decimal_allowed: bool = True) -> QuantityConversion:
-        qty = exact_decimal(qty)
+        qty = exact_quantity(qty)
         if source not in self.units or target not in self.units:
             raise ValueError("واحد انتخاب‌شده برای این کالا مجاز نیست")
         if not decimal_allowed and qty != qty.to_integral_value():
@@ -214,7 +236,11 @@ def conversion_from_snapshot(snapshot: dict, *, source_unit_id: UUID | None = No
     ratio = Fraction(int(snapshot["numerator"]), int(snapshot["denominator"]))
     steps = tuple(ConversionStep(UUID(step["rule_id"]), int(step["version"]),
         UUID(step["from_unit_id"]), UUID(step["to_unit_id"]),
-        Fraction(int(step["numerator"]), int(step["denominator"])), step["source"])
+        Fraction(int(step["numerator"]), int(step["denominator"])), step["source"],
+        exact_decimal(step["observation"]["from_qty"]) if step.get("observation") else None,
+        exact_decimal(step["observation"]["to_qty"]) if step.get("observation") else None,
+        UUID(step["observation"]["from_unit_id"]) if step.get("observation") else None,
+        UUID(step["observation"]["to_unit_id"]) if step.get("observation") else None)
         for step in snapshot.get("path", []))
     return QuantityConversion(exact_decimal(snapshot["source_qty"]), source,
         exact_decimal(snapshot["target_qty"]), target, ratio, steps,
@@ -225,7 +251,7 @@ def conversion_from_snapshot(snapshot: dict, *, source_unit_id: UUID | None = No
 def historical_return_conversion(original: QuantityConversion, qty: Decimal, unit_id: UUID | None, *,
                                  returned_base: Decimal = Decimal(0),
                                  returned_in_source: Fraction = Fraction(0)) -> QuantityConversion:
-    qty = exact_decimal(qty)
+    qty = exact_quantity(qty)
     source = unit_id or original.target_unit_id
     used_base = exact_decimal(returned_base)
     if used_base < 0 or returned_in_source < 0 or original.source_qty <= 0 or original.target_qty <= 0 or original.ratio <= 0:
@@ -270,9 +296,123 @@ def document_conversion(db: Session, line, item: Item) -> QuantityConversion:
     return QuantityConversion(qty, base_id, qty, base_id, Fraction(1), (), name, name)
 
 
+def remaining_entered_quantity(line, movements) -> Decimal:
+    """Display the same entered-unit remainder that a frozen partial posting accepts."""
+    snapshot = getattr(line, "unit_conversion_snapshot", None) or {}
+    ratio = Fraction(int(snapshot.get("numerator", "1")), int(snapshot.get("denominator", "1")))
+    source_id = getattr(line, "entered_unit_id", None)
+    quantity = getattr(line, "entered_qty", None)
+    quantity = line.qty if quantity is None else quantity
+    consumed = sum((Fraction(move.entered_qty)
+        if move.entered_unit_id == source_id and move.entered_qty is not None
+        else Fraction(move.qty) / ratio for move in movements), Fraction(0))
+    remaining = Fraction(quantity) - consumed
+    return rounded_quantity(remaining) if remaining > 0 else Decimal(0)
+
+
+def record_batch_observations(db: Session, batch, conversion: QuantityConversion, user) -> None:
+    """Keep original observed pairs on the physical batch, without a rounded factor."""
+    from app.models.item_units import BatchUnitConversion
+    existing = {r.rule_id: r for r in db.query(BatchUnitConversion).filter_by(
+        tenant_id=batch.tenant_id, item_id=batch.item_id, batch_id=batch.id).all()}
+    for step in conversion.path:
+        if step.observed_from_qty is None:
+            continue
+        previous = existing.get(step.rule_id)
+        if previous is not None:
+            if ObservedRatio(previous.from_qty, previous.to_qty).fraction() != ObservedRatio(
+                step.observed_from_qty, step.observed_to_qty).fraction():
+                raise HTTPException(409, "این بار نسبت واقعی متفاوتی دارد؛ مقادیر ناهمگون را در یک بار ادغام نکنید")
+            continue
+        db.add(BatchUnitConversion(tenant_id=batch.tenant_id, item_id=batch.item_id, batch_id=batch.id,
+            rule_id=step.rule_id, from_qty=step.observed_from_qty, to_qty=step.observed_to_qty,
+            approved_by_id=user.id))
+    db.flush()
+
+
+class OperationUnitRegistry:
+    """Fresh, tenant-scoped configuration held only by one posting transaction."""
+
+    def __init__(self, db: Session, items: Iterable[Item], *, batch_ids: Iterable[UUID] = ()):
+        from app.models.item_units import ItemUnit, ItemUnitConversion, BatchUnitConversion
+        from app.models.advanced_inventory import StockBatch
+        from app.tenant_context import require_session_tenant
+        self.db = db
+        self.tenant_id = require_session_tenant(db)
+        requested = {item.id for item in items}
+        self.items = {item.id: item for item in db.query(Item).filter(
+            Item.id.in_(requested), Item.tenant_id == self.tenant_id).order_by(Item.id)
+            .populate_existing().with_for_update().all()}
+        if set(self.items) != requested:
+            raise HTTPException(400, "کالای عملیات به شرکت جاری تعلق ندارد")
+
+        def memberships():
+            return db.query(ItemUnit, UnitOfMeasure).join(UnitOfMeasure,
+                UnitOfMeasure.id == ItemUnit.unit_id).filter(
+                ItemUnit.item_id.in_(requested), ItemUnit.tenant_id == self.tenant_id).all()
+
+        rows = memberships()
+        registered = {row.item_id for row, _unit in rows}
+        missing = requested - registered
+        for item_id in sorted(missing, key=str):
+            configure_legacy(db, self.items[item_id])
+        if missing:
+            rows = memberships()
+        self.allowed = {item_id: {} for item_id in requested}
+        self.names = {}
+        for row, unit in rows:
+            self.names[unit.id] = unit.name
+            if row.is_active and unit.is_active:
+                self.allowed[row.item_id][row.unit_id] = row
+        self.rules = {item_id: [] for item_id in requested}
+        for rule in db.query(ItemUnitConversion).filter(
+            ItemUnitConversion.item_id.in_(requested),
+            ItemUnitConversion.tenant_id == self.tenant_id,
+            ItemUnitConversion.is_active.is_(True)).all():
+            allowed = self.allowed[rule.item_id]
+            if rule.from_unit_id in allowed and rule.to_unit_id in allowed:
+                self.rules[rule.item_id].append(ConversionRule(rule.id, rule.from_unit_id,
+                    rule.to_unit_id, rule.mode, rule.factor, rule.version))
+        batch_ids = set(batch_ids)
+        self.batches = {}
+        self.observations = {}
+        if batch_ids:
+            self.batches = {batch.id: batch for batch in db.query(StockBatch).filter(
+                StockBatch.id.in_(batch_ids), StockBatch.tenant_id == self.tenant_id).all()}
+            for row in db.query(BatchUnitConversion).filter(
+                BatchUnitConversion.batch_id.in_(batch_ids),
+                BatchUnitConversion.tenant_id == self.tenant_id).all():
+                self.observations.setdefault(row.batch_id, {})[row.rule_id] = ObservedRatio(row.from_qty, row.to_qty)
+        self.transaction = db.get_transaction()
+
+    def assert_current(self, db: Session, item: Item) -> None:
+        from app.tenant_context import require_session_tenant
+        if (db is not self.db or db.get_transaction() is not self.transaction
+                or require_session_tenant(db) != self.tenant_id
+                or item.id not in self.items or item.tenant_id != self.tenant_id):
+            raise HTTPException(400, "پیکربندی واحد باید در همین عملیات و شرکت بارگذاری شود")
+
+    def graph(self, db: Session, item: Item, batch_id, transaction_overrides):
+        self.assert_current(db, item)
+        if batch_id is not None:
+            batch = self.batches.get(batch_id)
+            if batch is None or batch.item_id != item.id:
+                raise HTTPException(400, "بار انتخاب‌شده به همین کالا و شرکت تعلق ندارد")
+        allowed = self.allowed[item.id]
+        try:
+            return ConversionGraph(allowed, self.rules[item.id],
+                batch_overrides=self.observations.get(batch_id, {}),
+                transaction_overrides=transaction_overrides), allowed
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+
 def item_graph(db: Session, item: Item, *, batch_id: UUID | None = None,
+               registry: OperationUnitRegistry | None = None,
                transaction_overrides: Mapping[UUID, ObservedRatio] | None = None) -> tuple[ConversionGraph, dict]:
     """RLS-scoped configuration; posting holds the same item lock as editors."""
+    if registry is not None:
+        return registry.graph(db, item, batch_id, transaction_overrides)
     from app.models.item_units import ItemUnit, ItemUnitConversion, BatchUnitConversion
     from app.models.advanced_inventory import StockBatch
     db.query(Item).filter(Item.id == item.id).with_for_update().one()
@@ -301,15 +441,16 @@ def item_graph(db: Session, item: Item, *, batch_id: UUID | None = None,
 
 def convert_item_quantity(db: Session, item: Item, qty: Decimal, unit_id: UUID | None, *,
                           context: str = "inventory", batch_id: UUID | None = None,
+                          registry: OperationUnitRegistry | None = None,
                           transaction_overrides: Mapping[UUID, ObservedRatio] | None = None) -> QuantityConversion:
-    graph, allowed = item_graph(db, item, batch_id=batch_id, transaction_overrides=transaction_overrides)
+    graph, allowed = item_graph(db, item, batch_id=batch_id, registry=registry, transaction_overrides=transaction_overrides)
     source = unit_id or item.primary_unit_id
     if context not in ("purchase", "sale", "inventory", "production"):
         raise HTTPException(400, "زمینهٔ تبدیل واحد نامعتبر است")
     row = allowed.get(source)
     if row is None or not getattr(row, context + "_allowed"):
-        unit = resolve(db, source) if source is not None else None
-        name = unit.name if unit is not None else "نامشخص"
+        unit = resolve(db, source) if registry is None and source is not None else None
+        name = registry.names.get(source, "نامشخص") if registry else unit.name if unit is not None else "نامشخص"
         raise HTTPException(400, f"واحد «{name}» برای این عملیاتِ «{item.name}» مجاز نیست؛ واحد مجاز کالا را انتخاب کنید")
     try:
         result = graph.convert(qty, source, item.primary_unit_id, decimal_allowed=row.decimal_allowed)
@@ -318,8 +459,8 @@ def convert_item_quantity(db: Session, item: Item, qty: Decimal, unit_id: UUID |
             raise ValueError("واحد پایهٔ کالا برای انبار فعال نیست")
         if not base.decimal_allowed and result.target_qty != result.target_qty.to_integral_value():
             raise ValueError("مقدار تبدیل‌شدهٔ واحد پایه باید عدد صحیح باشد؛ مقدار یا نسبت را اصلاح کنید")
-        return replace(result, source_unit_name=resolve(db, source).name,
-                       target_unit_name=resolve(db, item.primary_unit_id).name)
+        return replace(result, source_unit_name=registry.names[source] if registry else resolve(db, source).name,
+                       target_unit_name=registry.names[item.primary_unit_id] if registry else resolve(db, item.primary_unit_id).name)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -592,17 +733,21 @@ def assert_conversion(item: Item) -> None:
 
 def convert_transaction(db: Session, item: Item, qty: Decimal, unit_id: UUID | None = None, *,
                         context: str = "inventory", batch_id: UUID | None = None,
+                        registry: OperationUnitRegistry | None = None,
                         observations=()) -> QuantityConversion:
     """One posting entry point for legacy-created items and explicit observations."""
     from app.models.item_units import ItemUnit
-    db.query(Item).filter(Item.id == item.id).with_for_update().one()
-    if not db.query(ItemUnit.id).filter_by(item_id=item.id, tenant_id=item.tenant_id).first():
-        configure_legacy(db, item)
+    if registry is None:
+        db.query(Item).filter(Item.id == item.id).with_for_update().one()
+        if not db.query(ItemUnit.id).filter_by(item_id=item.id, tenant_id=item.tenant_id).first():
+            configure_legacy(db, item)
+    else:
+        registry.assert_current(db, item)
     overrides = {row.rule_id: ObservedRatio(row.from_qty, row.to_qty) for row in observations}
     if len(overrides) != len(observations):
         raise HTTPException(400, "برای یک قاعده دو نسبت واقعی نفرستید؛ نسبت درست را انتخاب کنید")
     return convert_item_quantity(db, item, qty, unit_id, context=context,
-                                 batch_id=batch_id, transaction_overrides=overrides)
+                                 batch_id=batch_id, registry=registry, transaction_overrides=overrides)
 
 
 def snapshot_fields(conversion: QuantityConversion, *, commercial: bool = False) -> dict:

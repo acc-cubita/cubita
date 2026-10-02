@@ -469,7 +469,7 @@ def plan_outflow(
     return [(batch.id, take) for batch, take in plan]
 
 
-def mirror_batch(db: Session, batch_id: UUID, to_warehouse_id: UUID, user) -> StockBatch:
+def mirror_batch(db: Session, batch_id: UUID, to_warehouse_id: UUID, user, *, conversion=None) -> StockBatch:
     """بارِ آینه‌ی یک بار در انبارِ مقصد — ساخته می‌شود اگر نباشد.
 
     شناسنامه‌ی بار (شماره، انقضا، تاریخِ تولید، بهای واحد، تأمین‌کننده) کپی می‌شود
@@ -481,20 +481,36 @@ def mirror_batch(db: Session, batch_id: UUID, to_warehouse_id: UUID, user) -> St
 
     ایده‌آمپوتنت: انتقالِ دوم از همان بار به همان انبار، بارِ سومی نمی‌سازد.
     """
-    source = db.get(StockBatch, batch_id)
+    from app.models.item_units import BatchUnitConversion
+    from app.services.units import ObservedRatio
+    source = db.query(StockBatch).filter(StockBatch.id == batch_id).with_for_update().one_or_none()
     if source is None:  # pragma: no cover - فراخوان همیشه بارِ معتبر می‌دهد
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "بارِ مبدأ پیدا نشد")
 
-    existing = (
+    desired = {row.rule_id: ObservedRatio(row.from_qty, row.to_qty) for row in
+        db.query(BatchUnitConversion).filter_by(batch_id=source.id, item_id=source.item_id,
+            tenant_id=source.tenant_id).all()}
+    if conversion is not None:
+        for step in conversion.path:
+            if step.observed_from_qty is not None:
+                desired[step.rule_id] = ObservedRatio(step.observed_from_qty, step.observed_to_qty)
+    candidates = (
         db.query(StockBatch)
         .filter(
             StockBatch.parent_batch_id == source.id,
             StockBatch.warehouse_id == to_warehouse_id,
         )
-        .first()
+        .order_by(StockBatch.id).with_for_update().all()
     )
-    if existing is not None:
-        return existing
+    observations = {}
+    for row in db.query(BatchUnitConversion).filter(
+        BatchUnitConversion.batch_id.in_([c.id for c in candidates]),
+        BatchUnitConversion.tenant_id == source.tenant_id, BatchUnitConversion.item_id == source.item_id).all():
+        observations.setdefault(row.batch_id, {})[row.rule_id] = ObservedRatio(row.from_qty, row.to_qty).fraction()
+    desired_ratios = {key: value.fraction() for key, value in desired.items()}
+    for existing in candidates:
+        if observations.get(existing.id, {}) == desired_ratios:
+            return existing
 
     mirror = StockBatch(
         item_id=source.item_id,
@@ -518,6 +534,10 @@ def mirror_batch(db: Session, batch_id: UUID, to_warehouse_id: UUID, user) -> St
         created_by_id=user.id,
     )
     db.add(mirror)
+    db.flush()
+    for rule_id, observation in desired.items():
+        db.add(BatchUnitConversion(tenant_id=source.tenant_id, item_id=source.item_id, batch_id=mirror.id,
+            rule_id=rule_id, from_qty=observation.from_qty, to_qty=observation.to_qty, approved_by_id=user.id))
     db.flush()
     return mirror
 

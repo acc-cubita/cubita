@@ -17,6 +17,7 @@ from app.models.sales_ops import SaleType
 from app.models.user import User
 from app.schemas.invoices import WarehouseIssueIn, WarehouseIssueLineIn
 from app.services import chart_codes as cc, tafsili
+from app.services import units
 from app.services.common import get_account, get_or_create_account, make_journal_entry
 from app.services.inventory import sales_rounding_account, vat_payable_account
 from app.services.period_close import assert_period_open
@@ -197,6 +198,10 @@ def attach_sales_state(db: Session, invoices: list[SalesInvoice]) -> None:
     if not invoices:
         return
     ids = [invoice.id for invoice in invoices]
+    movements = defaultdict(list)
+    for move in db.query(WarehouseIssueLine).join(WarehouseIssue).filter(
+        WarehouseIssue.sales_invoice_id.in_(ids), WarehouseIssue.voided_at.is_(None)).all():
+        movements[move.sales_invoice_line_id].append(move)
     issue_rows = (
         db.query(WarehouseIssue.sales_invoice_id, WarehouseIssueLine.sales_invoice_line_id,
                  func.sum(WarehouseIssueLine.qty))
@@ -222,13 +227,14 @@ def attach_sales_state(db: Session, invoices: list[SalesInvoice]) -> None:
     for invoice in invoices:
         physical_total = issued_total = Decimal(0)
         for line in invoice.lines:
-            line.issued_qty = issued.get((invoice.id, line.id), Decimal(0))
+            base_issued = issued.get((invoice.id, line.id), Decimal(0))
+            line.remaining_issueable_qty = units.remaining_entered_quantity(line, movements[line.id])
+            line.issued_qty = Decimal(line.qty) - line.remaining_issueable_qty
             if line.item.is_service:
                 line.remaining_issueable_qty = Decimal(0)
                 continue
-            line.remaining_issueable_qty = max(Decimal(line.qty) - line.issued_qty, Decimal(0))
-            physical_total += Decimal(line.qty)
-            issued_total += line.issued_qty
+            physical_total += Decimal(line.base_qty if line.base_qty is not None else line.qty)
+            issued_total += base_issued
         invoice.issued_total_qty = issued_total
         invoice.fulfillment_status = (
             "not_applicable" if physical_total == 0 else

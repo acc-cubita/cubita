@@ -2,12 +2,17 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
+from app.schemas.item_units import ObservedRatioIn
+from app.schemas.invoices import BatchAllocationIn
 
 
 class StockTransferLineIn(BaseModel):
     item_id: UUID
     qty: Decimal
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
+    batch_allocations: list[BatchAllocationIn] | None = None
 
     @model_validator(mode="after")
     def validate_positive(self) -> "StockTransferLineIn":
@@ -36,6 +41,10 @@ class StockTransferLineOut(BaseModel):
     id: UUID
     item_id: UUID
     qty: Decimal
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
 
     model_config = {"from_attributes": True}
 

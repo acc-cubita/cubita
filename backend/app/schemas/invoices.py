@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class SalesInvoiceLineIn(BaseModel):
     item_id: UUID
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
     qty: Decimal
     unit_price: Decimal
     #: تخفیفِ ردیف به مبلغ (نه درصد). درصد در رابط کاربری به مبلغ تبدیل می‌شود تا
@@ -102,6 +104,11 @@ class SalesInvoiceLineOut(BaseModel):
     id: UUID
     item_id: UUID
     qty: Decimal
+    base_qty: Decimal | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_price: Decimal
     discount: Decimal = Decimal(0)
     addition: Decimal = Decimal(0)

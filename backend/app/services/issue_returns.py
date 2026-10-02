@@ -288,9 +288,9 @@ def _post(db: Session, ret: WarehouseIssueReturn, rows: list[_Row], user: User) 
         secondary_qty = (units.rounded_quantity(Fraction(row.qty) * Fraction(source.secondary_qty) / Fraction(source.qty))
                          if source.secondary_qty is not None and source.qty else None)
         secondary_unit = source.secondary_unit_snapshot if secondary_qty is not None else ""
-        conversion = row.conversion or units.convert_transaction(db, item, row.qty)
+        conversion = row.conversion or units.document_conversion(db, source, item)
         line = WarehouseIssueReturnLine(
-            **units.snapshot_fields(conversion),
+            **units.movement_snapshot_fields(conversion, row.qty),
             seq=seq,
             warehouse_issue_line_id=source.id,
             sales_return_line_id=row.sales_return_line_id,
@@ -415,6 +415,18 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
         for doc in db.query(SalesReturn).filter(SalesReturn.id.in_({l.return_id for l in sr_lines.values()})).all()
     } if sr_lines else {}
     physical = physically_returned_by_sales_return_line(db, list(sr_lines))
+    prior_physical = db.query(WarehouseIssueReturnLine).join(WarehouseIssueReturn).filter(
+        WarehouseIssueReturnLine.sales_return_line_id.in_(list(sr_lines)),
+        WarehouseIssueReturn.voided_at.is_(None)).all() if sr_lines else []
+    used_source_sr = {}
+    original_sr = {}
+    for source in sr_lines.values():
+        original = units.document_conversion(db, source, db.get(Item, source.item_id))
+        original_sr[source.id] = original
+        used_source_sr[source.id] = sum((Fraction(p.entered_qty)
+            if p.entered_unit_id == original.source_unit_id and p.entered_qty is not None
+            else Fraction(p.qty) / original.ratio
+            for p in prior_physical if p.sales_return_line_id == source.id), Fraction(0))
 
     lines, issues = _lock_issue_lines(db, issue_line_ids)
     returned = returned_by_issue_line(db, list(lines))
@@ -468,8 +480,16 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
             item = items[sr_line.item_id]
             if item.is_service:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, f"«{item.name}» خدمت است و به انبار برنمی‌گردد")
-            qty = units.to_primary(db, item, Decimal(req.qty), req.unit_id)
-            remaining = Decimal(sr_line.qty) - physical.get(sr_line.id, Decimal(0)) - planned_sr[sr_line.id]
+            original = original_sr[sr_line.id]
+            try:
+                conversion = units.historical_return_conversion(original, req.qty,
+                    req.unit_id or original.source_unit_id,
+                    returned_base=physical.get(sr_line.id, Decimal(0)) + planned_sr[sr_line.id],
+                    returned_in_source=used_source_sr[sr_line.id])
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            qty = conversion.target_qty
+            remaining = Decimal(sr_line.base_qty if sr_line.base_qty is not None else sr_line.qty) - physical.get(sr_line.id, Decimal(0)) - planned_sr[sr_line.id]
             if qty > remaining:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
@@ -477,10 +497,12 @@ def _resolve_rows(db: Session, data: IssueReturnIn) -> list[_Row]:
                     f"(باقیمانده: {_q(max(remaining, Decimal(0)))})",
                 )
             planned_sr[sr_line.id] += qty
+            used_source_sr[sr_line.id] += (Fraction(conversion.source_qty)
+                if conversion.source_unit_id == original.source_unit_id else Fraction(qty) / original.ratio)
             for source, issue, take in _allocate_sales_return_line(
                 db, sr_line, qty, planned=planned_issue, name=item.name
             ):
-                rows.append(_Row(source, issue, take, sr_line.id, description, req.return_condition))
+                rows.append(_Row(source, issue, take, sr_line.id, description, req.return_condition, conversion=conversion))
             continue
 
         source = lines.get(req.warehouse_issue_line_id)
@@ -577,9 +599,10 @@ def return_goods_for_sales_return(
         if item.is_service:
             continue
         for source, issue, take in _allocate_sales_return_line(
-            db, sr_line, Decimal(sr_line.qty), planned=planned, name=item.name
+            db, sr_line, Decimal(sr_line.base_qty if sr_line.base_qty is not None else sr_line.qty), planned=planned, name=item.name
         ):
-            by_warehouse.setdefault(issue.warehouse_id, []).append(_Row(source, issue, take, sr_line.id))
+            by_warehouse.setdefault(issue.warehouse_id, []).append(_Row(source, issue, take, sr_line.id,
+                conversion=units.document_conversion(db, sr_line, item)))
 
     created: list[WarehouseIssueReturn] = []
     for warehouse_id, rows in by_warehouse.items():
@@ -731,14 +754,14 @@ def attach_physical_state(db: Session, returns: list[SalesReturn]) -> None:
     returned = physically_returned_by_sales_return_line(db, [line.id for doc in returns for line in doc.lines])
     for doc in returns:
         physical = [line for line in doc.lines if line.item_id not in services]
-        total = sum((Decimal(line.qty) for line in physical), Decimal(0))
+        total = sum((Decimal(line.base_qty if line.base_qty is not None else line.qty) for line in physical), Decimal(0))
         doc.physical_qty = total
         if (doc.stock_mode or "inline") == "inline":
             doc.physical_status = "inline"
             doc.physical_returned_qty = total
             doc.physical_remaining_qty = Decimal(0)
             continue
-        done = sum((min(returned.get(line.id, Decimal(0)), Decimal(line.qty)) for line in physical), Decimal(0))
+        done = sum((min(returned.get(line.id, Decimal(0)), Decimal(line.base_qty if line.base_qty is not None else line.qty)) for line in physical), Decimal(0))
         doc.physical_returned_qty = done
         doc.physical_remaining_qty = max(total - done, Decimal(0))
         doc.physical_status = (
@@ -842,12 +865,14 @@ def basis_detail(db: Session, kind: str, doc_id: UUID) -> dict:
             source_warehouse = sources[0].issue.warehouse_id if sources else None
             warehouse_id = warehouse_id or source_warehouse
             done = returned.get(line.id, Decimal(0))
-            remaining = max(Decimal(line.qty) - done, Decimal(0))
+            base_qty = Decimal(line.base_qty if line.base_qty is not None else line.qty)
+            remaining = max(base_qty - done, Decimal(0))
             unit_cost = Decimal(line.unit_cost or 0)
             lines.append({
                 "kind": kind, "basis_line_id": line.id, "item_id": line.item_id,
-                "item_code": item.sku or "", "item_name": item.name, "unit": item.unit or "",
-                "qty": line.qty, "returned": done, "remaining": remaining,
+                "item_code": item.sku or "", "item_name": item.name,
+                "unit": (line.unit_conversion_snapshot or {}).get("target_unit_name") or item.unit or "",
+                "qty": base_qty, "returned": done, "remaining": remaining,
                 "unit_cost": unit_cost, "amount": (remaining * unit_cost).quantize(Decimal(1)),
                 "source_warehouse_id": source_warehouse,
             })

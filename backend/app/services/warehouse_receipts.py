@@ -203,6 +203,7 @@ def _direct_lines(db: Session, data: WarehouseReceiptIn) -> list[dict]:
         item.id: item
         for item in db.query(Item).filter(Item.id.in_([row.item_id for row in data.lines])).all()
     }
+    unit_registry = units.OperationUnitRegistry(db, items.values())
     rows = []
     for row in data.lines:
         item = items.get(row.item_id)
@@ -211,7 +212,7 @@ def _direct_lines(db: Session, data: WarehouseReceiptIn) -> list[dict]:
         context = "production" if data.receipt_type == "production" else (
             "inventory" if data.receipt_type == "opening" else "purchase")
         conversion = units.convert_transaction(db, item, row.qty, row.unit_id,
-            context=context, observations=row.observations)
+            context=context, observations=row.observations, registry=unit_registry)
         rows.append(
             {
                 "purchase_invoice_line_id": None,
@@ -698,6 +699,8 @@ def create_warehouse_receipt(
         for move, batch, line in tagged:
             move.batch_id = batch.id
             move.source_line_id = line.id
+            conversion = units.conversion_from_snapshot(line.unit_conversion_snapshot)
+            units.record_batch_observations(db, batch, conversion, user)
 
     #: **این‌جا نقطه‌ی ثبت تصمیم می‌گیرد (§۳۷).**
     #:

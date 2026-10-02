@@ -17,6 +17,7 @@ class SalesReturnLineIn(BaseModel):
     item_id: UUID | None = None
     sales_invoice_line_id: UUID | None = None
     qty: Decimal
+    unit_id: UUID | None = None
     return_reason_id: UUID | None = None
     description: str = ""
 
@@ -47,6 +48,11 @@ class SalesReturnLineOut(BaseModel):
     item_id: UUID
     sales_invoice_line_id: UUID | None = None
     qty: Decimal
+    base_qty: Decimal | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_price: Decimal
     unit_cost: Decimal
     return_reason_id: UUID | None = None

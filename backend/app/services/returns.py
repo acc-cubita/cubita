@@ -102,7 +102,7 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
 
     #: تخصیص‌های **فعال** — برگشتِ باطل‌شده مانده را آزاد می‌کند (§۷۶).
     allocated = dict(
-        db.query(SalesReturnLine.sales_invoice_line_id, func.coalesce(func.sum(SalesReturnLine.qty), 0))
+        db.query(SalesReturnLine.sales_invoice_line_id, func.coalesce(func.sum(func.coalesce(SalesReturnLine.base_qty, SalesReturnLine.qty)), 0))
         .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
         .filter(
             SalesReturn.sales_invoice_id == invoice_id,
@@ -135,11 +135,11 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
     issued_cost = issued_unit_cost_by_line(db, invoice_id)
     rows: list[_SourceLine] = []
     for line in lines:
-        sold = Decimal(line.qty)
+        sold = Decimal(line.base_qty if line.base_qty is not None else line.qty)
         # مبلغ **پس از کسر تخفیف** تا قیمتِ واحدِ مؤثر همان چیزی باشد که مشتری
         # واقعاً پرداخت کرده؛ وگرنه برگشت، بیش از دریافتی به او برمی‌گرداند و
         # تخفیف عملاً دو بار داده می‌شود.
-        net = (sold * Decimal(line.unit_price)) - Decimal(line.discount or 0)
+        net = (Decimal(line.qty) * Decimal(line.unit_price)) - Decimal(line.discount or 0)
         returned = Decimal(allocated.get(line.id, 0))
         rows.append(
             _SourceLine(
@@ -495,8 +495,10 @@ def post_sales_return(
     item_ids = {row.line.item_id for row in rows} | {l.item_id for l in data.lines if l.item_id}
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
     _assert_reasons_selectable(db, data.lines)
+    normalized, conversions = _return_quantities(db, rows, data.lines, items_by_id,
+        "sales_invoice_line_id", line_model=SalesReturnLine, header_model=SalesReturn)
     plan = _allocate(
-        rows, data.lines, items_by_id,
+        rows, normalized, items_by_id,
         source_attr="sales_invoice_line_id", doc_label="فاکتور فروش",
     )
 
@@ -520,6 +522,8 @@ def post_sales_return(
 
     for row, qty, req in plan:
         item = items_by_id[row.line.item_id]
+        conversion = conversions.get(id(req)) or units.historical_return_conversion(
+            units.document_conversion(db, row.line, item), qty, None, returned_base=row.returned)
         line_net = qty * row.unit_price
         total_amount += line_net
         net_by_nature[bool(item.is_service)] += line_net
@@ -529,10 +533,11 @@ def post_sales_return(
         tax_weight += line_net * row.tax_rate
         return_lines.append(
             SalesReturnLine(
+                **units.snapshot_fields(conversion, commercial=True),
                 sales_invoice_line_id=row.line.id,
                 item_id=row.line.item_id,
-                qty=qty,
-                unit_price=row.unit_price,
+                qty=conversion.source_qty,
+                unit_price=row.unit_price * qty / conversion.source_qty,
                 unit_cost=row.unit_cost,
                 return_reason_id=getattr(req, "return_reason_id", None),
                 description=req.description,
@@ -544,12 +549,14 @@ def post_sales_return(
             new_qty = existing_qty + qty
             if new_qty > 0:
                 item.average_cost = ((existing_qty * item.average_cost) + (qty * row.unit_cost)) / new_qty
-            stock_moves.extend(
-                _return_stock_moves(
+            inline_moves = _return_stock_moves(
                     db, invoice, row.line.id, row.line.item_id,
                     qty, row.unit_cost, data.return_date, item.name,
                 )
-            )
+            for move in inline_moves:
+                for field, value in units.movement_snapshot_fields(conversion, move.qty).items():
+                    setattr(move, field, value)
+            stock_moves.extend(inline_moves)
         elif not item.is_service:
             requested_physical[row.line.id] = requested_physical.get(row.line.id, Decimal(0)) + qty
 
@@ -993,12 +1000,13 @@ def _resolve_return_source(
     return invoice, receipt, warehouse_id
 
 
-def _purchase_return_quantities(db, rows, requested, items_by_id, source_attr):
+def _return_quantities(db, rows, requested, items_by_id, source_attr, *,
+                       line_model=PurchaseReturnLine, header_model=PurchaseReturn):
     """Normalize allocation to base, retaining exact entered quantity and frozen ratio."""
     sources = {row.line.id: row for row in rows}
-    key_column = getattr(PurchaseReturnLine, source_attr)
-    prior = db.query(PurchaseReturnLine).join(PurchaseReturn).filter(
-        key_column.in_(sources), PurchaseReturn.voided_at.is_(None)).all()
+    key_column = getattr(line_model, source_attr)
+    prior = db.query(line_model).join(header_model).filter(
+        key_column.in_(sources), header_model.voided_at.is_(None)).all()
     normalized, conversions = [], {}
     consumed_base, consumed_source = {}, {}
     for req in requested:
@@ -1026,7 +1034,7 @@ def _purchase_return_quantities(db, rows, requested, items_by_id, source_attr):
             if conversion.source_unit_id == original.source_unit_id
             else Fraction(conversion.target_qty) / original.ratio)
         updates = {"qty": conversion.target_qty}
-        if req.agreed_unit_value is not None:
+        if getattr(req, "agreed_unit_value", None) is not None:
             updates["agreed_unit_value"] = req.agreed_unit_value * conversion.source_qty / conversion.target_qty
         base_request = req.model_copy(update=updates)
         normalized.append(base_request)
@@ -1048,7 +1056,7 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
 
     item_ids = {row.line.item_id for row in rows} | {l.item_id for l in data.lines if l.item_id}
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
-    normalized, conversions = _purchase_return_quantities(db, rows, data.lines, items_by_id, source_attr)
+    normalized, conversions = _return_quantities(db, rows, data.lines, items_by_id, source_attr)
     plan = _allocate(rows, normalized, items_by_id, source_attr=source_attr, doc_label=doc_label)
     lock_items(db, {row.line.item_id for row, _, _ in plan})
 

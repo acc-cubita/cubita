@@ -230,6 +230,16 @@ def test_every_voidable_document_is_audited():
 
 def test_invoice_lines_do_not_each_get_their_own_row(db, user, tenant_id):
     """ثبت یک فاکتور ده‌ردیفه نباید یازده رکورد بسازد؛ ردیف جزئی از سند است."""
+    # The seed's legacy item has no registry yet. Audit its configuration separately
+    # from this assertion about document/line granularity.
+    from app.models.inventory import Item
+    from app.services import units
+    item = db.query(Item).first()
+    if item is None:
+        item = Item(sku="AUD-1", name="کالای حسابرسی", unit="عدد", sales_price=1000)
+        db.add(item)
+        db.flush()
+    units.configure_legacy(db, item)
     bind_session_actor(db, user)
     before = db.query(AuditLog).count()
     _post_invoice(db, user, tenant_id)

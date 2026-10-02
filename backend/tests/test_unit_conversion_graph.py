@@ -157,3 +157,14 @@ def test_float_and_boolean_quantities_are_rejected():
     for value in (0.1, True):
         with pytest.raises(ValueError):
             graph.convert(value, a, a)
+
+
+@pytest.mark.parametrize('quantity,factor,message', [
+    ('0.000000001', '1000', 'هشت رقم'),
+    ('10000000000000000', '0.00000001', 'ظرفیت'),
+])
+def test_source_quantity_must_fit_storage_even_when_converted_quantity_fits(quantity, factor, message):
+    source, target = uuid4(), uuid4()
+    graph = ConversionGraph([source, target], [fixed(source, target, factor)])
+    with pytest.raises(ValueError, match=message):
+        graph.convert(Decimal(quantity), source, target)

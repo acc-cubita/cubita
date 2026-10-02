@@ -15,7 +15,7 @@ from app.models.payment import Payment, PaymentRelatedDocument
 from app.models.receipt import Receipt, ReceiptRelatedDocument
 from app.models.sales_ops import SaleType
 from app.models.invoices import (
-    PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseIssue, WarehouseReceipt,
+    PurchaseInvoice, PurchaseInvoiceLine, SalesInvoice, WarehouseIssue, WarehouseReceipt, WarehouseReceiptLine,
 )
 from app.models.tenant import Membership, Tenant
 from app.models.user import Role, User
@@ -38,6 +38,7 @@ from app.schemas.invoices import (
 )
 from app.schemas.voiding import VoidIn, VoidOut
 from app.services import production_pricing, sales_posting
+from app.services import units
 from app.services.idempotency import idempotent
 from app.services.open_items import settled_amounts
 from app.services.purchase_deductions import totals_by_nature
@@ -131,8 +132,14 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
         .distinct()
         .all()
     }
+    movements, received = {}, {}
+    for movement in db.query(WarehouseReceiptLine).join(WarehouseReceipt).filter(
+        WarehouseReceipt.purchase_invoice_id.in_(ids),
+        WarehouseReceipt.voided_at.is_(None), WarehouseReceipt.status == "posted").all():
+        key = movement.purchase_invoice_line_id
+        movements.setdefault(key, []).append(movement)
+        received[key] = received.get(key, Decimal(0)) + Decimal(movement.qty)
     for invoice in invoices:
-        received = received_by_line(db, invoice.id)
         received_total = Decimal(0)
         ordered_total = Decimal(0)
         for line in invoice.lines:
@@ -145,8 +152,9 @@ def _attach_purchase_state(db: Session, invoices: list[PurchaseInvoice]) -> None
                 continue
             ordered = Decimal(line.base_qty if line.base_qty is not None else line.qty)
             got = received.get(line.id, ordered if invoice.id in legacy_ids else Decimal(0))
-            line.received_qty = got
-            line.remaining_qty = max(ordered - got, Decimal(0))
+            line.remaining_qty = (Decimal(0) if invoice.id in legacy_ids else
+                units.remaining_entered_quantity(line, movements.get(line.id, [])))
+            line.received_qty = Decimal(line.qty) - line.remaining_qty
             received_total += got
             ordered_total += ordered
         invoice.received_total_qty = received_total
