@@ -10767,3 +10767,51 @@ export const retryEnterpriseMarketPosting = (token: string, eventId: string) =>
   authedSend<{ outcome: string }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/retry`, {})
 export const repairEnterpriseMarketPostingMapping = (token: string, eventId: string, marketRef: string, itemId: string) =>
   authedSend<{ mapped: boolean }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/mapping`, { market_item_ref: marketRef, local_item_id: itemId })
+
+
+export interface ItemUnitRecord {
+  unit_id: string
+  unit_name: string
+  is_base: boolean
+  purchase_allowed: boolean
+  sale_allowed: boolean
+  inventory_allowed: boolean
+  production_allowed: boolean
+  decimal_allowed: boolean
+  is_active: boolean
+}
+export interface ItemConversionRule {
+  id: string
+  from_unit_id: string
+  to_unit_id: string
+  mode: 'fixed' | 'variable'
+  factor: string | null
+  version: number
+  is_active: boolean
+}
+export interface QuantityConversionSnapshot {
+  source_qty: string
+  source_unit_id: string
+  target_qty: string
+  target_unit_id: string
+  numerator: string
+  denominator: string
+  path: Array<{ rule_id: string; version: number; source: string }>
+}
+export type ItemConversionInput = Pick<ItemConversionRule, 'from_unit_id' | 'to_unit_id' | 'mode' | 'factor'>
+export const fetchItemUnits = (token: string, itemId: string) =>
+  authedGet<ItemUnitRecord[]>(token, `/api/items/${itemId}/units`)
+export const addItemUnit = (token: string, itemId: string, unitId: string) =>
+  authedSend<ItemUnitRecord>(token, 'POST', `/api/items/${itemId}/units`, { unit_id: unitId })
+export const updateItemUnit = (token: string, itemId: string, unitId: string, data: Partial<ItemUnitRecord>) =>
+  authedSend<ItemUnitRecord>(token, 'PATCH', `/api/items/${itemId}/units/${unitId}`, data)
+export const fetchItemConversionRules = (token: string, itemId: string) =>
+  authedGet<ItemConversionRule[]>(token, `/api/items/${itemId}/unit-conversions`)
+export const saveItemConversionRule = (token: string, itemId: string, data: ItemConversionInput, ruleId?: string) =>
+  authedSend<ItemConversionRule>(token, ruleId ? 'PUT' : 'POST', `/api/items/${itemId}/unit-conversions${ruleId ? `/${ruleId}` : ''}`, data)
+export const deactivateItemConversionRule = (token: string, itemId: string, ruleId: string) =>
+  authedDelete(token, `/api/items/${itemId}/unit-conversions/${ruleId}`)
+export const previewItemQuantity = (token: string, itemId: string, data: {
+  qty: string; unit_id: string; context: 'purchase' | 'sale' | 'inventory' | 'production'
+  batch_id?: string; observations?: Array<{ rule_id: string; from_qty: string; to_qty: string }>
+}) => authedSend<QuantityConversionSnapshot>(token, 'POST', `/api/items/${itemId}/convert-quantity`, data)

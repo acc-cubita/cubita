@@ -17,6 +17,7 @@ import {
   type WarehouseRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
+import { ItemUnitsEditor } from './ItemUnitsEditor'
 import { NumberInput } from './NumberInput'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
@@ -112,6 +113,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<DraftForm>(EMPTY_FORM)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [unitsItem, setUnitsItem] = useState<ItemRecord | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false) // نمای دوربینِ اسکنِ بارکد باز است؟
@@ -390,6 +392,8 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
       setError(err instanceof Error ? err.message : 'خطای ناشناخته')
     }
   }
+
+  if (unitsItem) return <ItemUnitsEditor token={token} item={unitsItem} masterUnits={units} onClose={() => { setUnitsItem(null); void refresh(); onChanged?.() }} />
 
   return (
     <div className="workspace-split">
@@ -1020,6 +1024,7 @@ export function ProductsPanel({ token, onChanged }: { token: string; onChanged?:
                       </td>
                       <td className="card-actions">
                         <div className="check-actions">
+                          <button type="button" onClick={() => setUnitsItem(p)}>واحدها و تبدیل</button>
                           <button type="button" onClick={() => startEdit(p)}>
                             <Pencil size={13} /> ویرایش
                           </button>
