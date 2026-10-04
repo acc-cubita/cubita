@@ -546,7 +546,8 @@ def post_sales_invoice(
     return invoice
 
 
-def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> PurchaseInvoice:
+def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User, *,
+                          frozen_conversions: dict[int, units.QuantityConversion] | None = None) -> PurchaseInvoice:
     assert_period_open(db, data.invoice_date)
     warehouses.assert_usable(db, data.warehouse_id, action="فاکتور خرید")
 
@@ -666,8 +667,10 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
         line_discount = Decimal(line.discount or 0) + allocated[idx]
-        conversion = units.convert_transaction(db, item, line.qty, line.unit_id,
-            context="purchase", observations=line.observations, registry=unit_registry)
+        conversion = (frozen_conversions or {}).get(idx)
+        if conversion is None:
+            conversion = units.convert_transaction(db, item, line.qty, line.unit_id,
+                context="purchase", observations=line.observations, registry=unit_registry)
         base_qty = conversion.target_qty
         line_addition = Decimal(line.addition or 0) + allocated_additions[idx]
         line_duty = line_duties_own[idx] + allocated_duties[idx]

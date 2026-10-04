@@ -29,6 +29,7 @@ DDL = (
 
 
 def upgrade():
+    op.add_column("enterprise_market_local_postings", sa.Column("quantity_inputs", postgresql.JSONB(), nullable=False, server_default="{}"))
     conn = op.get_bind()
     with rls_disabled(conn, tuple(dict.fromkeys((*PARENTS, *QUANTITY_TABLES, *(row[0] for row in SNAPSHOT_TABLES))))):
         invalid = conn.execute(sa.text("""
@@ -112,6 +113,10 @@ def upgrade():
 
 
 def downgrade():
+    with rls_disabled(op.get_bind(), ("enterprise_market_local_postings",)):
+        if op.get_bind().execute(sa.text("SELECT EXISTS(SELECT 1 FROM enterprise_market_local_postings WHERE quantity_inputs <> '{}'::jsonb)")).scalar_one():
+            raise RuntimeError("INV-02 downgrade would discard approved private market measurements")
+    op.drop_column("enterprise_market_local_postings", "quantity_inputs")
     conn = op.get_bind()
     with rls_disabled(conn, tuple(dict.fromkeys((*TABLES, *PARENTS, *QUANTITY_TABLES, *(row[0] for row in SNAPSHOT_TABLES))))):
         for table, column in QUANTITY_COLUMNS:

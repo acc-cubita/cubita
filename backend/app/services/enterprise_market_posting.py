@@ -33,6 +33,7 @@ from app.services import marketplace as marketplace_svc, treasury
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.sales_invoices import finalize_immediate_sale
 from app.services.returns import post_purchase_return, post_sales_return, get_returnable_summary, get_purchase_returnable_summary
+from app.services import units
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class MappingMissing(ValueError):
     pass
 
 
-def resolve_commercial_units(db: Session, local_items, lines, items_by_ref, *, side: str) -> dict[UUID, UUID]:
+def resolve_commercial_units(db: Session, local_items, lines, items_by_ref, *, side: str) -> list[UUID]:
     """Only an existing, enabled item-unit membership authorizes trade input.
 
     The seller's base quantity is never assumed to be the buyer's base quantity.
@@ -55,13 +56,13 @@ def resolve_commercial_units(db: Session, local_items, lines, items_by_ref, *, s
         ItemUnit.item_id.in_(item_ids), ItemUnit.is_active.is_(True),
         allowed.is_(True), UnitOfMeasure.is_active.is_(True)).all()
     by_name = {(row.item_id, row.name): row.unit_id for row in rows}
-    result = {}
+    result = []
     for line in lines:
         item = items_by_ref[line.market_item_ref]
         unit_id = by_name.get((item.id, line.unit.strip() or item.unit))
         if unit_id is None:
             raise MappingMissing("commercial market unit missing")
-        result[line.market_item_ref] = unit_id
+        result.append(unit_id)
     return result
 
 
@@ -139,7 +140,7 @@ def _local_contact(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
     return contact
 
 
-def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) -> UUID:
+def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent, *, quantity_inputs=None) -> UUID:
     items = _local_items(db, tenant_id, event)
     actor = marketplace_svc._tenant_actor(db, tenant_id)
     if event.kind == "return":
@@ -158,12 +159,23 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
         anchor = "sales_invoice_line_id" if event.side == "seller" else "purchase_invoice_line_id"
         return_lines = []
         for line in event.lines:
+            approved_units = set()
+            for index, original_line in enumerate(original.payload.get("lines", [])):
+                approved = (original.quantity_inputs or {}).get(str(index))
+                if (approved and original_line.get("market_item_ref") == str(line.market_item_ref)
+                        and original_line.get("unit", "") == line.unit):
+                    approved_units.add(units.conversion_from_snapshot(approved["conversion"]).source_unit_id)
+            if len(approved_units) > 1:
+                raise MappingMissing("historical market unit is ambiguous")
+            approved_unit = next(iter(approved_units), None)
             left = line.qty
             for source in summary:
                 if source["item_id"] != items[line.market_item_ref].id:
                     continue
                 options = source["return_unit_options"]
-                option = next((unit for unit in options if not line.unit or unit["unit_name"] == line.unit), None)
+                option = next((unit for unit in options if
+                    (unit["unit_id"] == approved_unit if approved_unit is not None
+                     else not line.unit or unit["unit_name"] == line.unit)), None)
                 if option is None:
                     continue
                 take = min(left, option["remaining"])
@@ -197,7 +209,23 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
     contact = _local_contact(db, tenant_id, event)
     warehouse = marketplace_svc._default_warehouse(db, tenant_id)
     description = f"سفارش بازار #{event.order_number} ({event.order_id})"
-    commercial_units = resolve_commercial_units(db, items.values(), event.lines, items, side=event.side)
+    frozen = {}
+    commercial_units = {}
+    unresolved = []
+    for index, line in enumerate(event.lines):
+        approved = (quantity_inputs or {}).get(str(index))
+        if approved is None:
+            unresolved.append((index,line))
+            continue
+        conversion = units.conversion_from_snapshot(approved['conversion'])
+        item = items[line.market_item_ref]
+        if (approved['item_id'] != str(item.id) or approved['market_item_ref'] != str(line.market_item_ref)
+                or conversion.source_qty != line.qty or conversion.target_unit_id != item.primary_unit_id):
+            raise MappingMissing('approved market input mismatch')
+        frozen[index] = conversion
+        commercial_units[index] = conversion.source_unit_id
+    resolved = resolve_commercial_units(db, items.values(), [line for _,line in unresolved], items, side=event.side)
+    commercial_units.update({index:unit_id for (index,_line),unit_id in zip(unresolved,resolved)})
     if event.side == "seller":
         invoice = post_sales_invoice(
             db,
@@ -205,11 +233,11 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
                 invoice_date=event.order_date, warehouse_id=warehouse.id,
                 contact_id=contact.id, description=description,
                 lines=[SalesInvoiceLineIn(
-                    item_id=items[line.market_item_ref].id, qty=line.qty, unit_id=commercial_units[line.market_item_ref],
+                    item_id=items[line.market_item_ref].id, qty=line.qty, unit_id=commercial_units[index],
                     unit_price=line.unit_price, discount=line.discount,
-                ) for line in event.lines],
+                ) for index,line in enumerate(event.lines)],
             ),
-            actor, move_inventory=False, issue_accounting=False,
+            actor, move_inventory=False, issue_accounting=False, frozen_conversions=frozen,
         )
         finalize_immediate_sale(db, invoice, warehouse.id, actor)
     else:
@@ -219,11 +247,11 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
                 invoice_date=event.order_date, warehouse_id=warehouse.id,
                 contact_id=contact.id, description=description,
                 lines=[PurchaseInvoiceLineIn(
-                    item_id=items[line.market_item_ref].id, qty=line.qty, unit_id=commercial_units[line.market_item_ref],
+                    item_id=items[line.market_item_ref].id, qty=line.qty, unit_id=commercial_units[index],
                     unit_cost=line.unit_price, discount=line.discount,
-                ) for line in event.lines],
+                ) for index,line in enumerate(event.lines)],
             ),
-            actor,
+            actor, frozen_conversions=frozen,
         )
         consumer_by_item = {
             items[line.market_item_ref].id: line.consumer_price
@@ -274,7 +302,8 @@ def consume(db: Session, tenant_id: UUID, event: MarketFinancialEvent) -> Market
     row.attempts += 1
     try:
         with db.begin_nested():
-            document_id = _post_document(db, tenant_id, event)
+            document_id = (_post_document(db, tenant_id, event, quantity_inputs=row.quantity_inputs)
+                if row.quantity_inputs else _post_document(db, tenant_id, event))
     except MappingMissing as exc:
         row.status = "blocked"
         row.error_code = "item_mapping_missing"
@@ -284,6 +313,8 @@ def consume(db: Session, tenant_id: UUID, event: MarketFinancialEvent) -> Market
                             if "historical market unit" in str(exc) else
                             "واحد معامله در واحدهای مجاز کالا تعریف نشده است؛ واحد و تبدیل معتبر همین کالا را تعریف و دوباره تلاش کنید."
                             if "commercial market unit" in str(exc) else
+                            "نگاشت کالا پس از تأیید مقدار تغییر کرده است؛ واحد و نسبت محلی همین ردیف را دوباره تأیید کنید."
+                            if "approved market input mismatch" in str(exc) else
                             "نگاشت کالا کامل نیست یا کالا غیرفعال است؛ نگاشت را اصلاح و دوباره تلاش کنید.")
     except Exception as exc:  # noqa: BLE001 — finance failure must remain retryable, not lose the event
         log.warning("local market posting failed: %s", type(exc).__name__)

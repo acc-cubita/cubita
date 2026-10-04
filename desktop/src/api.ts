@@ -10778,7 +10778,7 @@ export interface EnterpriseMarketPostingError {
   attempts: number
   error_code: string
   error_detail: string
-  lines: Array<{ market_item_ref: string; name: string; unit: string }>
+  lines: Array<{ market_item_ref: string; name: string; unit: string; qty?: string; local_item_id?: string | null }>
 }
 export const fetchEnterpriseMarketSyncStatus = (token: string) =>
   authedGet<{ last_sync_at: string | null; offline: boolean; access_denied: boolean }>(token, '/api/local-market/sync-status')
@@ -10901,3 +10901,8 @@ export interface ProductionMaterialPreview {
 export const previewProductionMaterials = (token: string, id: string, data: {
   issue_date: string; qty?: string | null; unit_id?: string; observations?: UnitObservation[]
 }) => authedSend<ProductionMaterialPreview>(token, 'POST', `/api/production-plans/${id}/material-preview`, data)
+
+export const approveEnterpriseMarketQuantity = (token: string, eventId: string, data: {
+  line_index: number; unit_id: string; observations: UnitObservation[]
+}) => authedSend<{ approved: boolean; conversion: QuantityConversionSnapshot }>(token, 'POST',
+  `/api/local-market/posting-errors/${eventId}/quantity-input`, data)

@@ -203,6 +203,7 @@ class EnterpriseMarketLocalPosting(UUIDPKMixin, TenantMixin, TimestampMixin, Bas
     side: Mapped[str] = mapped_column(String(8), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    quantity_inputs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     error_code: Mapped[str] = mapped_column(String(60), nullable=False, default="", server_default="")

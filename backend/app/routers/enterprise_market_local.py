@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
+from app.schemas.item_units import ObservedRatioIn
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -615,6 +616,12 @@ class LocalItemMapIn(BaseModel):
     market_item_ref: UUID | None = None
 
 
+class LocalQuantityInputIn(BaseModel):
+    line_index: int = Field(ge=0, le=99)
+    unit_id: UUID
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
+
+
 def _posting_permission(principal: Principal, side: str, action: str) -> None:
     if not principal.has_permission("market_buy" if side == "buyer" else "market_distribute", action):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "دسترسی به ثبت مالی این سمت بازار ندارید")
@@ -631,10 +638,16 @@ def posting_errors(principal: Principal = Depends(active_market), db: Session = 
         EnterpriseMarketLocalPosting.side.in_(sides),
         EnterpriseMarketLocalPosting.status.in_(("blocked", "retryable_error", "pending")),
     ).order_by(EnterpriseMarketLocalPosting.created_at, EnterpriseMarketLocalPosting.id).limit(200).all()
+    refs = {UUID(line["market_item_ref"]) for row in rows for line in row.payload.get("lines", [])}
+    mapped = dict(db.query(EnterpriseMarketItemMap.market_item_ref, EnterpriseMarketItemMap.local_item_id).filter(
+        EnterpriseMarketItemMap.tenant_id == principal.tenant_id,
+        EnterpriseMarketItemMap.market_item_ref.in_(refs)).all())
     return [{"event_id": row.event_id, "order_number": row.payload.get("order_number"),
              "side": row.side, "kind": row.kind, "status": row.status,
              "attempts": row.attempts, "error_code": row.error_code,
-             "error_detail": row.error_detail, "lines": row.payload.get("lines", [])} for row in rows]
+             "error_detail": row.error_detail, "lines": [{**line,
+                 "local_item_id":mapped.get(UUID(line["market_item_ref"]))}
+                 for line in row.payload.get("lines", [])]} for row in rows]
 
 
 def _error_posting(db: Session, principal: Principal, event_id: UUID) -> EnterpriseMarketLocalPosting:
@@ -668,6 +681,32 @@ def repair_posting_mapping(event_id: UUID, data: LocalItemMapIn,
     from app.services.enterprise_market_recovery import repair_mapping
 
     return repair_mapping(db, principal.tenant_id, principal.user.id, row, data.market_item_ref, data.local_item_id)
+
+
+@router.post("/posting-errors/{event_id}/quantity-input")
+def approve_posting_quantity(event_id: UUID, data: LocalQuantityInputIn,
+                             principal: Principal = Depends(active_market), db: Session = Depends(get_db)):
+    row = _error_posting(db, principal, event_id)
+    if row.status == "posted" or row.kind != "order":
+        raise HTTPException(409, "مقدار سند ثبت‌شده یا مرجوعی تغییر نمی‌کند؛ از واحد تاریخی فاکتور اصلی استفاده کنید")
+    event = MarketFinancialEvent.model_validate(row.payload)
+    if data.line_index >= len(event.lines):
+        raise HTTPException(422, "ردیف انتخاب‌شده در رویداد وجود ندارد")
+    from app.services.enterprise_market_posting import _local_items, MappingMissing
+    from app.services import units
+    line = event.lines[data.line_index]
+    try:
+        item = _local_items(db, principal.tenant_id, event)[line.market_item_ref]
+    except MappingMissing as exc:
+        raise HTTPException(409, "ابتدا نگاشت کالای همین رویداد را تکمیل کنید") from exc
+    conversion = units.convert_transaction(db, item, line.qty, data.unit_id,
+        context="sale" if event.side == "seller" else "purchase", observations=data.observations)
+    row.quantity_inputs = {**(row.quantity_inputs or {}), str(data.line_index): {
+        "schema_version":1, "item_id":str(item.id), "market_item_ref":str(line.market_item_ref),
+        "conversion":conversion.snapshot(), "approved_by":str(principal.user.id),
+        "approved_at":datetime.now(timezone.utc).isoformat()}}
+    db.flush()
+    return {"approved":True, "conversion":conversion.snapshot()}
 
 
 class LocalListingMapIn(BaseModel):
