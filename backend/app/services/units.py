@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from fractions import Fraction
 from typing import Iterable, Mapping
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -483,6 +483,136 @@ def assert_base_change_allowed(db: Session, item: Item, proposed: UUID | None) -
         for column in columns:
             if db.execute(select(column).where(column == item.id, table.c.tenant_id == item.tenant_id).limit(1)).first():
                 raise HTTPException(409, "این کالا سابقهٔ عملیاتی دارد و واحد پایه‌اش قابل تغییر نیست؛ کالای تازه تعریف کنید")
+
+
+def initialize_pending_items(db: Session) -> None:
+    """Give every new ORM item a base membership before its first INSERT.
+
+    This is called by the existing tenant before-flush hook. It never flushes,
+    and resolves all requested names in one query for imports and catalog pulls.
+    """
+    from app.models.item_units import ItemUnit, ItemUnitConversion
+    pending = [item for item in db.new if isinstance(item, Item)]
+    if not pending:
+        return
+    from app.tenant_context import require_session_tenant
+    tenant_id = require_session_tenant(db)
+    units_by_name = {}
+    units_by_id = {}
+    for unit in db.new:
+        if isinstance(unit, UnitOfMeasure):
+            unit.id = unit.id or uuid4()
+            unit.tenant_id = unit.tenant_id or tenant_id
+            units_by_name[(unit.tenant_id, unit.name)] = unit
+            units_by_id[unit.id] = unit
+    names = {(item.unit or "عدد").strip() or "عدد" for item in pending if item.primary_unit_id is None}
+    ids = {uid for item in pending for uid in (item.primary_unit_id, item.secondary_unit_id) if uid}
+    with db.no_autoflush:
+        for unit in db.query(UnitOfMeasure).filter(UnitOfMeasure.tenant_id == tenant_id,
+            (UnitOfMeasure.name.in_(names)) | (UnitOfMeasure.id.in_(ids))).all():
+            units_by_name[(unit.tenant_id, unit.name)] = unit
+            units_by_id[unit.id] = unit
+    memberships = {(row.tenant_id or tenant_id, row.item_id, row.unit_id)
+        for row in db.new if isinstance(row, ItemUnit)}
+    member_rows = {(row.item_id, row.unit_id): row for row in db.new if isinstance(row, ItemUnit)}
+    rules = {(row.item_id, row.from_unit_id, row.to_unit_id)
+        for row in db.new if isinstance(row, ItemUnitConversion)}
+    for item in pending:
+        item.id = item.id or uuid4()
+        item.tenant_id = item.tenant_id or tenant_id
+        if item.tenant_id != tenant_id:
+            raise HTTPException(400, "کالای جدید به شرکت جاری تعلق ندارد")
+        if item.primary_unit_id is None:
+            name = (item.unit or "عدد").strip() or "عدد"
+            unit = units_by_name.get((tenant_id, name))
+            if unit is None:
+                unit = UnitOfMeasure(id=uuid4(), tenant_id=tenant_id, name=name)
+                db.add(unit); units_by_name[(tenant_id, name)] = unit; units_by_id[unit.id] = unit
+            item.primary_unit_id = unit.id
+        primary = units_by_id.get(item.primary_unit_id)
+        if primary is not None and primary.tenant_id == tenant_id:
+            item.primary_unit = primary
+            item.unit = primary.name
+        for unit_id in (item.primary_unit_id, item.secondary_unit_id):
+            key = (tenant_id, item.id, unit_id)
+            if unit_id and key not in memberships:
+                member = ItemUnit(tenant_id=tenant_id, item_id=item.id, unit_id=unit_id, item=item)
+                if unit_id in units_by_id:
+                    member.unit = units_by_id[unit_id]
+                db.add(member)
+                member_rows[(item.id, unit_id)] = member
+                memberships.add(key)
+        if item.secondary_unit_id is not None and item.secondary_unit_id != item.primary_unit_id:
+            mode = item.conversion_mode or "fixed"
+            factor = exact_decimal(item.conversion_factor or 0) if mode == "fixed" else None
+            key = (item.id, item.secondary_unit_id, item.primary_unit_id)
+            if key not in rules and (mode == "variable" or (factor is not None and factor > 0)):
+                db.add(ItemUnitConversion(tenant_id=tenant_id, item_id=item.id,
+                    from_unit_id=item.secondary_unit_id, to_unit_id=item.primary_unit_id,
+                    mode=mode, factor=factor,
+                    from_membership=member_rows[(item.id, item.secondary_unit_id)],
+                    to_membership=member_rows[(item.id, item.primary_unit_id)]))
+                rules.add(key)
+
+
+def normalize_backup_item_units(tables: dict) -> dict:
+    """Normalize pre-registry backup items before any existing data is deleted."""
+    result = dict(tables)
+    items = [dict(row) for row in tables.get("items", [])]
+    unit_rows = [dict(row) for row in tables.get("units_of_measure", [])]
+    members = [dict(row) for row in tables.get("item_units", [])]
+    rules = [dict(row) for row in tables.get("item_unit_conversions", [])]
+    by_id = {str(row["id"]): row for row in unit_rows}
+    by_name = {(str(row.get("tenant_id", "")), row["name"]): row for row in unit_rows}
+    member_keys = {(str(row["item_id"]), str(row["unit_id"])): row for row in members}
+    rule_keys = {(str(row["item_id"]), str(row["from_unit_id"]), str(row["to_unit_id"])) for row in rules}
+    for item in items:
+        tenant = str(item.get("tenant_id", ""))
+        if not item.get("primary_unit_id"):
+            name = (item.get("unit") or "عدد").strip() or "عدد"
+            unit = by_name.get((tenant, name))
+            if unit is None:
+                unit = {"id": str(uuid4()), "tenant_id": item.get("tenant_id"), "name": name}
+                unit_rows.append(unit); by_name[(tenant, name)] = unit; by_id[unit["id"]] = unit
+            item["primary_unit_id"] = unit["id"]
+        primary = by_id.get(str(item["primary_unit_id"]))
+        if primary is None or str(primary.get("tenant_id", "")) != tenant:
+            raise HTTPException(400, "واحد پایهٔ کالا در پشتیبان معتبر نیست")
+        item["unit"] = primary["name"]
+        if item.get("secondary_unit_id") == item["primary_unit_id"]:
+            raise HTTPException(400, "واحد پایه و فرعی پشتیبان یکسان‌اند")
+        for uid in (item["primary_unit_id"], item.get("secondary_unit_id")):
+            if uid is None:
+                continue
+            unit = by_id.get(str(uid))
+            if unit is None or str(unit.get("tenant_id", "")) != tenant:
+                raise HTTPException(400, "واحد کالا در پشتیبان به همان شرکت تعلق ندارد")
+            key = (str(item["id"]), str(uid))
+            member = member_keys.get(key)
+            if member is None:
+                member = {"id": str(uuid4()), "tenant_id": item.get("tenant_id"),
+                    "item_id": item["id"], "unit_id": uid}
+                members.append(member); member_keys[key] = member
+            if uid == item["primary_unit_id"] and (member.get("is_active") is False or
+                member.get("inventory_allowed") is False or unit.get("is_active") is False):
+                raise HTTPException(400, "واحد پایهٔ پشتیبان باید برای موجودی فعال باشد")
+        secondary = item.get("secondary_unit_id")
+        key = (str(item["id"]), str(secondary), str(item["primary_unit_id"]))
+        if secondary and key not in rule_keys:
+            mode = item.get("conversion_mode") or "fixed"
+            try:
+                factor = exact_decimal(str(item.get("conversion_factor") or 0)) if mode == "fixed" else None
+            except (ValueError, ArithmeticError) as exc:
+                raise HTTPException(400, "نسبت تبدیل قدیمی پشتیبان معتبر نیست") from exc
+            if mode not in ("fixed", "variable") or (mode == "fixed" and factor <= 0):
+                raise HTTPException(400, "نسبت تبدیل قدیمی پشتیبان معتبر نیست")
+            rules.append({"id": str(uuid4()), "tenant_id": item.get("tenant_id"), "item_id": item["id"],
+                "from_unit_id": secondary, "to_unit_id": item["primary_unit_id"], "mode": mode,
+                "factor": str(factor) if factor is not None else None})
+            rule_keys.add(key)
+    if items:
+        result.update(items=items, units_of_measure=unit_rows, item_units=members, item_unit_conversions=rules)
+    return result
 
 
 def configure_legacy(db: Session, item: Item, *, old_secondary: UUID | None = None, old_primary: UUID | None = None) -> None:

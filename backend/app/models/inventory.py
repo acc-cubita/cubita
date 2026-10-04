@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     case,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     Index,
     Numeric,
@@ -391,6 +392,9 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "sku", name="uq_items_tenant_sku"),
         UniqueConstraint("tenant_id", "id", name="uq_items_tenant_id"),
+        ForeignKeyConstraint(["tenant_id", "id", "primary_unit_id"],
+            ["item_units.tenant_id", "item_units.item_id", "item_units.unit_id"],
+            name="fk_items_base_membership", deferrable=True, initially="DEFERRED", use_alter=True),
         # بارکد در سطحِ مستأجر یکتاست — دو کالا نباید بارکدِ یکسان بگیرند، وگرنه اسکن
         # مبهم می‌شود و «آخرین کالای ذخیره‌شده» را می‌آورد. ایندکسِ جزئی چون بارکدِ
         # خالی NULL است و چند کالای بی‌بارکد مجازند (فقط ردیف‌های دارای بارکد یکتا).
@@ -523,9 +527,10 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: هر بار که واحد عوض شود آن را هم‌گام می‌کند. نگه‌داشتنش عمدی است — ردیفِ
     #: فاکتور، بسته‌ی مؤدیان، بازار و فروشگاه همه `unit_snapshot`/`unit` را
     #: می‌خوانند و شکستنِ همه‌شان ارزشی اضافه نمی‌کرد.
-    primary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
+    primary_unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=False
     )
+    primary_unit: Mapped["UnitOfMeasure"] = relationship(foreign_keys=[primary_unit_id])
     secondary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
     )

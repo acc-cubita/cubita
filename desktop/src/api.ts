@@ -8674,6 +8674,8 @@ export interface PurchaseInvoiceDuplicateDraft {
   lines: Array<{
     item_id: string
     qty: string | number
+    unit_id?: string | null
+    unit_name?: string
     unit_cost: string | number
     discount: string | number
     addition: string | number

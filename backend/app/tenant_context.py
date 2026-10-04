@@ -148,6 +148,8 @@ def _stamp_tenant_on_new_rows(session, flush_context, instances) -> None:
             continue
         if hasattr(type(obj), "tenant_id") and getattr(obj, "tenant_id", None) is None:
             obj.tenant_id = tenant_id
+    from app.services.units import initialize_pending_items
+    initialize_pending_items(session)
 
 
 def current_tenant_in_db(db: Session) -> str | None:

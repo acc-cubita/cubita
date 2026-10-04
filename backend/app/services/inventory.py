@@ -995,7 +995,9 @@ def duplicate_purchase_invoice_draft(db: Session, invoice_id: UUID) -> dict:
         "lines": [
             {
                 "item_id": line.item_id,
-                "qty": Decimal(line.qty),
+                "qty": format(Decimal(line.qty), "f"),
+                "unit_id": line.entered_unit_id or line.base_unit_id,
+                "unit_name": (line.unit_conversion_snapshot or {}).get("source_unit_name", line.unit_snapshot),
                 "unit_cost": transaction_amount(line.unit_cost),
                 "discount": transaction_amount(line.discount),
                 "addition": transaction_amount(line.addition),

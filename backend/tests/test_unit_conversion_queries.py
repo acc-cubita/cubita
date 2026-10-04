@@ -9,7 +9,7 @@ from uuid import uuid4
 from app.tenant_context import tenant_scope
 
 from app.models.inventory import Item
-from app.models.item_units import ItemUnit, ItemUnitConversion
+from app.models.item_units import ItemUnitConversion
 from app.services import units
 
 
@@ -19,13 +19,6 @@ def _registries(db, count=1000):
     items = [Item(sku=f'PERF-{index}', name=f'کالای {index}', unit='عدد', primary_unit_id=piece.id,
         secondary_unit_id=carton.id, conversion_factor=Decimal('24')) for index in range(count)]
     db.add_all(items); db.flush()
-    for item in items:
-        db.add_all([ItemUnit(tenant_id=item.tenant_id, item_id=item.id, unit_id=unit.id)
-            for unit in (piece, carton)])
-    db.flush()
-    db.add_all([ItemUnitConversion(tenant_id=item.tenant_id, item_id=item.id,
-        from_unit_id=carton.id, to_unit_id=piece.id, factor=Decimal('24')) for item in items])
-    db.flush()
     return items, carton
 
 

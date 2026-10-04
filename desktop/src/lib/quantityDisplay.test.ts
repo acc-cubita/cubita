@@ -1,5 +1,12 @@
 import { expect, it } from 'vitest'
-import { quantityTotals, stepQuantity } from './quantityDisplay'
+import { quantityTotals, remainingQuantity, stepQuantity } from './quantityDisplay'
+
+it('preserves eight decimals in large production remainders', () => {
+  expect(remainingQuantity('9999999999999999.12345678', '9999999999999998.12345677')).toBe('1.00000001')
+  expect(remainingQuantity('0.3', '0.1')).toBe('0.2')
+  expect(remainingQuantity('1', '2')).toBe('0')
+  expect(() => remainingQuantity('1.000000001', '0')).toThrow()
+})
 
 it('steps POS quantities without losing the entered fraction', () => {
   expect(stepQuantity('9999999999999998.12345678', 1)).toBe('9999999999999999.12345678')

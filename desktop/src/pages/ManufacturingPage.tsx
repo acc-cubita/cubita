@@ -40,6 +40,7 @@ import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { Pager, usePagination } from '../components/Pager'
 import { useNavSection } from '../components/navContext'
 import { formatJalali, todayIso } from '../lib/jalali'
+import { remainingQuantity } from '../lib/quantityDisplay'
 import { SearchSelect } from '../components/SearchSelect'
 import { FormField } from '../components/form/FormKit'
 import { TransactionUnitPicker, type TransactionUnitPatch } from '../components/TransactionUnitPicker'
@@ -880,7 +881,7 @@ function ProductReceiptTab({
     setPlanId(id)
     setUnit({})
     const p = plans.find((x) => x.id === id)
-    if (p) setQty(String(remainingOf(p)))
+    if (p) setQty(remainingQuantity(String(p.qty_planned), String(p.qty_produced)))
   }
 
   async function submit(e: React.FormEvent) {

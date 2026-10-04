@@ -102,6 +102,10 @@ def upgrade():
                    CASE WHEN conversion_mode='fixed' THEN conversion_factor ELSE NULL END
             FROM items WHERE secondary_unit_id IS NOT NULL
         """))
+    op.alter_column("items", "primary_unit_id", nullable=False)
+    op.create_foreign_key("fk_items_base_membership", "items", "item_units",
+        ["tenant_id", "id", "primary_unit_id"], ["tenant_id", "item_id", "unit_id"],
+        deferrable=True, initially="DEFERRED")
     for statement in rls_statements(TABLES):
         conn.execute(sa.text(statement))
 
@@ -132,6 +136,8 @@ def downgrade():
         """)).scalar_one()
         if incompatible:
             raise RuntimeError("INV-02 downgrade would discard multi-unit data; restore a verified pre-upgrade backup instead")
+    op.drop_constraint("fk_items_base_membership", "items", type_="foreignkey")
+    op.alter_column("items", "primary_unit_id", nullable=True)
     for table, item_column, qty_column, commercial, has_name in SNAPSHOT_TABLES:
         for column in ("unit_conversion_snapshot", "base_unit_id", "entered_unit_id", "entered_qty"):
             op.drop_column(table, column)

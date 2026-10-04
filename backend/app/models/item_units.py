@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import TimestampMixin, UUIDPKMixin
@@ -20,6 +20,8 @@ class ItemUnit(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     unit_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    item = relationship("Item", foreign_keys="[ItemUnit.tenant_id, ItemUnit.item_id]")
+    unit = relationship("UnitOfMeasure", foreign_keys="[ItemUnit.tenant_id, ItemUnit.unit_id]", overlaps="item")
     purchase_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     sale_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     inventory_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
@@ -43,6 +45,8 @@ class ItemUnitConversion(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     from_unit_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     to_unit_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    from_membership = relationship("ItemUnit", foreign_keys="[ItemUnitConversion.tenant_id, ItemUnitConversion.item_id, ItemUnitConversion.from_unit_id]")
+    to_membership = relationship("ItemUnit", foreign_keys="[ItemUnitConversion.tenant_id, ItemUnitConversion.item_id, ItemUnitConversion.to_unit_id]", overlaps="from_membership")
     mode: Mapped[str] = mapped_column(String(12), default="fixed", server_default="fixed")
     factor: Mapped[Decimal | None] = mapped_column(Numeric(30, 12), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")

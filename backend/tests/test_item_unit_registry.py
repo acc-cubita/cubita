@@ -14,6 +14,41 @@ from app.tenant_context import tenant_scope
 from tests.factories import make_item
 
 
+def test_bulk_items_initialize_shared_new_base_unit(db):
+    from app.models.inventory import Item
+    from sqlalchemy import text
+
+    rows = [Item(sku=f'BASE-{i}', name=f'Base {i}', unit='واحد تازه') for i in range(3)]
+    db.add_all(rows)
+    db.flush()
+    assert len({row.primary_unit_id for row in rows}) == 1
+    assert db.query(ItemUnit).filter(ItemUnit.item_id.in_([row.id for row in rows])).count() == 3
+    # Fixture transactions normally roll back; explicitly evaluate the deferred FK.
+    db.execute(text('SET CONSTRAINTS fk_items_base_membership IMMEDIATE'))
+    db.execute(text('SET CONSTRAINTS fk_items_base_membership DEFERRED'))
+
+
+def test_database_rejects_removed_base_membership(db):
+    from sqlalchemy import text
+
+    item = make_item(db)
+    with pytest.raises(IntegrityError):
+        with db.begin_nested():
+            db.query(ItemUnit).filter_by(item_id=item.id, unit_id=item.primary_unit_id).delete()
+            db.execute(text('SET CONSTRAINTS fk_items_base_membership IMMEDIATE'))
+    assert db.query(ItemUnit).filter_by(item_id=item.id, unit_id=item.primary_unit_id).count() == 1
+
+
+def test_raw_insert_cannot_bypass_required_base_unit(db):
+    from app.models.inventory import Item
+    from app.tenant_context import require_session_tenant
+
+    with pytest.raises(IntegrityError):
+        with db.begin_nested():
+            db.execute(Item.__table__.insert().values(
+                tenant_id=require_session_tenant(db), sku='NO-BASE', name='Missing base'))
+
+
 def configured(db, variable=False):
     primary=units.get_or_create(db,'متر' if variable else 'عدد')
     secondary=units.get_or_create(db,'کیلوگرم' if variable else 'کارتن')

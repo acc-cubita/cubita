@@ -20,6 +20,29 @@ def seed_stock(db,user,item,qty):
         lines=[PurchaseInvoiceLineIn(item_id=item.id,qty=Decimal(qty),unit_cost=Decimal(100))]),user)
 
 
+def test_purchase_duplicate_keeps_entered_unit_but_is_a_fresh_conversion(db, user, client):
+    item, piece, carton = configured(db)
+    invoice = post_purchase_invoice(db, PurchaseInvoiceIn(invoice_date=date.today(),
+        warehouse_id=main_warehouse(db).id,
+        lines=[PurchaseInvoiceLineIn(item_id=item.id, qty='2.00000001', unit_id=carton.id,
+                                    unit_cost='2400')]), user)
+    rule = db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
+    units.configure_rule(db, item, ConversionRuleIn(from_unit_id=carton.id,
+        to_unit_id=piece.id, factor='30'), rule_id=rule.id)
+    response = client.get(f'/api/purchase-invoices/{invoice.id}/duplicate')
+    assert response.status_code == 200, response.text
+    draft_line = response.json()['lines'][0]
+    assert draft_line['qty'] == '2.00000001'
+    assert draft_line['unit_id'] == str(carton.id)
+    assert draft_line['unit_name'] == 'کارتن'
+    assert 'unit_conversion_snapshot' not in draft_line
+    assert 'base_qty' not in draft_line
+    copied = post_purchase_invoice(db, PurchaseInvoiceIn(invoice_date=date.today(),
+        warehouse_id=main_warehouse(db).id, lines=[PurchaseInvoiceLineIn(**draft_line)]), user)
+    assert copied.lines[0].base_qty == Decimal('60.00000030')
+    assert invoice.lines[0].base_qty == Decimal('48.00000024')
+
+
 def test_quotation_partial_invoices_keep_original_unit_and_factor(db, user):
     from app.schemas.quotations import SalesQuotationIn, SalesQuotationConvertIn
     from app.services import quotations

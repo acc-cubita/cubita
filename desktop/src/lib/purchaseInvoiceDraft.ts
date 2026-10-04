@@ -153,6 +153,9 @@ export function usePurchaseInvoiceDraft({
       prefill.lines.map((l) => ({
         itemId: l.item_id,
         qty: String(l.qty),
+        unitId: l.unit_id ?? undefined,
+        unitName: l.unit_name,
+        observations: [],
         unitCost: String(Number(l.unit_cost)),
         discount: Number(l.discount) ? String(Number(l.discount)) : '',
         addition: Number(l.addition) ? String(Number(l.addition)) : '',

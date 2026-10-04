@@ -26,3 +26,16 @@ export function stepQuantity(qty: string, delta: 1 | -1): string {
   const fraction = (value % scale).toString().padStart(8, '0').replace(/0+$/, '')
   return `${value / scale}${fraction ? `.${fraction}` : ''}`
 }
+
+/** Exact canonical remainder for pre-filling a server quantity, without conversion. */
+export function remainingQuantity(total: string, used: string): string {
+  const scaled = (value: string) => {
+    const match = /^(\d+)(?:\.(\d{0,8}))?$/.exec(value.trim())
+    if (!match) throw new Error('مقدار نامعتبر است')
+    return BigInt(match[1]) * 100000000n + BigInt((match[2] ?? '').padEnd(8, '0'))
+  }
+  const value = scaled(total) - scaled(used)
+  if (value <= 0n) return '0'
+  const fraction = (value % 100000000n).toString().padStart(8, '0').replace(/0+$/, '')
+  return `${value / 100000000n}${fraction ? `.${fraction}` : ''}`
+}
