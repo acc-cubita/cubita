@@ -800,6 +800,8 @@ def remove_listing_mapping(listing_id: UUID, principal: Principal = Depends(owne
     ).with_for_update().first()
     if mapping is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "نگاشت کاتالوگ پیدا نشد")
+    if mapping.quantity_contracts:
+        raise HTTPException(409, "نسخه‌های عرضه برای سفارش‌های قبلی نگه داشته می‌شوند؛ عرضه را غیرفعال کنید تا قرارداد تاریخی حذف نشود")
     # Keep item mappings: already accepted orders and returns may still need
     # them for exact-once local posting after the listing is unpublished.
     db.delete(mapping)

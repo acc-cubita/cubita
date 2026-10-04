@@ -29,6 +29,11 @@ DDL = (
 
 
 def upgrade():
+    op.add_column("marketplace_listing_components", sa.Column("unit_conversion_snapshot", postgresql.JSONB(), nullable=True))
+    op.add_column("marketplace_listing_components", sa.Column("trade_contract_ref", postgresql.UUID(as_uuid=True), nullable=True))
+    op.add_column("marketplace_listing_components", sa.Column("trade_unit_name", sa.String(50), nullable=False, server_default=""))
+    op.add_column("enterprise_market_listing_maps", sa.Column("quantity_contracts", postgresql.JSONB(), nullable=False, server_default="{}"))
+    op.create_index("ix_em_listing_contracts_gin", "enterprise_market_listing_maps", ["quantity_contracts"], postgresql_using="gin")
     op.add_column("enterprise_market_local_postings", sa.Column("quantity_inputs", postgresql.JSONB(), nullable=False, server_default="{}"))
     conn = op.get_bind()
     with rls_disabled(conn, tuple(dict.fromkeys((*PARENTS, *QUANTITY_TABLES, *(row[0] for row in SNAPSHOT_TABLES))))):
@@ -113,6 +118,16 @@ def upgrade():
 
 
 def downgrade():
+    with rls_disabled(op.get_bind(), ("enterprise_market_listing_maps",)):
+        if op.get_bind().execute(sa.text("SELECT EXISTS(SELECT 1 FROM enterprise_market_listing_maps WHERE quantity_contracts <> '{}'::jsonb)")).scalar_one():
+            raise RuntimeError("INV-02 downgrade would discard frozen market contracts")
+    if op.get_bind().execute(sa.text("SELECT EXISTS(SELECT 1 FROM marketplace_listing_components WHERE unit_conversion_snapshot IS NOT NULL OR trade_contract_ref IS NOT NULL OR trade_unit_name <> '')")).scalar_one():
+        raise RuntimeError("INV-02 downgrade would discard listing unit contracts")
+    op.drop_index("ix_em_listing_contracts_gin", table_name="enterprise_market_listing_maps")
+    op.drop_column("enterprise_market_listing_maps", "quantity_contracts")
+    op.drop_column("marketplace_listing_components", "trade_contract_ref")
+    op.drop_column("marketplace_listing_components", "trade_unit_name")
+    op.drop_column("marketplace_listing_components", "unit_conversion_snapshot")
     with rls_disabled(op.get_bind(), ("enterprise_market_local_postings",)):
         if op.get_bind().execute(sa.text("SELECT EXISTS(SELECT 1 FROM enterprise_market_local_postings WHERE quantity_inputs <> '{}'::jsonb)")).scalar_one():
             raise RuntimeError("INV-02 downgrade would discard approved private market measurements")

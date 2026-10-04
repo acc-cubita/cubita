@@ -12,6 +12,23 @@ def fixed(a, b, factor, **kwargs):
     return ConversionRule(uuid4(), a, b, factor=Decimal(factor), **kwargs)
 
 
+def test_frozen_integer_policy_survives_scaling_and_historical_return():
+    from fastapi import HTTPException
+    from app.services.units import QuantityConversion, convert_frozen_quantity, historical_return_conversion, conversion_from_snapshot
+    source, base = uuid4(), uuid4()
+    original = QuantityConversion(Decimal(2), source, Decimal(48), base, Fraction(24), (),
+                                  "کارتن", "عدد", source_decimal_allowed=False,
+                                  target_decimal_allowed=False)
+    restored = conversion_from_snapshot(original.snapshot())
+    assert convert_frozen_quantity(restored, Decimal(1)).target_qty == 24
+    assert historical_return_conversion(restored, Decimal(1), source).target_qty == 24
+    for quantity, selected_unit in [(Decimal('0.5'), source), (Decimal('0.5'), base)]:
+        with pytest.raises(ValueError):
+            historical_return_conversion(restored, quantity, selected_unit)
+    with pytest.raises(HTTPException):
+        convert_frozen_quantity(restored, Decimal('0.5'))
+
+
 def test_pallet_carton_pack_piece_and_reverse_are_exact():
     pallet, carton, pack, piece = [UUID(int=i) for i in range(1, 5)]
     graph = ConversionGraph([pallet, carton, pack, piece], [fixed(pallet, carton, 40), fixed(carton, pack, 12), fixed(pack, piece, 6)])

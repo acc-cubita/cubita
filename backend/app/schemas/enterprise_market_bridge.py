@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, model_serializer
 
 from app.schemas.marketplace import (
     CatalogListingOut, CommissionPeriodOut, ConnectionOut, DistributorCardOut,
@@ -37,7 +37,24 @@ class MarketViewSnapshot(BaseModel):
     seller_unread: int
 
 
-class MarketComponentSnapshot(BaseModel):
+class MarketTradeContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    ref: UUID
+
+
+class TradeContractMixin(BaseModel):
+    trade_contract: MarketTradeContract | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_contract(self, handler):
+        result = handler(self)
+        if self.trade_contract is None:
+            result.pop("trade_contract", None)
+        return result
+
+
+class MarketComponentSnapshot(TradeContractMixin):
     model_config = ConfigDict(extra="forbid")
 
     market_item_ref: UUID
@@ -119,7 +136,7 @@ class MarketPostingReceipt(BaseModel):
     error_code: str = Field(default="", max_length=60)
 
 
-class MarketFinancialLine(BaseModel):
+class MarketFinancialLine(TradeContractMixin):
     model_config = ConfigDict(extra="forbid")
 
     market_item_ref: UUID
@@ -198,8 +215,9 @@ def listing_snapshot(
             MarketComponentSnapshot(
                 market_item_ref=item_refs[component.distributor_item_id],
                 name=component.item_name,
-                unit=(item_units or {}).get(component.distributor_item_id, ""),
-                qty=Decimal(component.qty),
+                unit=(getattr(component,"unit_conversion_snapshot",None) or {}).get("source_unit_name") or getattr(component,"trade_unit_name","") or (item_units or {}).get(component.distributor_item_id, ""),
+                qty=Decimal((getattr(component,"unit_conversion_snapshot",None) or {}).get("source_qty", component.qty)),
+                trade_contract=MarketTradeContract(ref=component.trade_contract_ref) if getattr(component,"trade_contract_ref",None) else None,
             )
             for component in listing.components
         ],

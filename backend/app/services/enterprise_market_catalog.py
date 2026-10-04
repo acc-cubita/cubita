@@ -24,7 +24,7 @@ def selected_snapshots(db: Session, tenant_id: UUID) -> list[MarketListingSnapsh
     """Local-only read. An unmapped component fails the whole publication."""
     mappings = db.query(EnterpriseMarketListingMap).filter(
         EnterpriseMarketListingMap.tenant_id == tenant_id
-    ).order_by(EnterpriseMarketListingMap.market_listing_ref).all()
+    ).order_by(EnterpriseMarketListingMap.market_listing_ref).with_for_update().all()
     if not mappings:
         return []
     listings = db.query(MarketplaceListing).filter(
@@ -41,6 +41,16 @@ def selected_snapshots(db: Session, tenant_id: UUID) -> list[MarketListingSnapsh
         listing = by_id.get(mapping.local_listing_id)
         if listing is None:
             raise HTTPException(status.HTTP_409_CONFLICT, "نگاشت کاتالوگ به کالای این شرکت اشاره نمی‌کند")
+        contracts = dict(mapping.quantity_contracts or {})
+        for component in listing.components:
+            if component.trade_contract_ref and component.unit_conversion_snapshot:
+                if component.distributor_item_id not in refs:
+                    raise HTTPException(409,"همهٔ اجزای عرضه باید ابتدا نگاشت و تأیید شوند")
+                contracts[str(component.trade_contract_ref)] = {
+                    "item_id":str(component.distributor_item_id),
+                    "market_item_ref":str(refs[component.distributor_item_id]),
+                    "conversion":component.unit_conversion_snapshot}
+        mapping.quantity_contracts = contracts
         try:
             snapshots.append(listing_snapshot(
                 listing, quantities.get(listing.id) or Decimal(0),
@@ -177,6 +187,8 @@ def _publish_cloud_shadow(db: Session, link: EnterpriseMarketLink, row: Enterpri
                 item.sales_price = snapshot.wholesale_price
             cloud_components.append(MarketplaceListingComponent(
                 distributor_item_id=item.id, item_name=component.name, qty=component.qty,
+                trade_contract_ref=component.trade_contract.ref if component.trade_contract else None,
+                trade_unit_name=component.unit,
             ))
     listing = db.get(MarketplaceListing, row.cloud_listing_id) if row.cloud_listing_id else None
     if listing is None:

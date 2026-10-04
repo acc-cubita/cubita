@@ -86,7 +86,7 @@ def test_private_variable_measurement_freezes_purchase_and_replay(db,tenant_id,u
     rule=db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
     event=_event().model_copy(update={'side':'buyer','order_date':date.today(),'lines':[
         MarketFinancialLine(market_item_ref=uuid4(),name='پارچه',unit='واحد وزنی توافق‌شده',qty='36',
-            unit_price='500',discount='0',consumer_price='0')]})
+            unit_price='500',discount='0',consumer_price='900')]})
     db.add(EnterpriseMarketItemMap(tenant_id=tenant_id,market_item_ref=event.lines[0].market_item_ref,
         local_item_id=item.id,approved_by_id=user.id,approved_at=datetime.now(timezone.utc)));db.flush()
     assert posting.consume(db,tenant_id,event).outcome=='blocked'
@@ -120,6 +120,9 @@ def test_private_variable_measurement_freezes_purchase_and_replay(db,tenant_id,u
     invoice=db.query(PurchaseInvoice).one()
     assert invoice.lines[0].qty==36 and invoice.lines[0].base_qty==150
     assert invoice.lines[0].unit_conversion_snapshot['source_unit_name']=='کیلوگرم'
+    assert invoice.lines[0].unit_conversion_snapshot['market_suggested_price']['amount']=='900'
+    from app.models.advanced_inventory import StockBatch
+    assert db.query(StockBatch).filter_by(source_id=invoice.id).one().consumer_price==0
     assert db.query(PurchaseInvoice).count()==1
     assert 'quantity_inputs' not in result.model_dump()
     returned=event.model_copy(update={'event_id':uuid4(),'operation_ref':uuid4(),'kind':'return',

@@ -499,6 +499,7 @@ def post_sales_invoice(
         lines=invoice_lines,
     )
     db.add(invoice)
+    invoice._inv02_input_lines = tuple(invoice_lines)
     # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
     # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
     # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
@@ -910,6 +911,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User, *,
         lines=invoice_lines,
     )
     db.add(invoice)
+    invoice._inv02_input_lines = tuple(invoice_lines)
     # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
     # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
     # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.

@@ -110,6 +110,8 @@ class QuantityConversion:
     source_unit_name: str = ""
     target_unit_name: str = ""
     rounding_adjustment: Decimal = Decimal(0)
+    source_decimal_allowed: bool = True
+    target_decimal_allowed: bool = True
 
     def snapshot(self) -> dict:
         def ratio_row(ratio):
@@ -121,6 +123,8 @@ class QuantityConversion:
             "source_unit_name": self.source_unit_name, "target_unit_name": self.target_unit_name,
             "rounding": "ROUND_HALF_UP", "scale": 8,
             "rounding_adjustment": format(self.rounding_adjustment, "f"),
+            "source_decimal_allowed":self.source_decimal_allowed,
+            "target_decimal_allowed":self.target_decimal_allowed,
             "path": [{"rule_id": str(step.rule_id), "version": step.version,
                       "from_unit_id": str(step.from_unit_id), "to_unit_id": str(step.to_unit_id),
                       "source": step.source, **ratio_row(step.ratio),
@@ -245,7 +249,8 @@ def conversion_from_snapshot(snapshot: dict, *, source_unit_id: UUID | None = No
     return QuantityConversion(exact_decimal(snapshot["source_qty"]), source,
         exact_decimal(snapshot["target_qty"]), target, ratio, steps,
         snapshot.get("source_unit_name", ""), snapshot.get("target_unit_name", ""),
-        exact_decimal(snapshot.get("rounding_adjustment", "0")))
+        exact_decimal(snapshot.get("rounding_adjustment", "0")),
+        snapshot.get("source_decimal_allowed",True),snapshot.get("target_decimal_allowed",True))
 
 
 def historical_return_conversion(original: QuantityConversion, qty: Decimal, unit_id: UUID | None, *,
@@ -253,6 +258,10 @@ def historical_return_conversion(original: QuantityConversion, qty: Decimal, uni
                                  returned_in_source: Fraction = Fraction(0)) -> QuantityConversion:
     qty = exact_quantity(qty)
     source = unit_id or original.target_unit_id
+    decimal_allowed = (original.target_decimal_allowed if source == original.target_unit_id
+                       else original.source_decimal_allowed)
+    if not decimal_allowed and qty != qty.to_integral_value():
+        raise ValueError("واحد تاریخی انتخاب‌شده مقدار اعشاری نمی‌پذیرد")
     used_base = exact_decimal(returned_base)
     if used_base < 0 or returned_in_source < 0 or original.source_qty <= 0 or original.target_qty <= 0 or original.ratio <= 0:
         raise ValueError("مقادیر تاریخی برگشت نامعتبرند؛ سند اصلی را بررسی کنید")
@@ -278,8 +287,11 @@ def historical_return_conversion(original: QuantityConversion, qty: Decimal, uni
         raise ValueError("این واحد در تبدیل تاریخی سند اصلی نیست؛ واحد واردشده یا پایهٔ همان سند را انتخاب کنید")
     if target <= 0 or target > remaining_base:
         raise ValueError("مقدار پایهٔ برگشت از باقیماندهٔ سند اصلی بیشتر است")
+    if not original.target_decimal_allowed and target != target.to_integral_value():
+        raise ValueError("واحد پایهٔ تاریخی مقدار اعشاری نمی‌پذیرد")
     return QuantityConversion(qty, source, target, original.target_unit_id, ratio, path,
-                              name, original.target_unit_name, target - rounded_quantity(Fraction(qty) * ratio))
+                              name, original.target_unit_name, target - rounded_quantity(Fraction(qty) * ratio),
+                              decimal_allowed, original.target_decimal_allowed)
 
 
 def document_conversion(db: Session, line, item: Item) -> QuantityConversion:
@@ -486,7 +498,8 @@ def convert_item_quantity(db: Session, item: Item, qty: Decimal, unit_id: UUID |
         if not base.decimal_allowed and result.target_qty != result.target_qty.to_integral_value():
             raise ValueError("مقدار تبدیل‌شدهٔ واحد پایه باید عدد صحیح باشد؛ مقدار یا نسبت را اصلاح کنید")
         return replace(result, source_unit_name=registry.names[source] if registry else resolve(db, source).name,
-                       target_unit_name=registry.names[item.primary_unit_id] if registry else resolve(db, item.primary_unit_id).name)
+                       target_unit_name=registry.names[item.primary_unit_id] if registry else resolve(db, item.primary_unit_id).name,
+                       source_decimal_allowed=row.decimal_allowed,target_decimal_allowed=base.decimal_allowed)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -904,6 +917,21 @@ def convert_transaction(db: Session, item: Item, qty: Decimal, unit_id: UUID | N
         raise HTTPException(400, "برای یک قاعده دو نسبت واقعی نفرستید؛ نسبت درست را انتخاب کنید")
     return convert_item_quantity(db, item, qty, unit_id, context=context,
                                  batch_id=batch_id, registry=registry, transaction_overrides=overrides)
+
+
+def convert_frozen_quantity(original: QuantityConversion, quantity) -> QuantityConversion:
+    """Apply a frozen exact ratio, rounding once at the final stock boundary."""
+    source = exact_quantity(quantity)
+    target = rounded_quantity(Fraction(source) * original.ratio)
+    if not original.source_decimal_allowed and source != source.to_integral_value():
+        raise HTTPException(400,"واحد عرضهٔ تاریخی مقدار اعشاری نمی‌پذیرد")
+    if not original.target_decimal_allowed and target != target.to_integral_value():
+        raise HTTPException(400,"مقدار تبدیل‌شده در واحد پایه باید صحیح باشد")
+    return replace(original, source_qty=source, target_qty=target, rounding_adjustment=Decimal(0))
+
+
+def frozen_source_capacity(original: QuantityConversion, base_quantity) -> Fraction:
+    return Fraction(exact_quantity(base_quantity)) / original.ratio
 
 
 def scale_document_conversion(original: QuantityConversion, scale: Fraction) -> QuantityConversion:

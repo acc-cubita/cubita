@@ -170,10 +170,12 @@ class EnterpriseMarketListingMap(UUIDPKMixin, TenantMixin, TimestampMixin, Base)
     __table_args__ = (
         UniqueConstraint("tenant_id", "market_listing_ref", name="uq_em_listing_map_ref"),
         UniqueConstraint("tenant_id", "local_listing_id", name="uq_em_listing_map_local"),
+        Index("ix_em_listing_contracts_gin", "quantity_contracts", postgresql_using="gin"),
     )
 
     market_listing_ref: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     local_listing_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("marketplace_listings.id"), nullable=False)
+    quantity_contracts: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     approved_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

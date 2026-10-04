@@ -154,6 +154,9 @@ class MarketplaceListingComponent(UUIDPKMixin, Base):
     )
     item_name: Mapped[str] = mapped_column(String(300), default="")  # snapshot
     qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=1)
+    unit_conversion_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    trade_contract_ref: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    trade_unit_name: Mapped[str] = mapped_column(String(50), default="", server_default="", nullable=False)
 
     listing: Mapped["MarketplaceListing"] = relationship(back_populates="components")
 

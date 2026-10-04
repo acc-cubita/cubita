@@ -15,16 +15,17 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert, array
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.models.advanced_inventory import StockBatch
 from app.models.enterprise_market_bridge import (
     EnterpriseMarketCounterpartyMap, EnterpriseMarketItemMap, EnterpriseMarketLocalPosting,
+    EnterpriseMarketListingMap,
 )
 from app.models.inventory import Contact, Item, UnitOfMeasure
 from app.models.item_units import ItemUnit
+from app.models.invoices import SalesInvoiceLine, PurchaseInvoiceLine
 from app.schemas.enterprise_market_bridge import MarketFinancialEvent, MarketPostingReceipt
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.schemas.returns import PurchaseReturnIn, PurchaseReturnLineIn, SalesReturnIn, SalesReturnLineIn
@@ -34,6 +35,7 @@ from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.sales_invoices import finalize_immediate_sale
 from app.services.returns import post_purchase_return, post_sales_return, get_returnable_summary, get_purchase_returnable_summary
 from app.services import units
+from app.services import market_units
 
 log = logging.getLogger(__name__)
 
@@ -157,13 +159,17 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent, *,
         summary = (get_returnable_summary if event.side == "seller" else get_purchase_returnable_summary)(
             db, original.local_document_id)
         anchor = "sales_invoice_line_id" if event.side == "seller" else "purchase_invoice_line_id"
+        line_model = SalesInvoiceLine if event.side == "seller" else PurchaseInvoiceLine
+        source_contracts = {source.id:(source.unit_conversion_snapshot or {}).get("market_trade_contract_ref")
+            for source in db.query(line_model).filter_by(invoice_id=original.local_document_id).all()}
         return_lines = []
         for line in event.lines:
             approved_units = set()
             for index, original_line in enumerate(original.payload.get("lines", [])):
                 approved = (original.quantity_inputs or {}).get(str(index))
                 if (approved and original_line.get("market_item_ref") == str(line.market_item_ref)
-                        and original_line.get("unit", "") == line.unit):
+                        and original_line.get("unit", "") == line.unit
+                        and (not line.trade_contract or (original_line.get("trade_contract") or {}).get("ref") == str(line.trade_contract.ref))):
                     approved_units.add(units.conversion_from_snapshot(approved["conversion"]).source_unit_id)
             if len(approved_units) > 1:
                 raise MappingMissing("historical market unit is ambiguous")
@@ -171,6 +177,8 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent, *,
             left = line.qty
             for source in summary:
                 if source["item_id"] != items[line.market_item_ref].id:
+                    continue
+                if line.trade_contract and source_contracts.get(source[anchor]) != str(line.trade_contract.ref):
                     continue
                 options = source["return_unit_options"]
                 option = next((unit for unit in options if
@@ -212,8 +220,23 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent, *,
     frozen = {}
     commercial_units = {}
     unresolved = []
+    contracts = {}
+    if event.side == "seller" and any(line.trade_contract for line in event.lines):
+        refs = [str(line.trade_contract.ref) for line in event.lines if line.trade_contract]
+        for mapping in db.query(EnterpriseMarketListingMap).filter(
+                EnterpriseMarketListingMap.tenant_id==tenant_id,
+                EnterpriseMarketListingMap.quantity_contracts.has_any(array(refs))).all():
+            contracts.update(mapping.quantity_contracts or {})
     for index, line in enumerate(event.lines):
         approved = (quantity_inputs or {}).get(str(index))
+        if approved is None and event.side == "seller" and line.trade_contract:
+            contract = contracts.get(str(line.trade_contract.ref))
+            if contract is None:
+                raise MappingMissing("frozen market contract missing")
+            original_conversion = units.conversion_from_snapshot(contract["conversion"])
+            if original_conversion.source_unit_name != line.unit:
+                raise MappingMissing("approved market input mismatch")
+            approved = {**contract,"conversion":market_units.scale_contract(original_conversion, line.qty).snapshot()}
         if approved is None:
             unresolved.append((index,line))
             continue
@@ -253,15 +276,8 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent, *,
             ),
             actor, frozen_conversions=frozen,
         )
-        consumer_by_item = {
-            items[line.market_item_ref].id: line.consumer_price
-            for line in event.lines if line.consumer_price > 0
-        }
-        if consumer_by_item:
-            for batch in db.query(StockBatch).filter(StockBatch.source_id == invoice.id).all():
-                price = consumer_by_item.get(batch.item_id)
-                if price is not None:
-                    batch.consumer_price = price
+        market_units.apply_purchase_suggestions(db, invoice, [line.consumer_price for line in event.lines])
+    market_units.freeze_trade_refs(db, invoice, [line.trade_contract for line in event.lines])
     if event.cash_amount > 0:
         method, bank_id = marketplace_svc._money_method(db)
         payment = TreasuryTransactionIn(
@@ -315,6 +331,8 @@ def consume(db: Session, tenant_id: UUID, event: MarketFinancialEvent) -> Market
                             if "commercial market unit" in str(exc) else
                             "نگاشت کالا پس از تأیید مقدار تغییر کرده است؛ واحد و نسبت محلی همین ردیف را دوباره تأیید کنید."
                             if "approved market input mismatch" in str(exc) else
+                            "نسخهٔ تاریخی عرضه در دفتر فروشنده پیدا نشد؛ کاتالوگ تأییدشده و پشتیبان قراردادها را بررسی کنید."
+                            if "frozen market contract missing" in str(exc) else
                             "نگاشت کالا کامل نیست یا کالا غیرفعال است؛ نگاشت را اصلاح و دوباره تلاش کنید.")
     except Exception as exc:  # noqa: BLE001 — finance failure must remain retryable, not lose the event
         log.warning("local market posting failed: %s", type(exc).__name__)
