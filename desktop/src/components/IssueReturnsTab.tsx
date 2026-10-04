@@ -1,3 +1,5 @@
+import { selectedReturnUnit, positiveQuantity, exceedsQuantity } from '../lib/returnQuantity'
+import { toFaDigits } from '../lib/jalali'
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Ban, ClipboardList, FileText, PackagePlus, Printer, RefreshCw, Save, ScrollText } from 'lucide-react'
 import {
@@ -34,8 +36,7 @@ import { formatJalali, todayIso } from '../lib/jalali'
 import { AsyncBlock, Note, faAmount, type Msg } from '../pages/accounting/kit'
 import { SearchSelect } from '../components/SearchSelect'
 
-const faQty = (v: string | number | null | undefined) =>
-  Number(v || 0).toLocaleString('fa-IR', { maximumFractionDigits: 3 })
+const faQty = (v: string | number) => toFaDigits(String(v))
 const faNum = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString('fa-IR'))
 const errText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback)
 
@@ -134,6 +135,7 @@ function ReturnForm({
   const [docsKey, setDocsKey] = useState(0)
   const [basisKey, setBasisKey] = useState(initial ? `${initial.kind}:${initial.id}` : '')
   const [basis, setBasis] = useState<IssueReturnBasis | null>(null)
+  const [unitByLine, setUnitByLine] = useState<Record<string, string>>({})
   const [qty, setQty] = useState<Record<string, string>>({})
   //: §۱۴ — حالِ هر ردیفِ برگشتی. نیامده = `sellable`، یعنی رفتارِ دیروز.
   const [condition, setCondition] = useState<Record<string, ReturnCondition>>({})
@@ -177,7 +179,7 @@ function ReturnForm({
         if (!alive) return
         setBasis(data)
         //: پیش‌فرض همان باقیمانده است؛ کاربر کمش می‌کند وقتی فقط بخشی برگشته.
-        setQty(Object.fromEntries(data.lines.map((l) => [l.basis_line_id, Number(l.remaining) > 0 ? String(Number(l.remaining)) : ''])))
+        setUnitByLine({}); setQty(Object.fromEntries(data.lines.map((l) => [l.basis_line_id, positiveQuantity(l.remaining) ? l.remaining : ''])))
         if (data.warehouse_id) setWarehouseId(data.warehouse_id)
         setDelivererId(data.party_id ?? '')
       })
@@ -190,10 +192,10 @@ function ReturnForm({
   }, [token, basisKey])
 
   const chosen = useMemo(
-    () => (basis?.lines ?? []).filter((line) => Number(qty[line.basis_line_id]) > 0),
+    () => (basis?.lines ?? []).filter((line) => positiveQuantity(qty[line.basis_line_id] ?? '')),
     [basis, qty],
   )
-  const totalCost = chosen.reduce((sum, line) => sum + Number(qty[line.basis_line_id]) * Number(line.unit_cost), 0)
+  const totalCost = chosen.reduce((sum, line) => sum + Number(qty[line.basis_line_id]) * Number(selectedReturnUnit({...line, unit_price:line.unit_cost}, unitByLine[line.basis_line_id]).unit_price), 0)
   const needsDeliverer = returnType === 'sale' && basis?.kind === 'issue'
   const movedWarehouse = basis?.warehouse_id && warehouseId && basis.warehouse_id !== warehouseId
 
@@ -209,7 +211,7 @@ function ReturnForm({
     if (!basis) return setMsg({ text: 'مبنای برگشت را انتخاب کنید.', kind: 'err' })
     if (!warehouseId) return setMsg({ text: 'انباری که کالا به آن برمی‌گردد را انتخاب کنید.', kind: 'err' })
     if (chosen.length === 0) return setMsg({ text: 'مقدارِ برگشتِ حداقل یک ردیف را وارد کنید.', kind: 'err' })
-    const over = chosen.find((line) => Number(qty[line.basis_line_id]) > Number(line.remaining))
+    const over = basis.lines.find((line) => exceedsQuantity(qty[line.basis_line_id] ?? '', selectedReturnUnit({...line, unit_price:line.unit_cost}, unitByLine[line.basis_line_id]).remaining))
     if (over) {
       return setMsg({
         text: `مقدارِ برگشتِ «${over.item_name}» بیش از باقیمانده (${faQty(over.remaining)}) است.`,
@@ -232,12 +234,14 @@ function ReturnForm({
             basis.kind === 'sales_return'
               ? {
                   sales_return_line_id: line.basis_line_id,
-                  qty: Number(qty[line.basis_line_id]),
+                  qty: qty[line.basis_line_id],
+                  unit_id: selectedReturnUnit({...line,unit_price:line.unit_cost},unitByLine[line.basis_line_id]).unit_id || null,
                   return_condition: condition[line.basis_line_id] ?? 'sellable',
                 }
               : {
                   warehouse_issue_line_id: line.basis_line_id,
-                  qty: Number(qty[line.basis_line_id]),
+                  qty: qty[line.basis_line_id],
+                  unit_id: selectedReturnUnit({...line,unit_price:line.unit_cost},unitByLine[line.basis_line_id]).unit_id || null,
                   return_condition: condition[line.basis_line_id] ?? 'sellable',
                 },
           ),
@@ -353,7 +357,8 @@ function ReturnForm({
               <tbody>
                 {basis.lines.map((line) => {
                   const value = qty[line.basis_line_id] ?? ''
-                  const done = Number(line.remaining) <= 0
+                  const selected = selectedReturnUnit({...line,unit_price:line.unit_cost}, unitByLine[line.basis_line_id])
+                  const done = !positiveQuantity(selected.remaining)
                   return (
                     <tr key={line.basis_line_id} style={done ? { opacity: 0.55 } : undefined}>
                       <td className="card-title">
@@ -362,8 +367,12 @@ function ReturnForm({
                       <td data-label="کد کالا">{line.item_code || '—'}</td>
                       <td className="num" data-label="مقدار مبنا">{faQty(line.qty)}</td>
                       <td className="num" data-label="برگشت‌خورده">{faQty(line.returned)}</td>
-                      <td className="num" data-label="باقیمانده">{faQty(line.remaining)}</td>
+                      <td className="num" data-label="باقیمانده">{toFaDigits(selected.remaining)} {selected.unit_name}</td>
                       <td data-label="مقدار برگشت">
+                        <SearchSelect aria-label="واحد برگشت" value={selected.unit_id}
+                          onChange={(e) => {setUnitByLine((prev) => ({...prev,[line.basis_line_id]:e.target.value})); setQty((prev) => ({...prev,[line.basis_line_id]:''}))}}>
+                          {(line.return_unit_options ?? [selected]).map((option) => <option key={option.unit_id} value={option.unit_id}>{option.unit_name}</option>)}
+                        </SearchSelect>
                         <NumberInput
                           allowDecimal
                           value={value}
@@ -392,9 +401,9 @@ function ReturnForm({
                           ))}
                         </SearchSelect>
                       </td>
-                      <td className="num" data-label="فی">{faAmount(line.unit_cost)}</td>
+                      <td className="num" data-label="فی">{faAmount(selected.unit_price)}</td>
                       <td className="num" data-label="مبلغ">
-                        {faAmount(Math.round(Number(value || 0) * Number(line.unit_cost)))}
+                        {faAmount(Math.round(Number(value || 0) * Number(selected.unit_price)))}
                       </td>
                     </tr>
                   )

@@ -18,6 +18,8 @@ import {
   fetchWarehouseIssueLedger,
   fetchWarehousesLive,
   issueMaterialsToProduction,
+  previewProductionMaterials,
+  type ProductionMaterialPreview,
   receiveProductionOutput,
   type BomRecord,
   type ItemRecord,
@@ -39,7 +41,7 @@ import { EmptyState } from '../components/EmptyState'
 import { JalaliDatePicker } from '../components/JalaliDatePicker'
 import { Pager, usePagination } from '../components/Pager'
 import { useNavSection } from '../components/navContext'
-import { formatJalali, todayIso } from '../lib/jalali'
+import { formatJalali, todayIso, toFaDigits } from '../lib/jalali'
 import { remainingQuantity } from '../lib/quantityDisplay'
 import { SearchSelect } from '../components/SearchSelect'
 import { FormField } from '../components/form/FormKit'
@@ -196,6 +198,7 @@ function OrdersTab({
 }) {
   const [bomId, setBomId] = useState('')
   const [warehouseId, setWarehouseId] = useState('')
+  const [planUnit, setPlanUnit] = useState<TransactionUnitPatch>({})
   const [qty, setQty] = useState('')
   const [date, setDate] = useState(todayIso())
   const [notes, setNotes] = useState('')
@@ -227,7 +230,7 @@ function OrdersTab({
     try {
       const p = await createProductionPlan(
         token,
-        { bom_id: bomId, warehouse_id: warehouseId, planned_date: date, qty_planned: qty, notes },
+        { bom_id: bomId, warehouse_id: warehouseId, planned_date: date, qty_planned: qty, unit_id: planUnit.unitId, observations: planUnit.observations, notes },
         `production-plan-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       )
       setQty('')
@@ -249,7 +252,7 @@ function OrdersTab({
         <form className="invoice-form form-full" onSubmit={submit}>
           <label>
             فرمولِ ساخت (محصول)
-            <SearchSelect value={bomId} onChange={(e) => setBomId(e.target.value)} required>
+            <SearchSelect value={bomId} onChange={(e) => {setBomId(e.target.value);setPlanUnit({})}} required>
               <option value="">— انتخاب —</option>
               {activeBoms.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -275,6 +278,9 @@ function OrdersTab({
           <label>
             تعدادِ برنامه
             <NumberInput allowDecimal value={qty} onChange={setQty} required />
+            <TransactionUnitPicker token={token} itemId={boms.find((b) => b.id === bomId)?.finished_item_id || ''}
+              qty={qty} unitId={planUnit.unitId} observations={planUnit.observations} context="production"
+              onChange={(patch) => setPlanUnit((prev) => ({...prev,...patch}))} />
           </label>
           <label className="form-full">
             توضیحات
@@ -337,8 +343,8 @@ function OrderListTab({
                     <tr key={p.id}>
                       <td className="card-title" data-label="شماره">{fa(p.number)}</td>
                       <td data-label="محصول">{itemById.get(p.finished_item_id)?.name ?? '—'}</td>
-                      <td data-label="مقدارِ برنامه">{Number(p.qty_planned).toLocaleString('fa-IR')}</td>
-                      <td data-label="مقدارِ اجراشده">{Number(p.qty_produced).toLocaleString('fa-IR')}</td>
+                      <td data-label="مقدارِ برنامه">{toFaDigits(p.qty_planned)}</td>
+                      <td data-label="مقدارِ اجراشده">{toFaDigits(p.qty_produced)}</td>
                       <td data-label="تاریخ">{formatJalali(p.planned_date)}</td>
                       <td data-label="وضعیت">
                         <span className={`status-badge ${p.status === 'finished' ? 'tone-success' : p.status === 'cancelled' ? 'tone-danger' : ''}`}>
@@ -394,6 +400,7 @@ function BomsTab({
   const [finishedId, setFinishedId] = useState('')
   const [name, setName] = useState('')
   const [yieldQty, setYieldQty] = useState('1')
+  const [yieldUnit, setYieldUnit] = useState<TransactionUnitPatch>({})
   const [lines, setLines] = useState<({ componentId: string; qty: string } & TransactionUnitPatch)[]>([{ componentId: '', qty: '' }])
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -411,7 +418,7 @@ function BomsTab({
     setEditingId(null)
     setFinishedId('')
     setName('')
-    setYieldQty('1')
+    setYieldQty('1'); setYieldUnit({})
     setLines([{ componentId: '', qty: '' }])
     setMsg(null)
   }
@@ -420,7 +427,8 @@ function BomsTab({
     setEditingId(b.id)
     setFinishedId(b.finished_item_id)
     setName(b.name)
-    setYieldQty(b.yield_qty)
+    setYieldQty(b.entered_qty || b.yield_qty)
+    setYieldUnit({unitId:b.entered_unit_id || undefined, observations:b.unit_conversion_snapshot?.path.flatMap((step) => step.observation ? [{rule_id:step.rule_id,from_qty:step.observation.from_qty,to_qty:step.observation.to_qty}] : [])})
     setLines(b.lines.map((l) => ({ componentId: l.component_item_id, qty: l.entered_qty || l.qty, unitId: l.entered_unit_id || undefined,
       observations: l.unit_conversion_snapshot?.path.flatMap((step) => step.observation ? [{ rule_id: step.rule_id, from_qty: step.observation.from_qty, to_qty: step.observation.to_qty }] : []) })))
     setMsg(null)
@@ -453,13 +461,13 @@ function BomsTab({
     const linePayload = valid.map((l) => ({ component_item_id: l.componentId, qty: l.qty, unit_id: l.unitId, observations: l.observations }))
     try {
       if (editingId) {
-        await updateBom(token, editingId, { name, yield_qty: yieldQty || '1', lines: linePayload })
+        await updateBom(token, editingId, { name, yield_qty: yieldQty || '1', unit_id: yieldUnit.unitId, observations: yieldUnit.observations, lines: linePayload })
         setMsg('فرمولِ ساخت ویرایش شد.')
       } else {
         await createBom(token, {
           finished_item_id: finishedId,
           name: name || undefined,
-          yield_qty: yieldQty || '1',
+          yield_qty: yieldQty || '1', unit_id: yieldUnit.unitId, observations: yieldUnit.observations,
           lines: linePayload,
         })
         setMsg('فرمولِ ساخت ثبت شد.')
@@ -487,7 +495,7 @@ function BomsTab({
           message={editingId ? 'محصولِ یک فرمول قابلِ تغییر نیست؛ برای محصولِ دیگر فرمولِ تازه بسازید.' : null}
         >
           {(id) => (
-            <SearchSelect id={id} value={finishedId} onChange={(e) => setFinishedId(e.target.value)} required disabled={!!editingId}>
+            <SearchSelect id={id} value={finishedId} onChange={(e) => {setFinishedId(e.target.value);setYieldUnit({})}} required disabled={!!editingId}>
               <option value="">— انتخاب —</option>
               {goodsItems.map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
@@ -503,6 +511,9 @@ function BomsTab({
           <label>
             بازده (چند واحد در هر اجرا)
             <NumberInput allowDecimal value={yieldQty} onChange={setYieldQty} />
+            <TransactionUnitPicker token={token} itemId={finishedId} qty={yieldQty}
+              unitId={yieldUnit.unitId} observations={yieldUnit.observations} context="production"
+              onChange={(patch) => setYieldUnit((prev) => ({...prev,...patch}))} />
           </label>
         </div>
 
@@ -614,14 +625,14 @@ function BomListTab({
                           <div>
                             <div className="entity-name">{finished?.name ?? '—'}</div>
                             <div className="entity-sub">
-                              {b.name ? `${b.name} · ` : ''}بازده {Number(b.yield_qty).toLocaleString('fa-IR')}
+                              {b.name ? `${b.name} · ` : ''}بازده {toFaDigits(b.yield_qty)}
                               {!b.is_active && ' · غیرفعال'}
                             </div>
                           </div>
                         </div>
                       </td>
                       <td data-label="اجزا" className="bom-components">
-                        {b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${Number(l.qty).toLocaleString('fa-IR')})`).join('، ')}
+                        {b.lines.map((l) => `${itemById.get(l.component_item_id)?.name ?? '؟'} (${toFaDigits(l.qty)} ${l.unit_conversion_snapshot?.target_unit_name ?? ''})`).join('، ')}
                       </td>
                       <td data-label="بهای واحد" className="money-cell">{fa(cost)}</td>
                       <td data-label="حاشیهٔ سود">
@@ -658,7 +669,6 @@ function BomListTab({
 // ── تبِ تحویلِ مواد به تولید ───────────────────────────
 function MaterialIssueTab({
   token,
-  boms,
   plans,
   itemById,
   stockLevels,
@@ -675,6 +685,9 @@ function MaterialIssueTab({
 }) {
   const [planId, setPlanId] = useState('')
   const [qty, setQty] = useState('')
+  const [materialUnit, setMaterialUnit] = useState<TransactionUnitPatch>({})
+  const [materialPreview, setMaterialPreview] = useState<ProductionMaterialPreview | null>(null)
+  const [previewError, setPreviewError] = useState('')
   const [date, setDate] = useState(todayIso())
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -682,39 +695,29 @@ function MaterialIssueTab({
   //: فقط سفارش‌های باز و دارای باقی‌مانده — سفارشِ پیش‌نویس اول باید «شروع» شود.
   const openPlans = plans.filter((p) => RESERVING_PLAN_STATUSES.has(p.status) && remainingOf(p) > 0)
   const plan = plans.find((p) => p.id === planId)
-  const bom = plan ? boms.find((b) => b.id === plan.bom_id) : undefined
-  const remaining = plan ? remainingOf(plan) : 0
-  const effectiveQty = Number(qty) > 0 ? Number(qty) : remaining
+  const remaining = Number(materialPreview?.remaining ?? (plan ? remainingOf(plan) : 0))
+  const observationKey = JSON.stringify(materialUnit.observations || [])
+  useEffect(() => {
+    let cancelled = false
+    setMaterialPreview(null);setPreviewError('')
+    if (!planId) return
+    const timer = window.setTimeout(() => {
+      previewProductionMaterials(token, planId, {issue_date:date, qty:qty || null,
+        unit_id:materialUnit.unitId, observations:JSON.parse(observationKey)})
+        .then((value) => {if (!cancelled) setMaterialPreview(value)})
+        .catch((error: unknown) => {if (!cancelled) setPreviewError(error instanceof Error ? error.message : 'پیش‌نمایش مواد ناموفق بود')})
+    },250)
+    return () => {cancelled=true;window.clearTimeout(timer)}
+  },[token,planId,qty,date,materialUnit.unitId,observationKey])
 
   const issuesPg = usePagination(materialIssues, 10)
 
-  //: نیازِ هر جزء برای همین مقدار — پیش‌نمایشِ سمتِ کلاینت، عیناً فرمولِ سرور.
   const needs = useMemo(() => {
-    if (!bom || !(effectiveQty > 0)) return []
-    const batches = effectiveQty / (Number(bom.yield_qty) || 1)
-    const rows = new Map<string, number>()
-    for (const l of bom.lines) rows.set(l.component_item_id, (rows.get(l.component_item_id) ?? 0) + Number(l.qty) * batches)
-    return [...rows.entries()].map(([itemId, need]) => ({ itemId, need }))
-  }, [bom, effectiveQty])
-
-  //: چقدر از هر جزء را سفارش‌های بازِ *دیگر* در همین انبار لازم دارند — مبنای
-  //: هشدارِ «جلوگیری از خروجِ مواد» (تصمیمِ کاربر: هشدار، نه قفل).
-  const reservedByOtherPlans = useMemo(() => {
-    const reserved = new Map<string, number>()
-    if (!plan) return reserved
-    for (const p of plans) {
-      if (p.id === plan.id) continue
-      if (p.warehouse_id !== plan.warehouse_id) continue
-      if (!RESERVING_PLAN_STATUSES.has(p.status)) continue
-      const rem = remainingOf(p)
-      if (rem <= 0) continue
-      const b = boms.find((x) => x.id === p.bom_id)
-      if (!b) continue
-      const batches = rem / (Number(b.yield_qty) || 1)
-      for (const l of b.lines) reserved.set(l.component_item_id, (reserved.get(l.component_item_id) ?? 0) + Number(l.qty) * batches)
-    }
-    return reserved
-  }, [plans, boms, plan])
+    const grouped = new Map<string, number>()
+    for (const row of materialPreview?.lines ?? []) grouped.set(row.item_id, (grouped.get(row.item_id) ?? 0) + Number(row.qty))
+    return [...grouped].map(([itemId, need]) => ({itemId,need}))
+  },[materialPreview])
+  const reservedByOtherPlans = useMemo(() => new Map((materialPreview?.lines ?? []).map((row) => [row.item_id, Number(row.reserved_other)])),[materialPreview])
 
   const materialWarnings = useMemo(() => {
     if (!plan) return []
@@ -737,11 +740,12 @@ function MaterialIssueTab({
       setMsg('سفارشِ تولید را انتخاب کنید.')
       return
     }
+    if (!materialPreview) {setMsg(previewError || 'پیش‌نمایش معتبر مواد را تکمیل کنید.');return}
     setBusy(true)
     try {
       const issue = await issueMaterialsToProduction(
         token, planId,
-        { issue_date: date, qty: Number(qty) > 0 ? qty : null },
+        { issue_date: date, qty: qty || null, unit_id:materialUnit.unitId, observations:materialUnit.observations },
         `production-issue-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       )
       setQty('')
@@ -763,7 +767,7 @@ function MaterialIssueTab({
           <form className="invoice-form form-full" onSubmit={submit}>
             <label>
               سفارشِ تولید
-              <SearchSelect value={planId} onChange={(e) => { setPlanId(e.target.value); setQty('') }} required>
+              <SearchSelect value={planId} onChange={(e) => { setPlanId(e.target.value);setMaterialUnit({}); setQty('') }} required>
                 <option value="">— انتخاب —</option>
                 {openPlans.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -780,6 +784,10 @@ function MaterialIssueTab({
               <label>
                 مقدار (خالی = کلِ باقی‌مانده)
                 <NumberInput allowDecimal value={qty} onChange={setQty} placeholder={plan ? String(remaining) : ''} />
+              <TransactionUnitPicker token={token} itemId={plan?.finished_item_id || ''} qty={qty}
+                unitId={materialUnit.unitId} observations={materialUnit.observations} context="production"
+                onChange={(patch) => setMaterialUnit((prev) => ({...prev,...patch}))} />
+              {previewError && <p className="form-error">{previewError}</p>}
               </label>
             </div>
 
@@ -833,7 +841,7 @@ function MaterialIssueTab({
                     <tr key={r.id}>
                       <td className="card-title" data-label="شماره">{r.number != null ? fa(r.number) : '—'}</td>
                       <td data-label="انبار">{r.warehouse_name}</td>
-                      <td data-label="مقدار">{Number(r.total_qty).toLocaleString('fa-IR')}</td>
+                      <td data-label="مقدار">{toFaDigits(r.total_qty)}</td>
                       <td data-label="بها" className="money-cell">{fa(Number(r.total_cost))}</td>
                       <td data-label="تاریخ">{formatJalali(r.doc_date)}</td>
                     </tr>
@@ -982,7 +990,7 @@ function ProductReceiptTab({
                       <tr key={r.id}>
                         <td className="card-title" data-label="شماره">{fa(r.number)}</td>
                         <td data-label="محصول">{line ? itemById.get(line.item_id)?.name ?? '—' : '—'}</td>
-                        <td data-label="مقدار">{line ? Number(line.qty).toLocaleString('fa-IR') : '—'}</td>
+                        <td data-label="مقدار">{line ? toFaDigits(line.qty) : '—'}</td>
                         <td data-label="بهای واحد" className="money-cell">{line ? fa(Number(line.unit_cost)) : '—'}</td>
                         <td data-label="تاریخ">{formatJalali(r.receipt_date)}</td>
                       </tr>
@@ -1069,7 +1077,7 @@ function CostCalcTab({
                 <option value="">— انتخاب —</option>
                 {eligiblePlans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'} (دریافت‌شده: {fa(Number(p.qty_produced))})
+                    {fa(p.number)} — {itemById.get(p.finished_item_id)?.name ?? '—'} (دریافت‌شده: {toFaDigits(p.qty_produced)})
                   </option>
                 ))}
               </SearchSelect>
@@ -1127,7 +1135,7 @@ function CostCalcTab({
                       <tr key={p.id}>
                         <td className="card-title" data-label="شماره">{fa(p.number)}</td>
                         <td data-label="محصول">{itemById.get(p.finished_item_id)?.name ?? '—'}</td>
-                        <td data-label="دریافت‌شده">{Number(p.qty_produced).toLocaleString('fa-IR')}</td>
+                        <td data-label="دریافت‌شده">{toFaDigits(p.qty_produced)}</td>
                         <td data-label="نرخِ موادِ فعلی" className="money-cell">{fa(materialUnit)}</td>
                       </tr>
                     )
@@ -1221,12 +1229,12 @@ function VarianceTab({
                         <td className="card-title" data-label="سفارش">{fa(r.plan_number)}</td>
                         <td data-label="محصول">{r.finished_item_name}</td>
                         <td data-label="جزء">{r.component_item_name}</td>
-                        <td data-label="تولیدشده">{Number(r.qty_produced).toLocaleString('fa-IR')}</td>
-                        <td data-label="مصرفِ استاندارد">{Number(r.standard_qty).toLocaleString('fa-IR')}</td>
-                        <td data-label="مصرفِ واقعی">{Number(r.actual_qty).toLocaleString('fa-IR')}</td>
+                        <td data-label="تولیدشده">{toFaDigits(r.qty_produced)}</td>
+                        <td data-label="مصرفِ استاندارد">{toFaDigits(r.standard_qty)}</td>
+                        <td data-label="مصرفِ واقعی">{toFaDigits(r.actual_qty)}</td>
                         <td data-label="انحراف">
                           <span className={`status-badge ${variance > 0 ? 'tone-danger' : variance < 0 ? 'tone-success' : ''}`}>
-                            {variance.toLocaleString('fa-IR')}
+                            {toFaDigits(r.variance_qty)}
                           </span>
                         </td>
                         <td data-label="بهای مصرف" className="money-cell">{fa(Number(r.actual_cost))}</td>
@@ -1341,8 +1349,8 @@ function KardexTab({
                       </td>
                       <td data-label="سفارش">{fa(r.plan_number)}</td>
                       <td data-label="کالا">{r.item_name}</td>
-                      <td data-label="واردِ خط">{Number(r.qty_in) > 0 ? Number(r.qty_in).toLocaleString('fa-IR') : '—'}</td>
-                      <td data-label="خروجِ خط">{Number(r.qty_out) > 0 ? Number(r.qty_out).toLocaleString('fa-IR') : '—'}</td>
+                      <td data-label="واردِ خط">{Number(r.qty_in) > 0 ? toFaDigits(r.qty_in) : '—'}</td>
+                      <td data-label="خروجِ خط">{Number(r.qty_out) > 0 ? toFaDigits(r.qty_out) : '—'}</td>
                       <td data-label="بهای واحد" className="money-cell">{fa(Number(r.unit_cost))}</td>
                       <td data-label="مبلغ" className="money-cell">{fa(Number(r.amount))}</td>
                     </tr>
@@ -1447,7 +1455,7 @@ function CostReportTab({
                     <tr key={r.plan_id}>
                       <td className="card-title" data-label="سفارش">{fa(r.plan_number)}</td>
                       <td data-label="محصول">{r.finished_item_name}</td>
-                      <td data-label="تولیدشده">{Number(r.qty_produced).toLocaleString('fa-IR')}</td>
+                      <td data-label="تولیدشده">{toFaDigits(r.qty_produced)}</td>
                       <td data-label="مواد" className="money-cell">{fa(Number(r.material_cost))}</td>
                       <td data-label="دستمزد" className="money-cell">{fa(Number(r.labor_cost))}</td>
                       <td data-label="سربار" className="money-cell">{fa(Number(r.overhead_cost))}</td>

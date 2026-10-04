@@ -1,3 +1,4 @@
+import { selectedReturnUnit, positiveQuantity, exceedsQuantity } from './returnQuantity'
 import { useEffect, useRef, useState } from 'react'
 import {
   createSalesReturn,
@@ -37,6 +38,7 @@ export function useSalesReturnDraft({ token }: { token: string }) {
   const [returnable, setReturnable] = useState<ReturnableLine[]>([])
   const [returnDate, setReturnDate] = useState(todayIso())
   const [description, setDescription] = useState('')
+  const [unitByLine, setUnitByLine] = useState<Record<string, string>>({})
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({})
   const [reasonByLine, setReasonByLine] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
@@ -74,7 +76,7 @@ export function useSalesReturnDraft({ token }: { token: string }) {
 
   // با انتخابِ فاکتور، باقی‌ماندهٔ قابلِ برگشتِ هر ردیف زنده خوانده می‌شود.
   useEffect(() => {
-    setQtyByLine({})
+    setQtyByLine({}); setUnitByLine({})
     setReasonByLine({})
     if (!invoiceId) {
       setReturnable([])
@@ -93,7 +95,7 @@ export function useSalesReturnDraft({ token }: { token: string }) {
   const rowByKey = new Map(returnable.map((r) => [returnableKey(r), r]))
 
   const enteredLines = Object.entries(qtyByLine)
-    .filter(([, qty]) => Number(qty) > 0)
+    .filter(([, qty]) => positiveQuantity(qty))
     .map(([key, qty]) => {
       const row = rowByKey.get(key)
       const reasonId = reasonByLine[key]
@@ -103,14 +105,15 @@ export function useSalesReturnDraft({ token }: { token: string }) {
         ...(row?.sales_invoice_line_id
           ? { sales_invoice_line_id: row.sales_invoice_line_id }
           : { item_id: row?.item_id ?? key }),
-        qty: Number(qty),
+        qty,
+        unit_id: row ? selectedReturnUnit(row, unitByLine[key]).unit_id || null : null,
         ...(reasonId ? { return_reason_id: reasonId } : {}),
       }
     })
 
   const overRemaining = Object.entries(qtyByLine).some(([key, qty]) => {
     const row = rowByKey.get(key)
-    return row !== undefined && Number(qty) > Number(row.remaining)
+    return row !== undefined && exceedsQuantity(qty, selectedReturnUnit(row, unitByLine[key]).remaining)
   })
   const returnLinesValid = enteredLines.length > 0 && !overRemaining
 
@@ -120,21 +123,22 @@ export function useSalesReturnDraft({ token }: { token: string }) {
    * نام و واحد به آن یعنی فرستادنِ فیلدهای بی‌مصرف روی سیم.
    */
   const enteredRows = Object.entries(qtyByLine)
-    .filter(([, qty]) => Number(qty) > 0)
+    .filter(([, qty]) => positiveQuantity(qty))
     .map(([key, qty]) => {
       const row = rowByKey.get(key)
       return {
         key,
         name: row?.item_name ?? '—',
-        unit: row?.unit ?? '',
-        qty: Number(qty),
-        unitPrice: Number(row?.unit_price ?? 0),
+        unit: row ? selectedReturnUnit(row, unitByLine[key]).unit_name : '',
+        qty,
+        unit_id: row ? selectedReturnUnit(row, unitByLine[key]).unit_id || null : null,
+        unitPrice: Number(row ? selectedReturnUnit(row, unitByLine[key]).unit_price : 0),
         reason: reasonTitleById.get(reasonByLine[key] ?? '') ?? '',
       }
     })
 
   /** جمعِ مبلغِ برگشتی — با قیمتِ **همان ردیف**، نه میانگینِ کالا. */
-  const enteredTotal = enteredRows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0)
+  const enteredTotal = enteredRows.reduce((sum, row) => sum + Number(row.qty) * row.unitPrice, 0)
 
   async function submit(): Promise<boolean> {
     setMessage(null)
@@ -163,7 +167,7 @@ export function useSalesReturnDraft({ token }: { token: string }) {
         idempotencyKey.current,
       )
       idempotencyKey.current = newIdempotencyKey()
-      setQtyByLine({})
+      setQtyByLine({}); setUnitByLine({})
       setReasonByLine({})
       setDescription('')
       setMessage('برگشت از فروش با موفقیت ثبت شد.')
@@ -224,6 +228,8 @@ export function useSalesReturnDraft({ token }: { token: string }) {
     setDescription,
     qtyByLine,
     setQtyByLine,
+    unitByLine,
+    setUnitByLine,
     reasonByLine,
     setReasonByLine,
     message,

@@ -1825,7 +1825,7 @@ export async function downloadStorefrontBundle(token: string): Promise<{ blob: B
   return { blob, filename: m && m[1] ? m[1] : 'cubita-storefront.zip' }
 }
 
-export interface StockAdjustmentRecord {
+export interface StockAdjustmentRecord extends FrozenQuantityRecord {
   id: string
   item_id: string
   warehouse_id: string
@@ -1847,7 +1847,7 @@ export const voidStockAdjustment = (token: string, id: string, reason: string) =
 
 export const createStockAdjustment = (
   token: string,
-  data: { item_id: string; warehouse_id: string; qty_diff: number; reason: string; adjustment_date: string },
+  data: { item_id: string; warehouse_id: string; qty_diff: string | number; unit_id?: string; observations?: UnitObservation[]; reason: string; adjustment_date: string },
 ) => authedSend<StockAdjustmentRecord>(token, 'POST', '/api/stock-adjustments', data)
 
 export interface SalesQuotationLine {
@@ -2122,7 +2122,9 @@ export interface SalesReturnRecord {
 
 export const fetchSalesReturns = (token: string) => authedGetAll<SalesReturnRecord>(token, '/api/sales-returns')
 
+export interface HistoricalReturnUnit { unit_id: string; unit_name: string; remaining: string; unit_price: string }
 export interface ReturnableLine {
+  return_unit_options?: HistoricalReturnUnit[]
   /** هویتِ ردیفِ مبدأ. یک کالا می‌تواند در یک فاکتور چند ردیف با چند قیمت داشته باشد. */
   sales_invoice_line_id: string | null
   purchase_invoice_line_id: string | null
@@ -2150,7 +2152,7 @@ export const createSalesReturn = (
     return_date: string
     sales_invoice_id: string
     description: string
-    lines: { item_id?: string; sales_invoice_line_id?: string; qty: number; return_reason_id?: string | null }[]
+    lines: { item_id?: string; sales_invoice_line_id?: string; unit_id?: string | null; qty: string | number; return_reason_id?: string | null }[]
   },
   idempotencyKey?: string,
 ) => authedSend<SalesReturnRecord>(token, 'POST', '/api/sales-returns', data, idempotencyKey)
@@ -2199,7 +2201,7 @@ export const createPurchaseReturn = (
     return_date: string
     purchase_invoice_id: string
     description: string
-    lines: { item_id?: string; purchase_invoice_line_id?: string; qty: number }[]
+    lines: { item_id?: string; purchase_invoice_line_id?: string; unit_id?: string | null; qty: string | number }[]
   },
   idempotencyKey?: string,
 ) => authedSend<PurchaseReturnRecord>(token, 'POST', '/api/purchase-returns', data, idempotencyKey)
@@ -4687,7 +4689,7 @@ export interface SalesDashboard {
 export const fetchSalesDashboard = (token: string, months = 12) =>
   authedGet<SalesDashboard>(token, `/api/reports/dashboard?months=${months}`)
 
-export interface KardexLine {
+export interface KardexLine extends FrozenQuantityRecord {
   entry_date: string
   source_type: string
   source_label: string
@@ -5623,7 +5625,7 @@ export interface BomLineRecord {
   component_item_id: string
   qty: string
 }
-export interface BomRecord {
+export interface BomRecord extends FrozenQuantityRecord {
   id: string
   finished_item_id: string
   name: string
@@ -5637,7 +5639,7 @@ export interface ProductionOrderLineRecord {
   qty: string
   unit_cost: string
 }
-export interface ProductionOrderRecord {
+export interface ProductionOrderRecord extends FrozenQuantityRecord {
   id: string
   number: number | null
   bom_id: string
@@ -5654,7 +5656,7 @@ export interface ProductionOrderRecord {
 
 export type ProductionPlanStatus = 'draft' | 'started' | 'in_progress' | 'stopped' | 'finished' | 'cancelled'
 
-export interface ProductionPlanRecord {
+export interface ProductionPlanRecord extends FrozenQuantityRecord {
   id: string
   number: number
   bom_id: string
@@ -5670,6 +5672,8 @@ export interface ProductionPlanRecord {
 }
 
 export interface ProductionPlanIn {
+  unit_id?: string | null
+  observations?: UnitObservation[]
   bom_id: string
   warehouse_id: string
   planned_date: string
@@ -5706,7 +5710,7 @@ export const changeProductionPlanStatus = (token: string, planId: string, status
 export const issueMaterialsToProduction = (
   token: string,
   planId: string,
-  data: { issue_date: string; qty?: number | string | null },
+  data: { issue_date: string; qty?: number | string | null; unit_id?: string; observations?: UnitObservation[] },
   idempotencyKey?: string,
 ) => authedSend<WarehouseIssueRecord>(token, 'POST', `/api/production-plans/${planId}/issue-materials`, data, idempotencyKey)
 
@@ -8982,7 +8986,7 @@ export interface DirectWarehouseReceiptIn {
   freight_basis?: string
   tax_rate?: number
   description?: string
-  lines: { item_id: string; qty: number; unit_cost: number; description?: string }[]
+  lines: { item_id: string; unit_id?: string | null; observations?: UnitObservation[]; qty: string | number; unit_cost: string | number; description?: string }[]
 }
 
 export const createDirectWarehouseReceipt = (token: string, data: DirectWarehouseReceiptIn, idempotencyKey: string) =>
@@ -8992,6 +8996,7 @@ export const printWarehouseReceipt = (token: string, receiptId: string) =>
   openInvoicePrintView(token, `/api/warehouse-receipts/${receiptId}/print`)
 
 export interface ReceiptReturnableLine {
+  return_unit_options?: HistoricalReturnUnit[]
   warehouse_receipt_line_id: string
   purchase_invoice_line_id: string | null
   receipt_number: number
@@ -9020,7 +9025,8 @@ export interface ReceiptReturnIn {
   description?: string
   lines: {
     warehouse_receipt_line_id: string
-    qty: number
+    qty: string | number
+    unit_id?: string | null
     /** خالی یعنی «همان ارزشِ دفتری» — هیچ اختلافی ساخته نمی‌شود. */
     agreed_unit_value?: number | null
     description?: string
@@ -9447,15 +9453,16 @@ export interface DirectWarehouseIssueIn {
   description?: string
   lines: {
     item_id: string
-    qty: number
+    qty: string | number
     unit_id?: string | null
+    observations?: UnitObservation[]
     account_id?: string | null
     description?: string
     /**
      * نقضِ FEFO (§۱۱) — مقدارها به **واحدِ اصلیِ کالا**.
      * `null`/نیامده = سرور خودش نزدیک‌ترین انقضا را برمی‌دارد.
      */
-    batch_allocations?: { batch_id: string; qty: number }[] | null
+    batch_allocations?: { batch_id: string; qty: string | number }[] | null
   }[]
 }
 
@@ -9625,7 +9632,7 @@ export interface IssueReturnIn {
   lines: {
     sales_return_line_id?: string | null
     warehouse_issue_line_id?: string | null
-    qty: number
+    qty: string | number
     unit_id?: string | null
     /**
      * §۱۴ — حالِ کالای برگشتی. سالم به موجودیِ قابلِ فروش برمی‌گردد؛
@@ -9664,6 +9671,7 @@ export const fetchIssueReturnBasis = (token: string, returnType: IssueReturnType
   authedGet<IssueReturnBasisDoc[]>(token, `/api/warehouse-issue-returns/basis?return_type=${returnType}`)
 
 export interface IssueReturnBasisLine {
+  return_unit_options?: HistoricalReturnUnit[]
   kind: 'sales_return' | 'issue'
   basis_line_id: string
   item_id: string
@@ -10850,6 +10858,8 @@ export interface ProductionOrderLineRecord {
   unit_conversion_snapshot?: QuantityConversionSnapshot | null
 }
 export type UnitAwareBomInput = Omit<BomInput, 'yield_qty' | 'lines'> & {
+  unit_id?: string | null
+  observations?: UnitObservation[]
   yield_qty?: string | number
   lines: { component_item_id: string; qty: string | number; unit_id?: string; observations?: UnitObservation[] }[]
 }
@@ -10879,3 +10889,15 @@ export interface SalesReviewLine {
   entered_unit_price?: string | null
 }
 export interface PreinvoiceProgress { unit_name?: string }
+
+export interface FrozenQuantityRecord {
+  entered_qty?: string | null; entered_unit_id?: string | null; base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+
+export interface ProductionMaterialPreview {
+  qty: string; remaining: string; lines: { item_id: string; qty: string; unit: string; reserved_other: string }[]
+}
+export const previewProductionMaterials = (token: string, id: string, data: {
+  issue_date: string; qty?: string | null; unit_id?: string; observations?: UnitObservation[]
+}) => authedSend<ProductionMaterialPreview>(token, 'POST', `/api/production-plans/${id}/material-preview`, data)

@@ -42,19 +42,19 @@ describe('پیشنهادِ پیش‌فرض', () => {
   it('مقدار را بینِ بارها به ترتیبِ انقضا تقسیم می‌کند', () => {
     const rows = [batch('a', 'A', '1405-06-01', '10'), batch('b', 'B', '1405-09-01', '10')]
     expect(fefoPlan(rows, 15)).toEqual([
-      { batch_id: 'a', qty: 10 },
-      { batch_id: 'b', qty: 5 },
+      { batch_id: 'a', qty: '10' },
+      { batch_id: 'b', qty: '5' },
     ])
   })
 
   it('بارِ بدونِ موجودیِ قابلِ فروش را رد می‌کند', () => {
     const rows = [batch('empty', 'E', '1405-06-01', '0'), batch('ok', 'O', '1405-09-01', '7')]
-    expect(fefoPlan(rows, 5)).toEqual([{ batch_id: 'ok', qty: 5 }])
+    expect(fefoPlan(rows, 5)).toEqual([{ batch_id: 'ok', qty: '5' }])
   })
 
   it('اگر کافی نباشد، هرچه هست را می‌دهد — تصمیم با فراخوان است', () => {
     const rows = [batch('a', 'A', '1405-06-01', '3')]
-    expect(allocationTotal(fefoPlan(rows, 10))).toBe(3)
+    expect(allocationTotal(fefoPlan(rows, 10))).toBe('3')
   })
 })
 
@@ -70,7 +70,7 @@ describe('اعتبارسنجی', () => {
   })
 
   it('برداشتِ بیشتر از موجودیِ یک بار را رد می‌کند', () => {
-    expect(allocationError([{ batch_id: 'b', qty: 5 }], 5, rows)).toMatch('«B»')
+    expect(allocationError([{ batch_id: 'b', qty: '5' }], 5, rows)).toMatch('«B»')
   })
 
   it('مقدارِ صفر یا منفی را رد می‌کند', () => {
@@ -85,6 +85,16 @@ describe('اعتبارسنجی', () => {
 describe('جمعِ قابلِ فروش', () => {
   it('مقدارِ نامعتبر را صفر می‌شمارد، نه NaN', () => {
     const rows = [batch('a', 'A', null, '5'), batch('b', 'B', null, '')]
-    expect(totalSellable(rows)).toBe(5)
+    expect(totalSellable(rows)).toBe('5')
   })
+})
+
+it('allocates repeating decimal boundaries and large quantities exactly', () => {
+  const rows = [batch('a', 'A', null, '9999999999999998.00000001'), batch('b', 'B', null, '1.00000002')]
+  const plan = fefoPlan(rows, '9999999999999999.00000002')
+  expect(plan[1].qty).toBe('1.00000001')
+  expect(allocationTotal(plan)).toBe('9999999999999999.00000002')
+  expect(allocationError(plan, '9999999999999999.00000002', rows)).toBeNull()
+  expect(allocationError([{batch_id:'a',qty:'0.000000001'}], '1', rows)).toMatch('هشت')
+  expect(allocationError([{batch_id:'a',qty:'1'},{batch_id:'a',qty:'1'}], '2', rows)).toMatch('یک بار')
 })

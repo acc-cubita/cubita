@@ -7,9 +7,11 @@ import { EmptyState } from './EmptyState'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali } from '../lib/jalali'
 import { returnableKey, useSalesReturnDraft, type SalesReturnDraft } from '../lib/salesReturnDraft'
+import { selectedReturnUnit, positiveQuantity, exceedsQuantity } from '../lib/returnQuantity'
+import { toFaDigits } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
 
-const fa = (n: number) => n.toLocaleString('fa-IR')
+const fa = (n: number | string) => toFaDigits(String(n))
 
 /** وضعیتِ مالیِ سندِ برگشت — «باطل» عمداً از «تسویه‌نشده» جداست، وگرنه کاربر
  *  دنبالِ پولی می‌گردد که اصلاً قرار نیست جابه‌جا شود. */
@@ -97,6 +99,8 @@ export function ReturnableTable({
 }: {
   r: {
     returnable: ReturnableLine[]
+    unitByLine: Record<string, string>
+    setUnitByLine: Dispatch<SetStateAction<Record<string, string>>>
     qtyByLine: Record<string, string>
     setQtyByLine: Dispatch<SetStateAction<Record<string, string>>>
     /** فقط سمتِ فروش علتِ برگشت دارد؛ برای خرید تعریف نمی‌شود و ستون نمی‌آید. */
@@ -126,25 +130,29 @@ export function ReturnableTable({
             // کلیدْ ردیفِ فاکتور است نه کالا: یک کالا می‌تواند در یک فاکتور دو
             // ردیف با دو قیمت داشته باشد و هر کدام ماندهٔ خودش را دارد.
             const key = returnableKey(row)
-            const remaining = Number(row.remaining)
-            const entered = Number(r.qtyByLine[key] ?? 0)
-            const over = entered > remaining
+            const selected = selectedReturnUnit(row, r.unitByLine[key])
+            const remaining = selected.remaining
+            const over = exceedsQuantity(r.qtyByLine[key] ?? '0', remaining)
             return (
               <tr key={key}>
                 <td className="entity-name" data-label="کالا">{row.item_name} {row.unit && <span className="unit-suffix">/ {row.unit}</span>}</td>
                 <td className="num" data-label="قیمت واحد">{fa(Number(row.unit_price))}</td>
-                <td data-label="فروخته‌شده">{fa(Number(row.sold))}</td>
-                <td data-label="قبلاً برگشتی">{fa(Number(row.already_returned))}</td>
-                <td data-label="باقی‌مانده" className={remaining > 0 ? 'stock-ok' : 'unit-suffix'}>{fa(remaining)}</td>
+                <td data-label="فروخته‌شده">{fa(row.sold)}</td>
+                <td data-label="قبلاً برگشتی">{fa(row.already_returned)}</td>
+                <td data-label="باقی‌مانده" className={positiveQuantity(remaining) ? 'stock-ok' : 'unit-suffix'}>{fa(remaining)}</td>
                 <td data-label="مقدار برگشتی">
+                  <SearchSelect aria-label="واحد برگشت" value={selected.unit_id}
+                    onChange={(e) => { r.setUnitByLine((prev) => ({...prev, [key]:e.target.value})); r.setQtyByLine((prev) => ({...prev, [key]:''})) }}>
+                    {(row.return_unit_options ?? [selected]).map((option) => <option key={option.unit_id} value={option.unit_id}>{option.unit_name}</option>)}
+                  </SearchSelect>
                   <div className="stock-cell">
                     <NumberInput
                       allowDecimal
-                      disabled={remaining <= 0}
+                      disabled={!positiveQuantity(remaining)}
                       value={r.qtyByLine[key] ?? ''}
                       onChange={(v) => r.setQtyByLine((prev) => ({ ...prev, [key]: v }))}
                     />
-                    {remaining > 0 && (
+                    {positiveQuantity(remaining) && (
                       <button type="button" className="link-like" onClick={() => r.setQtyByLine((prev) => ({ ...prev, [key]: String(remaining) }))}>همه</button>
                     )}
                     {over && <div className="stock-warn">بیش از باقی‌مانده</div>}
@@ -154,7 +162,7 @@ export function ReturnableTable({
                   <td data-label="علت برگشت">
                     <SearchSelect
                       value={r.reasonByLine?.[key] ?? ''}
-                      disabled={remaining <= 0}
+                      disabled={!positiveQuantity(remaining)}
                       onChange={(e) => r.setReasonByLine?.((prev) => ({ ...prev, [key]: e.target.value }))}
                     >
                       {/* اختیاری است — نمونه‌ی مرجع هم اجباری‌اش نمی‌کند. */}

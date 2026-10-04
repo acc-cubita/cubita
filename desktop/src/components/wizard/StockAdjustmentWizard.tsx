@@ -5,6 +5,8 @@ import { JalaliDatePicker } from '../JalaliDatePicker'
 import { StockAdjustmentHistory } from '../StockAdjustmentForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { SearchSelect } from '../../components/SearchSelect'
+import { TransactionUnitPicker } from '../TransactionUnitPicker'
+import { toFaDigits } from '../../lib/jalali'
 
 /** ویزاردِ «تعدیل دستیِ موجودی» — دو مرحله + پیش‌نمایشِ زنده؛ تاریخچه زیرِ ویزارد. */
 export function StockAdjustmentWizard({
@@ -62,6 +64,9 @@ export function StockAdjustmentWizard({
           <label>
             مقدار
             <NumberInput allowDecimal value={d.qtyDiff} onChange={d.setQtyDiff} />
+            <TransactionUnitPicker token={token} itemId={d.itemId} qty={d.qtyDiff}
+              unitId={d.unit.unitId} observations={d.unit.observations} context="inventory"
+              onChange={(patch) => d.setUnit((previous) => ({...previous,...patch}))} />
           </label>
           <label>
             دلیل
@@ -99,7 +104,7 @@ export function StockAdjustmentWizard({
 function LivePreview({ d, items, warehouses }: { d: StockAdjustmentDraft; items: ItemCache[]; warehouses: WarehouseCache[] }) {
   const item = items.find((i) => i.id === d.itemId)
   const warehouse = warehouses.find((w) => w.id === d.warehouseId)
-  const mag = Number(d.qtyDiff) || 0
+  const mag = d.unit.baseQtyPreview
   return (
     <div className="live-preview">
       <p className="live-preview-title">پیش‌نمایشِ تعدیل</p>
@@ -109,7 +114,7 @@ function LivePreview({ d, items, warehouses }: { d: StockAdjustmentDraft; items:
       <div className="live-preview-divider" />
       <div className="live-preview-row live-preview-total">
         <span>تغییرِ موجودی</span>
-        <strong>{mag ? `${d.direction === 'shortage' ? '−' : '+'}${mag.toLocaleString('fa-IR')}` : '—'} {item?.unit ?? ''}</strong>
+        <strong>{mag ? `${d.direction === 'shortage' ? '−' : '+'}${toFaDigits(mag)}` : '—'} {item?.unit ?? ''}</strong>
       </div>
     </div>
   )

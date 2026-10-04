@@ -41,6 +41,7 @@ export function TransactionUnitPicker({ token, itemId, qty, unitId, observations
   useEffect(() => {
     let cancelled = false
     setPreview(null)
+    callback.current({ baseQtyPreview: undefined })
     if (!itemId || !selected || !qty) return
     const timer = window.setTimeout(() => {
       previewItemQuantity(token, itemId, { qty, unit_id: selected, context,

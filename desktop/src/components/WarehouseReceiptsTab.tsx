@@ -1,3 +1,4 @@
+import { selectedReturnUnit, positiveQuantity, exceedsQuantity } from '../lib/returnQuantity'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   Ban,
@@ -41,9 +42,11 @@ import { Pager, usePagination } from './Pager'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { AsyncBlock, Note, faAmount, type Msg } from '../pages/accounting/kit'
+import { TransactionUnitPicker, type TransactionUnitPatch } from './TransactionUnitPicker'
+import { toFaDigits } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
 
-const faQty = (v: string | number) => Number(v || 0).toLocaleString('fa-IR')
+const faQty = (v: string | number) => toFaDigits(String(v))
 const num = (v: string) => Number(v || 0)
 const errText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback)
 
@@ -54,7 +57,7 @@ const RETURN_STATUS_LABELS: Record<ReceiptReturnableLine['return_status'], strin
   fully_returned: 'کامل برگشت خورده',
 }
 
-type DraftLine = { key: number; itemId: string; qty: string; unitCost: string }
+type DraftLine = TransactionUnitPatch & { key: number; itemId: string; qty: string; unitCost: string }
 
 /**
  * تبِ «رسید انبار» در ماژولِ خرید.
@@ -196,8 +199,9 @@ function DirectReceiptForm({
     setMsg(null)
     const payloadLines = lines
       .filter((line) => line.itemId && num(line.qty) > 0)
-      .map((line) => ({ item_id: line.itemId, qty: num(line.qty), unit_cost: num(line.unitCost) }))
+      .map((line) => ({ item_id: line.itemId, qty: line.qty, unit_id: line.unitId || null, observations: line.observations || [], unit_cost: line.unitCost || '0' }))
     if (!warehouseId) return setMsg({ text: 'انبار را انتخاب کنید.', kind: 'err' })
+    if (lines.some((line) => line.itemId && num(line.qty) > 0 && !line.baseQtyPreview)) return setMsg({ text: 'واحد و تبدیل معتبر ردیف‌ها را تکمیل کنید.', kind: 'err' })
     if (payloadLines.length === 0) return setMsg({ text: 'دست‌کم یک ردیف با کالا و مقدار لازم است.', kind: 'err' })
     setBusy(true)
     try {
@@ -282,13 +286,13 @@ function DirectReceiptForm({
         <div className="table-scroll form-wide">
           <table className="cards-on-mobile">
             <thead>
-              <tr><th>کالا</th><th>مقدار</th><th>فی</th><th>مبلغ</th><th /></tr>
+              <tr><th>کالا</th><th>مقدار</th><th>واحد</th><th>فی</th><th>مبلغ</th><th /></tr>
             </thead>
             <tbody>
               {lines.map((line) => (
                 <tr key={line.key}>
                   <td className="card-title">
-                    <SearchSelect value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value })}>
+                    <SearchSelect value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value, unitId: undefined, unitName: undefined, observations: [], baseQtyPreview: undefined })}>
                       <option value="">— انتخاب کالا —</option>
                       {items.map((item) => (
                         <option key={item.id} value={item.id}>{item.name}{item.sku ? ` — ${item.sku}` : ''}</option>
@@ -296,8 +300,11 @@ function DirectReceiptForm({
                     </SearchSelect>
                   </td>
                   <td data-label="مقدار">
-                    <NumberInput allowDecimal value={line.qty} onChange={(value) => updateLine(line.key, { qty: value })} />
+                    <NumberInput allowDecimal value={line.qty} onChange={(value) => updateLine(line.key, { qty: value, baseQtyPreview: undefined })} />
                   </td>
+                  <td data-label="واحد"><TransactionUnitPicker token={token} itemId={line.itemId} qty={line.qty}
+                    unitId={line.unitId} observations={line.observations} context="purchase"
+                    onChange={(patch) => updateLine(line.key, patch)} /></td>
                   <td data-label="فی">
                     <NumberInput value={line.unitCost} onChange={(value) => updateLine(line.key, { unitCost: value })} />
                   </td>
@@ -615,7 +622,7 @@ function ReceiptDetail({ receipt, contactName }: { receipt: WarehouseReceiptFull
       <div className="table-scroll">
         <table className="cards-on-mobile">
           <thead>
-            <tr><th>ردیف</th><th>کالا</th><th>مقدار</th><th>فی</th><th>سهم حمل</th><th>فی تمام‌شده</th><th>مالیات</th></tr>
+            <tr><th>ردیف</th><th>کالا</th><th>مقدار</th><th>واحد</th><th>فی</th><th>سهم حمل</th><th>فی تمام‌شده</th><th>مالیات</th></tr>
           </thead>
           <tbody>
             {receipt.lines.map((line, index) => (
@@ -658,6 +665,7 @@ function ReceiptReturnPanel({
   const [rows, setRows] = useState<ReceiptReturnableLine[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [qty, setQty] = useState<Record<string, string>>({})
+  const [unitByLine, setUnitByLine] = useState<Record<string, string>>({})
   const [agreed, setAgreed] = useState<Record<string, string>>({})
   const [returnType, setReturnType] = useState(RETURN_TYPE_LABELS[receipt.receipt_type] ? receipt.receipt_type : 'purchase_domestic')
   const [returnDate, setReturnDate] = useState(todayIso())
@@ -686,15 +694,17 @@ function ReceiptReturnPanel({
     event.preventDefault()
     setMsg(null)
     const lines = (rows ?? [])
-      .filter((row) => num(qty[row.warehouse_receipt_line_id] ?? '') > 0)
+      .filter((row) => positiveQuantity(qty[row.warehouse_receipt_line_id] ?? ''))
       .map((row) => {
         const agreedValue = agreed[row.warehouse_receipt_line_id]
         return {
           warehouse_receipt_line_id: row.warehouse_receipt_line_id,
-          qty: num(qty[row.warehouse_receipt_line_id] ?? ''),
+          qty: qty[row.warehouse_receipt_line_id],
+          unit_id: selectedReturnUnit({...row,unit_price:row.landed_unit_cost},unitByLine[row.warehouse_receipt_line_id]).unit_id || null,
           agreed_unit_value: agreedValue ? num(agreedValue) : null,
         }
       })
+    if ((rows ?? []).some((row) => exceedsQuantity(qty[row.warehouse_receipt_line_id] ?? '', selectedReturnUnit({...row,unit_price:row.landed_unit_cost},unitByLine[row.warehouse_receipt_line_id]).remaining))) return setMsg({text:'مقدار برگشت نامعتبر یا بیش از باقی‌مانده است.',kind:'err'})
     if (lines.length === 0) return setMsg({ text: 'مقدارِ برگشتِ دست‌کم یک ردیف را وارد کنید.', kind: 'err' })
     setBusy(true)
     try {
@@ -716,7 +726,7 @@ function ReceiptReturnPanel({
         kind: 'ok',
       })
       setQty({})
-      setAgreed({})
+      setAgreed({}); setUnitByLine({})
       await load()
       onReturned()
     } catch (err) {
@@ -778,23 +788,28 @@ function ReceiptReturnPanel({
                     <th>فی</th>
                     <th>فی تمام‌شده</th>
                     <th>مقدار برگشت</th>
-                    <th>فیِ توافقی</th>
+                    <th>فیِ توافقی واحد پایه</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(rows ?? []).map((row) => {
                     const id = row.warehouse_receipt_line_id
-                    const closed = Number(row.remaining) <= 0
+                    const selected = selectedReturnUnit({...row,unit_price:row.landed_unit_cost},unitByLine[id])
+                    const closed = !positiveQuantity(selected.remaining)
                     return (
                       <tr key={id} style={closed ? { opacity: 0.55 } : undefined}>
                         <td className="card-title">{row.item_name}{row.item_code ? ` — ${row.item_code}` : ''}</td>
                         <td className="num" data-label="مقدار رسید">{faQty(row.received)} {row.unit}</td>
                         <td className="num" data-label="برگشت‌شده">{faQty(row.already_returned)}</td>
-                        <td className="num" data-label="باقیمانده"><strong>{faQty(row.remaining)}</strong></td>
+                        <td className="num" data-label="باقیمانده"><strong>{faQty(selected.remaining)} {selected.unit_name}</strong></td>
                         <td data-label="وضعیت">{RETURN_STATUS_LABELS[row.return_status]}</td>
                         <td className="num" data-label="فی">{faAmount(row.unit_cost)}</td>
                         <td className="num" data-label="فی تمام‌شده">{faAmount(Math.round(Number(row.landed_unit_cost)))}</td>
                         <td data-label="مقدار برگشت">
+                          <SearchSelect aria-label="واحد برگشت" value={selected.unit_id}
+                            onChange={(e) => {setUnitByLine((prev) => ({...prev,[id]:e.target.value}));setQty((prev) => ({...prev,[id]:''}))}}>
+                            {(row.return_unit_options ?? [selected]).map((option) => <option key={option.unit_id} value={option.unit_id}>{option.unit_name}</option>)}
+                          </SearchSelect>
                           <NumberInput
                             allowDecimal
                             value={qty[id] ?? ''}

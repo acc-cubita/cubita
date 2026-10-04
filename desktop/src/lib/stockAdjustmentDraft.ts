@@ -6,12 +6,16 @@ import {
   type StockAdjustmentRecord,
 } from '../api'
 import { todayIso } from './jalali'
+import { positiveQuantity } from './returnQuantity'
+import type { TransactionUnitPatch } from '../components/TransactionUnitPicker'
 
 /** منطقِ مشترکِ «تعدیل دستیِ موجودی» — یک رکورد (کالا/انبار/جهت/مقدار/دلیل/تاریخ) + تاریخچه. */
 export function useStockAdjustmentDraft({ token, onAdjusted }: { token: string; onAdjusted?: () => void }) {
   const [itemId, setItemId] = useState('')
   const [warehouseId, setWarehouseId] = useState('')
   const [qtyDiff, setQtyDiff] = useState('')
+  const [unit, setUnit] = useState<TransactionUnitPatch>({})
+  const chooseItem = (value: string) => { setItemId(value); setUnit({}) }
   const [direction, setDirection] = useState<'shortage' | 'surplus'>('shortage')
   const [reason, setReason] = useState('')
   const [adjustmentDate, setAdjustmentDate] = useState(todayIso())
@@ -32,9 +36,8 @@ export function useStockAdjustmentDraft({ token, onAdjusted }: { token: string; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const magnitude = Number(qtyDiff)
   const targetValid = !!itemId && !!warehouseId
-  const valid = targetValid && !!magnitude && magnitude > 0
+  const valid = targetValid && positiveQuantity(qtyDiff)
 
   async function submit(): Promise<boolean> {
     setMessage(null)
@@ -47,7 +50,9 @@ export function useStockAdjustmentDraft({ token, onAdjusted }: { token: string; 
       await createStockAdjustment(token, {
         item_id: itemId,
         warehouse_id: warehouseId,
-        qty_diff: direction === 'shortage' ? -magnitude : magnitude,
+        qty_diff: direction === 'shortage' ? `-${qtyDiff}` : qtyDiff,
+        unit_id: unit.unitId,
+        observations: unit.observations,
         reason,
         adjustment_date: adjustmentDate,
       })
@@ -86,7 +91,9 @@ export function useStockAdjustmentDraft({ token, onAdjusted }: { token: string; 
 
   return {
     itemId,
-    setItemId,
+    setItemId: chooseItem,
+    unit,
+    setUnit,
     warehouseId,
     setWarehouseId,
     qtyDiff,

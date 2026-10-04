@@ -8,6 +8,8 @@ import { JalaliDatePicker } from './JalaliDatePicker'
 import { formatJalali } from '../lib/jalali'
 import { useStockAdjustmentDraft, type StockAdjustmentDraft } from '../lib/stockAdjustmentDraft'
 import { SearchSelect } from '../components/SearchSelect'
+import { TransactionUnitPicker } from './TransactionUnitPicker'
+import { toFaDigits } from '../lib/jalali'
 
 /** فرمِ کلاسیکِ «تعدیل دستیِ موجودی» (پوسته‌های تیره/روشن). منطق در هوکِ مشترکِ
  *  [useStockAdjustmentDraft]. */
@@ -58,6 +60,9 @@ export function StockAdjustmentForm({
         <label>
           مقدار
           <NumberInput allowDecimal allowNegative value={d.qtyDiff} onChange={d.setQtyDiff} />
+          <TransactionUnitPicker token={token} itemId={d.itemId} qty={d.qtyDiff}
+            unitId={d.unit.unitId} observations={d.unit.observations} context="inventory"
+            onChange={(patch) => d.setUnit((previous) => ({...previous,...patch}))} />
         </label>
         <label>
           دلیل
@@ -142,12 +147,12 @@ function AdjustmentRow({
   onCancel: () => void
   onConfirm: () => void
 }) {
-  const qty = Number(row.qty_diff)
+  const qty = row.qty_diff
   return (
     <>
       <tr>
         <td data-label="تاریخ">{formatJalali(row.adjustment_date)}</td>
-        <td data-label="مقدار" className="num">{qty > 0 ? '+' : ''}{qty.toLocaleString('fa-IR')}</td>
+        <td data-label="مقدار" className="num">{qty.startsWith('-') ? '' : '+'}{toFaDigits(qty)} {row.unit_conversion_snapshot?.target_unit_name ?? ''}</td>
         <td data-label="دلیل" className="card-wide">{row.reason}</td>
         <td data-label="وضعیت">
           {row.voided_at ? (
