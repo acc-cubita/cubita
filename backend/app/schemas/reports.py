@@ -610,6 +610,15 @@ class CounterpartyEventDetailOut(BaseModel):
 # ───────────────────── مرور فروش ─────────────────────
 
 
+class SalesQuantityTotalOut(BaseModel):
+    unit_key: str
+    unit_name: str
+    sold_qty: Decimal | None
+    returned_qty: Decimal | None
+    issued_qty: Decimal
+    unissued_qty: Decimal | None
+
+
 class SalesReviewSummaryOut(BaseModel):
     invoice_count: int
     line_count: int
@@ -618,11 +627,13 @@ class SalesReviewSummaryOut(BaseModel):
     tax: Decimal
     return_amount: Decimal
     net_sales: Decimal
-    sold_qty: Decimal
-    issued_qty: Decimal
+    sold_qty: Decimal | None
+    issued_qty: Decimal | None
     #: فروخته‌شده منهای خارج‌شده — عددی که تا این فصل هیچ‌جا دیده نمی‌شد.
-    unissued_qty: Decimal
+    unissued_qty: Decimal | None
     item_count: int
+
+    quantity_totals: list[SalesQuantityTotalOut] = []
 
 
 class SalesByItemOut(BaseModel):
@@ -663,9 +674,9 @@ class SalesByCustomerOut(BaseModel):
     group_name: str = ""
     credit_limit: Decimal = Decimal(0)
     invoice_count: int
-    sold_qty: Decimal
-    returned_qty: Decimal
-    issued_qty: Decimal
+    sold_qty: Decimal | None
+    returned_qty: Decimal | None
+    issued_qty: Decimal | None
     gross_amount: Decimal
     discount: Decimal
     tax: Decimal
@@ -675,14 +686,18 @@ class SalesByCustomerOut(BaseModel):
     return_amount: Decimal
     net_sales: Decimal
 
+    quantity_totals: list[SalesQuantityTotalOut] = []
+
 
 class SalesByWarehouseOut(BaseModel):
     warehouse_id: UUID
     warehouse_name: str
     issue_count: int
     invoice_count: int
-    issued_qty: Decimal
+    issued_qty: Decimal | None
     issued_cost: Decimal
+
+    quantity_totals: list[SalesQuantityTotalOut] = []
 
 
 class SalesDocumentOut(BaseModel):
@@ -696,9 +711,9 @@ class SalesDocumentOut(BaseModel):
     sale_type_name: str = ""
     is_voided: bool
     line_count: int
-    sold_qty: Decimal
-    returned_qty: Decimal
-    issued_qty: Decimal
+    sold_qty: Decimal | None
+    returned_qty: Decimal | None
+    issued_qty: Decimal | None
     gross_amount: Decimal
     discount: Decimal
     tax: Decimal
@@ -707,6 +722,8 @@ class SalesDocumentOut(BaseModel):
     net_amount: Decimal
     return_amount: Decimal
     net_sales: Decimal
+
+    quantity_totals: list[SalesQuantityTotalOut] = []
 
 
 class SalesLineOut(BaseModel):
@@ -741,6 +758,11 @@ class SalesLineOut(BaseModel):
     return_amount: Decimal
     net_sales: Decimal
 
+    entered_qty: Decimal | None = None
+    entered_unit_name: str = ""
+    entered_unit_price: Decimal | None = None
+
+
 
 class PreinvoiceProgressOut(BaseModel):
     quotation_id: UUID
@@ -760,6 +782,8 @@ class PreinvoiceProgressOut(BaseModel):
     invoice_line_count: int
     remaining_invoiceable: Decimal
     remaining_issueable: Decimal
+
+    unit_name: str = ""
 
 
 class InventoryBreakdownRowOut(BaseModel):

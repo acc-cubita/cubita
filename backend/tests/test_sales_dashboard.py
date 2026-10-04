@@ -125,3 +125,17 @@ def test_voided_invoice_excluded(db, user):
     dash = get_sales_dashboard(db, months=12)
     assert dash["monthly"][-1]["sales"] == Decimal(0)
     assert dash["top_items"] == []
+
+def test_dashboard_top_item_quantity_is_base_while_revenue_is_commercial(db, user):
+    from tests.test_item_unit_registry import configured
+    item, _, carton = configured(db)
+    wh = main_warehouse(db)
+    _stock_in(db, user, item, wh, 100, 100)
+    invoice = post_sales_invoice(db, SalesInvoiceIn(invoice_date=TODAY, warehouse_id=wh.id,
+        tax_rate=Decimal(0), lines=[SalesInvoiceLineIn(item_id=item.id, qty='2', unit_id=carton.id, unit_price='2400')]), user)
+    row = get_sales_dashboard(db)['top_items'][0]
+    assert row['qty'] == 48 and row['revenue'] == 4800
+    post_sales_return(db, SalesReturnIn(sales_invoice_id=invoice.id, return_date=TODAY,
+        lines=[SalesReturnLineIn(sales_invoice_line_id=invoice.lines[0].id, qty='24')]), user)
+    row = get_sales_dashboard(db)['top_items'][0]
+    assert row['qty'] == 24 and row['revenue'] == 2400

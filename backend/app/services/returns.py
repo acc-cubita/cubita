@@ -115,7 +115,7 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
     legacy = {
         item_id: Decimal(qty)
         for item_id, qty in db.query(
-            SalesReturnLine.item_id, func.coalesce(func.sum(SalesReturnLine.qty), 0)
+            SalesReturnLine.item_id, func.coalesce(func.sum(func.coalesce(SalesReturnLine.base_qty, SalesReturnLine.qty)), 0)
         )
         .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
         .filter(

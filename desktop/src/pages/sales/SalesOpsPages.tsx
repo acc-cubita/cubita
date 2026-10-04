@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { salesQuantityText } from '../../lib/salesQuantityDisplay'
 import {
   BadgePercent,
   Boxes,
@@ -2323,13 +2324,13 @@ export function SalesBrowsePage({ token }: { token: string }) {
               <Metric
                 icon={<Boxes size={14} />}
                 label="فروخته / خارج‌شده"
-                value={`${fa(sum.sold_qty)} / ${fa(sum.issued_qty)}`}
+                value={`${salesQuantityText(sum, 'sold_qty')} / ${salesQuantityText(sum, 'issued_qty')}`}
               />
-              {Number(sum.unissued_qty) !== 0 && (
+              {(sum.quantity_totals?.some((group) => Number(group.unissued_qty) !== 0) || (!sum.quantity_totals && Number(sum.unissued_qty) !== 0)) && (
                 <Metric
                   icon={<Ship size={14} />}
                   label="فروخته و نرفته"
-                  value={fa(sum.unissued_qty)}
+                  value={salesQuantityText(sum, 'unissued_qty')}
                   tone="out"
                 />
               )}
@@ -2373,7 +2374,7 @@ type ViewProps = { token: string; scope: SalesReviewScope; cacheKey: string }
 function GapCell({ value }: { value: string }) {
   const n = Number(value || 0)
   if (n === 0) return <>—</>
-  return <span className={n > 0 ? 'stock-over' : undefined}>{fa(value)}</span>
+  return <span className={n > 0 ? 'stock-over' : undefined}>{toFaDigits(value)}</span>
 }
 
 function SalesItemsView({ token, scope, cacheKey }: ViewProps) {
@@ -2415,16 +2416,16 @@ function SalesItemsView({ token, scope, cacheKey }: ViewProps) {
                 </td>
                 <td data-label="واحد">{r.unit_name || '—'}</td>
                 <td className="num" data-label="فروخته">
-                  {fa(r.sold_qty)}
+                  {salesQuantityText(r, 'sold_qty')}
                   {r.sold_qty_secondary != null && (
                     <span className="field-hint">
                       {fa(r.sold_qty_secondary)} {r.secondary_unit_name}
                     </span>
                   )}
                 </td>
-                <td className="num" data-label="برگشت">{fa(r.returned_qty)}</td>
+                <td className="num" data-label="برگشت">{salesQuantityText(r, 'returned_qty')}</td>
                 <td className="num" data-label="خارج‌شده">
-                  {r.is_service ? '—' : fa(r.issued_qty)}
+                  {r.is_service ? '—' : salesQuantityText(r, 'issued_qty')}
                 </td>
                 <td className="num" data-label="فروخته و نرفته">
                   {r.is_service ? '—' : <GapCell value={r.unissued_qty} />}
@@ -2486,8 +2487,8 @@ function SalesCustomersView({ token, scope, cacheKey }: ViewProps) {
                 <td className="card-title" data-label="مشتری">{r.contact_name}</td>
                 <td data-label="گروه">{r.group_name || '—'}</td>
                 <td className="num" data-label="فاکتور">{faInt(r.invoice_count)}</td>
-                <td className="num" data-label="فروخته">{fa(r.sold_qty)}</td>
-                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="فروخته">{salesQuantityText(r, 'sold_qty')}</td>
+                <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
                 <td className="num" data-label="ناخالص">{faAmount(r.gross_amount)}</td>
                 <td className="num" data-label="تخفیف">{faAmount(r.discount)}</td>
                 <td className="num" data-label="برگشت">{faAmount(r.return_amount)}</td>
@@ -2540,8 +2541,8 @@ function DocumentsTable({ rows, cacheKey, voided }: { rows: SalesReviewDocument[
               <td data-label="مشتری">{r.contact_name}</td>
               <td data-label="نوع فروش">{r.sale_type_name || '—'}</td>
               <td className="num" data-label="ردیف">{faInt(r.line_count)}</td>
-              <td className="num" data-label="فروخته">{fa(r.sold_qty)}</td>
-              <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+              <td className="num" data-label="فروخته">{salesQuantityText(r, 'sold_qty')}</td>
+              <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
               <td className="num" data-label="ناخالص">{faAmount(r.gross_amount)}</td>
               <td className="num" data-label="تخفیف">{faAmount(r.discount)}</td>
               <td className="num" data-label="مالیات">{faAmount(r.tax)}</td>
@@ -2641,14 +2642,14 @@ function SalesLinesView({ token, scope, cacheKey }: ViewProps) {
                   {r.warehouse_names.length ? r.warehouse_names.join('، ') : '—'}
                 </td>
                 <td className="num" data-label="فروخته">
-                  {fa(r.sold_qty)}
+                  {salesQuantityText(r, 'sold_qty')}
                   {r.sold_qty_secondary != null && (
                     <span className="field-hint">{fa(r.sold_qty_secondary)}</span>
                   )}
                 </td>
-                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
-                <td className="num" data-label="برگشت">{fa(r.returned_qty)}</td>
-                <td className="num" data-label="فی">{faAmount(r.unit_price)}</td>
+                <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
+                <td className="num" data-label="برگشت">{salesQuantityText(r, 'returned_qty')}</td>
+                <td className="num" data-label="فی">{faAmount(r.unit_price)}{'entered_unit_price' in r && r.entered_qty != null && <span className="field-hint">{toFaDigits(r.entered_qty)} {r.entered_unit_name} × {faAmount(r.entered_unit_price)}</span>}</td>
                 <td className="num" data-label="خالص">{faAmount(r.net_sales)}</td>
               </tr>
             ))}
@@ -2691,7 +2692,7 @@ function SalesWarehousesView({ token, scope, cacheKey }: ViewProps) {
                 <td className="card-title" data-label="انبار">{r.warehouse_name}</td>
                 <td className="num" data-label="سندِ خروج">{faInt(r.issue_count)}</td>
                 <td className="num" data-label="فاکتور">{faInt(r.invoice_count)}</td>
-                <td className="num" data-label="مقدارِ خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="مقدارِ خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
                 <td className="num" data-label="بهای تمام‌شده">{faAmount(r.issued_cost)}</td>
               </tr>
             ))}
@@ -2744,9 +2745,9 @@ function PreinvoiceProgressView({ token, scope, cacheKey }: ViewProps) {
                   <span className="status-badge tone-default">{r.status}</span>
                 </td>
                 <td className="card-wide" data-label="کالا/خدمت">{r.item_name}</td>
-                <td className="num" data-label="پیشنهادشده">{fa(r.quoted_qty)}</td>
-                <td className="num" data-label="فاکتورشده">{fa(r.invoiced_qty)}</td>
-                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="پیشنهادشده">{toFaDigits(r.quoted_qty)} {r.unit_name}</td>
+                <td className="num" data-label="فاکتورشده">{toFaDigits(r.invoiced_qty)} {r.unit_name}</td>
+                <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
                 <td className="num" data-label="ماندهٔ فاکتورشدنی">
                   <GapCell value={r.remaining_invoiceable} />
                 </td>

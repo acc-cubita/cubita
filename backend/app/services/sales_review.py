@@ -117,6 +117,10 @@ def _sales_lines(db: Session, scope: Scope):
             SalesInvoiceLine.invoice_id,
             SalesInvoiceLine.item_id,
             SalesInvoiceLine.qty,
+            func.coalesce(SalesInvoiceLine.base_qty, SalesInvoiceLine.qty).label("base_qty"),
+            SalesInvoiceLine.base_unit_id,
+            func.coalesce(SalesInvoiceLine.unit_conversion_snapshot["target_unit_name"].astext,
+                SalesInvoiceLine.unit_snapshot).label("base_unit_name"),
             SalesInvoiceLine.unit_price,
             SalesInvoiceLine.discount,
             SalesInvoiceLine.addition,
@@ -156,7 +160,7 @@ def _returned_by_line(db: Session, scope: Scope) -> dict[UUID, tuple[Decimal, De
     rows = (
         db.query(
             SalesReturnLine.sales_invoice_line_id,
-            func.coalesce(func.sum(SalesReturnLine.qty), 0),
+            func.coalesce(func.sum(func.coalesce(SalesReturnLine.base_qty, SalesReturnLine.qty)), 0),
             func.coalesce(func.sum(SalesReturnLine.qty * SalesReturnLine.unit_price), 0),
         )
         .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
@@ -198,40 +202,39 @@ def _issued_by_line(db: Session, scope: Scope) -> dict[UUID, Decimal]:
 
 
 def _issued_by_warehouse(db: Session, scope: Scope) -> list[dict]:
-    """تحققِ فیزیکی، تجمیع‌شده روی **انبار** — دانه‌بندیِ نمای انبار.
-
-    انبار از خودِ سندِ خروج می‌آید، نه از سربرگِ فاکتور: بعد از مهاجرتِ ۰۱۲۵
-    سربرگ می‌تواند انبار نداشته باشد، و یک فاکتور می‌تواند از چند انبار تحقق
-    یابد.
-    """
-    rows = (
-        db.query(
-            WarehouseIssue.warehouse_id,
-            func.count(func.distinct(WarehouseIssue.id)).label("issue_count"),
-            func.count(func.distinct(WarehouseIssue.sales_invoice_id)).label("invoice_count"),
-            func.coalesce(func.sum(WarehouseIssueLine.qty), 0).label("qty"),
-            func.coalesce(
-                func.sum(WarehouseIssueLine.qty * WarehouseIssueLine.unit_cost), 0
-            ).label("cost"),
-        )
-        .join(WarehouseIssueLine, WarehouseIssueLine.issue_id == WarehouseIssue.id)
-        .join(SalesInvoice, SalesInvoice.id == WarehouseIssue.sales_invoice_id)
-        .filter(WarehouseIssue.voided_at.is_(None), *_invoice_filter(scope))
-        .group_by(WarehouseIssue.warehouse_id)
-        .all()
-    )
+    query = db.query(WarehouseIssue.warehouse_id, WarehouseIssue.id.label("issue_id"),
+        WarehouseIssue.sales_invoice_id.label("invoice_id"), WarehouseIssueLine.item_id,
+        WarehouseIssueLine.qty.label("base_qty"), WarehouseIssueLine.base_unit_id,
+        func.coalesce(WarehouseIssueLine.unit_conversion_snapshot["target_unit_name"].astext,
+            WarehouseIssueLine.unit_snapshot).label("base_unit_name"), WarehouseIssueLine.unit_cost
+    ).join(WarehouseIssueLine, WarehouseIssueLine.issue_id == WarehouseIssue.id
+    ).join(SalesInvoice, SalesInvoice.id == WarehouseIssue.sales_invoice_id
+    ).filter(WarehouseIssue.voided_at.is_(None), *_invoice_filter(scope))
+    if scope.item_id is not None:
+        query = query.filter(WarehouseIssueLine.item_id == scope.item_id)
+    if scope.warehouse_id is not None:
+        query = query.filter(WarehouseIssue.warehouse_id == scope.warehouse_id)
     names = {w.id: w.name for w in db.query(Warehouse).all()}
-    return [
-        {
-            "warehouse_id": r.warehouse_id,
-            "warehouse_name": names.get(r.warehouse_id, "—"),
-            "issue_count": int(r.issue_count),
-            "invoice_count": int(r.invoice_count),
-            "issued_qty": Decimal(r.qty),
-            "issued_cost": Decimal(r.cost),
-        }
-        for r in rows
-    ]
+    buckets = {}
+    for row in query.all():
+        bucket = buckets.setdefault(row.warehouse_id, {"warehouse_id": row.warehouse_id,
+            "warehouse_name": names.get(row.warehouse_id, "—"), "_issues": set(),
+            "_invoices": set(), "issued_cost": Decimal(0)})
+        bucket["_issues"].add(row.issue_id); bucket["_invoices"].add(row.invoice_id)
+        bucket["issued_cost"] += Decimal(row.base_qty) * Decimal(row.unit_cost)
+        _add_quantity(bucket, row, issued=Decimal(row.base_qty))
+        # This view describes physical fulfillment, not a second sale.
+        bucket["_unit_groups"][_quantity_key(row)]["sold_qty"] -= Decimal(row.base_qty)
+    result = []
+    for bucket in buckets.values():
+        bucket["issue_count"] = len(bucket.pop("_issues"))
+        bucket["invoice_count"] = len(bucket.pop("_invoices"))
+        _finish_quantities(bucket)
+        for group in bucket["quantity_totals"]:
+            for key in ("sold_qty", "returned_qty", "unissued_qty"):
+                group[key] = None
+        result.append(bucket)
+    return result
 
 
 # ═══════════════════════════ نماها ═══════════════════════════
@@ -263,19 +266,28 @@ def _components(row, returned_amount: Decimal) -> dict:
     }
 
 
-def _secondary(item: Item | None, qty: Decimal) -> Decimal | None:
-    """مقدار به واحدِ دوم.
+def _quantity_key(row):
+    return str(row.base_unit_id) if row.base_unit_id else row.base_unit_name or f"unknown:{row.item_id}"
 
-    **مقدارِ دومی، فروشِ دومی نیست** — همان مقدار است با واحدِ دیگر. پس هرگز با
-    مقدارِ اصلی جمع نمی‌شود. ضریبِ صفر یعنی نسبت تعریف نشده و `None` برمی‌گردد،
-    نه صفر.
-    """
-    if item is None or item.secondary_unit_id is None:
-        return None
-    factor = Decimal(item.conversion_factor or 0)
-    if factor <= 0:
-        return None
-    return qty / factor
+
+def _add_quantity(bucket, row, returned=Decimal(0), issued=Decimal(0)):
+    groups = bucket.setdefault("_unit_groups", {})
+    group = groups.setdefault(_quantity_key(row), {"unit_key": _quantity_key(row),
+        "unit_name": row.base_unit_name or "واحد نامشخص", "sold_qty": Decimal(0),
+        "returned_qty": Decimal(0), "issued_qty": Decimal(0)})
+    group["sold_qty"] += Decimal(row.base_qty)
+    group["returned_qty"] += returned
+    group["issued_qty"] += issued
+
+
+def _finish_quantities(bucket):
+    groups = list(bucket.pop("_unit_groups", {}).values())
+    for group in groups:
+        group["unissued_qty"] = group["sold_qty"] - group["issued_qty"]
+    bucket["quantity_totals"] = groups
+    for key in ("sold_qty", "returned_qty", "issued_qty", "unissued_qty"):
+        bucket[key] = groups[0][key] if len(groups) == 1 else Decimal(0) if not groups else None
+    return bucket
 
 
 def by_item(db: Session, scope: Scope) -> list[dict]:
@@ -301,11 +313,9 @@ def by_item(db: Session, scope: Scope) -> list[dict]:
                 "item_code": row.item_code_snapshot or (item.sku if item else ""),
                 "item_name": row.item_name_snapshot or (item.name if item else "—"),
                 "is_service": bool(item.is_service) if item else False,
-                "unit_name": row.unit_snapshot
+                "unit_name": row.base_unit_name
                 or (units.get(item.primary_unit_id, "") if item else ""),
-                "secondary_unit_name": (
-                    units.get(item.secondary_unit_id, "") if item and item.secondary_unit_id else ""
-                ),
+                "secondary_unit_name": "",
                 "sold_qty": Decimal(0),
                 "returned_qty": Decimal(0),
                 "issued_qty": Decimal(0),
@@ -321,7 +331,8 @@ def by_item(db: Session, scope: Scope) -> list[dict]:
             }
         ret_qty, ret_amount = returned.get(row.line_id, (Decimal(0), Decimal(0)))
         parts = _components(row, ret_amount)
-        bucket["sold_qty"] += Decimal(row.qty)
+        _add_quantity(bucket, row, ret_qty, issued.get(row.line_id, Decimal(0)))
+        bucket["sold_qty"] += Decimal(row.base_qty)
         bucket["returned_qty"] += ret_qty
         bucket["issued_qty"] += issued.get(row.line_id, Decimal(0))
         bucket["line_count"] += 1
@@ -340,11 +351,12 @@ def by_item(db: Session, scope: Scope) -> list[dict]:
             if bucket["sold_qty"]
             else None
         )
+        bucket.pop("_unit_groups", None)
         bucket["net_qty"] = net_qty
         #: اختلافِ تجاری و فیزیکی — مفیدترین عددِ این گزارش.
         bucket["unissued_qty"] = bucket["sold_qty"] - bucket["issued_qty"]
-        bucket["sold_qty_secondary"] = _secondary(item, bucket["sold_qty"])
-        bucket["issued_qty_secondary"] = _secondary(item, bucket["issued_qty"])
+        bucket["sold_qty_secondary"] = None
+        bucket["issued_qty_secondary"] = None
         #: موجودیِ انبار از **دفترِ موجودی** می‌آید، نه از فروش منهای برگشت.
         bucket["stock_qty"] = _stock_of(db, bucket["item_id"], scope.warehouse_id)
         out.append(bucket)
@@ -405,7 +417,8 @@ def by_customer(db: Session, scope: Scope) -> list[dict]:
         ret_qty, ret_amount = returned.get(row.line_id, (Decimal(0), Decimal(0)))
         parts = _components(row, ret_amount)
         bucket["invoice_ids"].add(row.invoice_id)
-        bucket["sold_qty"] += Decimal(row.qty)
+        _add_quantity(bucket, row, ret_qty, issued.get(row.line_id, Decimal(0)))
+        bucket["sold_qty"] += Decimal(row.base_qty)
         bucket["returned_qty"] += ret_qty
         bucket["issued_qty"] += issued.get(row.line_id, Decimal(0))
         for key in ("gross_amount", "discount", "tax", "duty", "addition", "net_amount", "return_amount", "net_sales"):
@@ -418,7 +431,7 @@ def by_customer(db: Session, scope: Scope) -> list[dict]:
         #: سه‌ردیفی یک فاکتور است.
         bucket["invoice_count"] = len(bucket.pop("invoice_ids"))
         bucket["group_name"] = groups.get(bucket.pop("group_id"), "") or ""
-        out.append(bucket)
+        out.append(_finish_quantities(bucket))
     out.sort(key=lambda r: -r["net_sales"])
     return out
 
@@ -477,13 +490,14 @@ def documents(db: Session, scope: Scope) -> list[dict]:
         ret_qty, ret_amount = returned.get(row.line_id, (Decimal(0), Decimal(0)))
         parts = _components(row, ret_amount)
         bucket["line_count"] += 1
-        bucket["sold_qty"] += Decimal(row.qty)
+        _add_quantity(bucket, row, ret_qty, issued.get(row.line_id, Decimal(0)))
+        bucket["sold_qty"] += Decimal(row.base_qty)
         bucket["returned_qty"] += ret_qty
         bucket["issued_qty"] += issued.get(row.line_id, Decimal(0))
         for key in ("gross_amount", "discount", "tax", "duty", "addition", "net_amount", "return_amount", "net_sales"):
             bucket[key] += parts[key]
 
-    out = list(acc.values())
+    out = [_finish_quantities(bucket) for bucket in acc.values()]
     out.sort(key=lambda r: (r["document_date"], r["number"] or 0), reverse=True)
     return out
 
@@ -526,13 +540,17 @@ def lines(db: Session, scope: Scope) -> list[dict]:
                 "item_code": row.item_code_snapshot or (item.sku if item else ""),
                 "item_name": row.item_name_snapshot or (item.name if item else "—"),
                 "barcode": (item.barcode or "") if item else "",
-                "unit_name": row.unit_snapshot,
-                "sold_qty": Decimal(row.qty),
-                "sold_qty_secondary": _secondary(item, Decimal(row.qty)),
+                "unit_name": row.base_unit_name,
+                "sold_qty": Decimal(row.base_qty),
+                "sold_qty_secondary": None,
                 "returned_qty": ret_qty,
                 "issued_qty": issued_qty,
-                "unissued_qty": Decimal(row.qty) - issued_qty,
-                "unit_price": Decimal(row.unit_price),
+                "unissued_qty": Decimal(row.base_qty) - issued_qty,
+                "entered_qty": Decimal(row.qty),
+                "entered_unit_name": row.unit_snapshot,
+                "entered_unit_price": Decimal(row.unit_price),
+                "unit_price": Decimal(row.qty) * Decimal(row.unit_price) / Decimal(row.base_qty)
+                    if row.base_qty else Decimal(row.unit_price),
                 "warehouse_names": [warehouses.get(w, "—") for w in line_warehouses.get(row.line_id, [])],
                 "is_voided": row.voided_at is not None,
                 **parts,
@@ -586,6 +604,9 @@ def preinvoices(db: Session, scope: Scope) -> list[dict]:
             SalesQuotationLine.id.label("line_id"),
             SalesQuotationLine.item_id,
             SalesQuotationLine.qty,
+            func.coalesce(SalesQuotationLine.base_qty, SalesQuotationLine.qty).label("base_qty"),
+            func.coalesce(SalesQuotationLine.unit_conversion_snapshot["target_unit_name"].astext,
+                SalesQuotationLine.unit_snapshot).label("base_unit_name"),
             SalesQuotationLine.unit_price,
             SalesQuotation.id.label("quotation_id"),
             SalesQuotation.number,
@@ -605,7 +626,7 @@ def preinvoices(db: Session, scope: Scope) -> list[dict]:
     invoiced_rows = (
         db.query(
             SalesInvoiceLine.source_quotation_line_id,
-            func.coalesce(func.sum(SalesInvoiceLine.qty), 0),
+            func.coalesce(func.sum(func.coalesce(SalesInvoiceLine.base_qty, SalesInvoiceLine.qty)), 0),
             func.count(SalesInvoiceLine.id),
         )
         .join(SalesInvoice, SalesInvoice.id == SalesInvoiceLine.invoice_id)
@@ -644,7 +665,7 @@ def preinvoices(db: Session, scope: Scope) -> list[dict]:
         item = items.get(row.item_id)
         inv_qty, inv_lines = invoiced.get(row.line_id, (Decimal(0), 0))
         iss_qty = issued.get(row.line_id, Decimal(0))
-        quoted_qty = Decimal(row.qty)
+        quoted_qty = Decimal(row.base_qty)
         out.append(
             {
                 "quotation_id": row.quotation_id,
@@ -657,6 +678,7 @@ def preinvoices(db: Session, scope: Scope) -> list[dict]:
                 "item_id": row.item_id,
                 "item_name": item.name if item else "—",
                 "unit_price": Decimal(row.unit_price),
+                "unit_name": row.base_unit_name,
                 "quoted_qty": quoted_qty,
                 "invoiced_qty": inv_qty,
                 "issued_qty": iss_qty,
@@ -700,7 +722,7 @@ def summary(db: Session, scope: Scope) -> dict:
     """شاخص‌های بازه — از دانه‌بندیِ درست، نه از جمعِ نمایی دیگر."""
     rows = documents(db, scope)
     items = by_item(db, scope)
-    return {
+    result = {
         "invoice_count": len(rows),
         "line_count": sum(r["line_count"] for r in rows),
         "gross_amount": sum((r["gross_amount"] for r in rows), Decimal(0)),
@@ -708,10 +730,20 @@ def summary(db: Session, scope: Scope) -> dict:
         "tax": sum((r["tax"] for r in rows), Decimal(0)),
         "return_amount": sum((r["return_amount"] for r in rows), Decimal(0)),
         "net_sales": sum((r["net_sales"] for r in rows), Decimal(0)),
-        "sold_qty": sum((r["sold_qty"] for r in rows), Decimal(0)),
-        "issued_qty": sum((r["issued_qty"] for r in rows), Decimal(0)),
+        "sold_qty": Decimal(0),
+        "issued_qty": Decimal(0),
         #: مقداری که فروخته شده و هنوز از انبار نرفته — عددی که تا امروز
         #: هیچ‌جا دیده نمی‌شد.
-        "unissued_qty": sum((r["sold_qty"] - r["issued_qty"] for r in rows), Decimal(0)),
+        "unissued_qty": Decimal(0),
         "item_count": len(items),
     }
+
+    groups = result.setdefault("_unit_groups", {})
+    for row in rows:
+        for incoming in row["quantity_totals"]:
+            target = groups.setdefault(incoming["unit_key"], {"unit_key": incoming["unit_key"],
+                "unit_name": incoming["unit_name"], "sold_qty": Decimal(0),
+                "returned_qty": Decimal(0), "issued_qty": Decimal(0)})
+            for key in ("sold_qty", "returned_qty", "issued_qty"):
+                target[key] += incoming[key]
+    return _finish_quantities(result)

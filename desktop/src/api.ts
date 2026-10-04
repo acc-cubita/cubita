@@ -9188,10 +9188,10 @@ export interface SalesReviewSummary {
   tax: string
   return_amount: string
   net_sales: string
-  sold_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  issued_qty: string | null
   /** فروخته‌شده منهای خارج‌شده. */
-  unissued_qty: string
+  unissued_qty: string | null
   item_count: number
 }
 
@@ -9230,9 +9230,9 @@ export interface SalesByCustomer {
   group_name: string
   credit_limit: string
   invoice_count: number
-  sold_qty: string
-  returned_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string | null
   gross_amount: string
   discount: string
   tax: string
@@ -9248,7 +9248,7 @@ export interface SalesByWarehouse {
   warehouse_name: string
   issue_count: number
   invoice_count: number
-  issued_qty: string
+  issued_qty: string | null
   issued_cost: string
 }
 
@@ -9263,9 +9263,9 @@ export interface SalesReviewDocument {
   sale_type_name: string
   is_voided: boolean
   line_count: number
-  sold_qty: string
-  returned_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string | null
   gross_amount: string
   discount: string
   tax: string
@@ -10858,3 +10858,22 @@ export interface ProductionOutputInput {
   unit_id?: string
   observations?: UnitObservation[]
 }
+
+export interface SalesQuantityTotal {
+  unit_key: string
+  unit_name: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string
+  unissued_qty: string | null
+}
+export interface SalesReviewSummary { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesByCustomer { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesByWarehouse { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesReviewDocument { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesReviewLine {
+  entered_qty?: string | null
+  entered_unit_name?: string
+  entered_unit_price?: string | null
+}
+export interface PreinvoiceProgress { unit_name?: string }
