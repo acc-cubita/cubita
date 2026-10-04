@@ -311,6 +311,31 @@ def remaining_entered_quantity(line, movements) -> Decimal:
     return rounded_quantity(remaining) if remaining > 0 else Decimal(0)
 
 
+def historical_return_options(original: QuantityConversion, movements, remaining_base: Decimal,
+                              base_price: Decimal) -> list[dict]:
+    """Allowed historical units and exact remainders for return forms, never a live graph."""
+    options = [{"unit_id": original.target_unit_id, "unit_name": original.target_unit_name,
+                "remaining": remaining_base, "unit_price": base_price}]
+    if original.source_unit_id == original.target_unit_id:
+        return options
+    consumed = Fraction(0)
+    anchored_base = Fraction(0)
+    for move in movements:
+        base = getattr(move, "base_qty", None)
+        base = Fraction(move.qty if base is None else base)
+        anchored_base += base
+        consumed += (Fraction(move.entered_qty)
+            if move.entered_unit_id == original.source_unit_id and move.entered_qty is not None
+            else base / original.ratio)
+    legacy = Fraction(original.target_qty) - Fraction(remaining_base) - anchored_base
+    consumed += max(legacy, Fraction(0)) / original.ratio
+    left = Fraction(original.source_qty) - consumed
+    options.append({"unit_id": original.source_unit_id, "unit_name": original.source_unit_name,
+                    "remaining": rounded_quantity(left) if left > 0 and remaining_base > 0 else Decimal(0),
+                    "unit_price": Decimal(base_price) * Decimal(original.ratio.numerator) / Decimal(original.ratio.denominator)})
+    return options
+
+
 def record_batch_observations(db: Session, batch, conversion: QuantityConversion, user) -> None:
     """Keep original observed pairs on the physical batch, without a rounded factor."""
     from app.models.item_units import BatchUnitConversion

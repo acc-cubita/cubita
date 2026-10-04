@@ -152,6 +152,10 @@ class KardexLineOut(BaseModel):
     voided: bool = False
     qty_in: Decimal
     qty_out: Decimal
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     #: بهای ارزش‌گذاری (بازپخشِ زمانی)؛ `recorded_unit_cost` همانی است که سند نوشته.
     unit_cost: Decimal | None
     recorded_unit_cost: Decimal | None

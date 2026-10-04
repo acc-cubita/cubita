@@ -50,6 +50,7 @@ from app.schemas.returns import (
 )
 from app.schemas.treasury import TreasuryTransactionIn
 from app.services import treasury
+from app.services import market_units
 from app.services.inventory import _allocate_discount, post_purchase_invoice, post_sales_invoice
 from app.services.sales_invoices import finalize_immediate_sale
 from app.services.returns import post_purchase_return, post_sales_return
@@ -1244,6 +1245,9 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
         if listing_visible_to_trade(retailer_trade, targets, l.extra_trades)
     }
 
+    with tenant_scope(db, distributor_id):
+        component_units = dict(db.query(Item.id, Item.unit).filter(Item.id.in_({
+            component.distributor_item_id for listing in listings.values() for component in listing.components})).all())
     order_lines: list[MarketplaceOrderLine] = []
     subtotal = Decimal(0)
     for ln in data.lines:
@@ -1282,7 +1286,8 @@ def place_order(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceOrder
                     "unit": listing.unit,
                     "consumer_price": str(listing.consumer_price or 0),
                     "components": [
-                        {"item_id": str(comp.distributor_item_id), "name": comp.item_name, "qty": str(comp.qty)}
+                        {"item_id": str(comp.distributor_item_id), "name": comp.item_name,
+                         "qty": str(comp.qty), "unit":component_units[comp.distributor_item_id]}
                         for comp in listing.components
                     ],
                 },
@@ -1611,7 +1616,7 @@ def _explode_order(order: MarketplaceOrder, listings: dict) -> list[dict]:
                 {
                     "distributor_item_id": UUID(comp["item_id"]),
                     "name": comp["name"],
-                    "unit": snapshot["unit"] if snapshot is not None else listing.unit,
+                    "unit": comp.get("unit") or (snapshot["unit"] if snapshot is not None else listing.unit),
                     "units": units,
                     "unit_price": unit_price,
                     "discount": discount,
@@ -1692,7 +1697,8 @@ def _fulfill(db: Session, order: MarketplaceOrder, distributor_user: User) -> Ma
                 consumer_by_item[ret_item.id] = cp
             purchase_lines.append(
                 PurchaseInvoiceLineIn(
-                    item_id=ret_item.id, qty=f["units"], unit_cost=f["unit_price"], discount=f["discount"]
+                    item_id=ret_item.id, qty=f["units"], unit_cost=f["unit_price"], discount=f["discount"],
+                    unit_id=market_units.commercial_unit(db, ret_item, f["unit"], context="purchase")
                 )
             )
         purchase_invoice = post_purchase_invoice(
@@ -2465,6 +2471,18 @@ def request_return(db: Session, retailer_tenant_id: UUID, data) -> MarketplaceRe
     return ret
 
 
+def return_component_units(order: MarketplaceOrder) -> dict[UUID, str]:
+    names = {}
+    for line in order.lines:
+        for component in (line.fulfillment_snapshot or {}).get("components", []):
+            item_id = UUID(component["item_id"])
+            unit = component.get("unit", "")
+            if item_id in names and names[item_id] != unit:
+                raise HTTPException(409, "واحد اجزای سفارش یکسان نیست؛ مرجوعی را با ردیف‌های فاکتور اصلی ثبت کنید")
+            names[item_id] = unit
+    return names
+
+
 def _explode_return(db: Session, order: MarketplaceOrder, ret: MarketplaceReturn) -> dict[UUID, Decimal]:
     """ردیف‌های مرجوعی را به «کالای پخش‌کننده → مقدار» باز می‌کند (مثلِ _explode_order برای مقدارِ مرجوع)."""
     lines_by_id = {ol.id: ol for ol in order.lines}
@@ -2509,6 +2527,7 @@ def approve_return(db: Session, distributor_tenant_id: UUID, distributor_user: U
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فاکتورهای سفارش برای مرجوعی در دسترس نیست")
 
     dist_items = _explode_return(db, order, ret)
+    component_units = return_component_units(order)
     today = date.today()
     tag = f"مرجوعیِ بازار #{ret.return_number}"
 
@@ -2541,7 +2560,9 @@ def approve_return(db: Session, distributor_tenant_id: UUID, distributor_user: U
             )
             if link is None:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "کالای متناظرِ فروشگاه برای مرجوعی پیدا نشد")
-            ret_lines.append(PurchaseReturnLineIn(item_id=link.retailer_item_id, qty=qty))
+            ret_lines.extend(PurchaseReturnLineIn(**line) for line in market_units.historical_return_lines(
+                db, order.retailer_purchase_invoice_id, "buyer",
+                [(link.retailer_item_id, qty, component_units.get(dist_item_id, ""))]))
         pr = post_purchase_return(
             db,
             PurchaseReturnIn(

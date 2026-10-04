@@ -839,6 +839,18 @@ def basis_documents(db: Session, return_type: str, *, limit: int = 200) -> list[
     return out
 
 
+def _basis_unit_options(db, lines, items, returned, anchor):
+    grouped = {}
+    for move in db.query(WarehouseIssueReturnLine).join(WarehouseIssueReturn).filter(
+        anchor.in_([line.id for line in lines]), WarehouseIssueReturn.voided_at.is_(None)).all():
+        grouped.setdefault(getattr(move, anchor.key), []).append(move)
+    return {line.id: units.historical_return_options(
+        units.document_conversion(db, line, items[line.item_id]), grouped.get(line.id, []),
+        max(Decimal(getattr(line, "base_qty", None) if getattr(line, "base_qty", None) is not None else line.qty)
+            - returned.get(line.id, Decimal(0)), Decimal(0)), Decimal(line.unit_cost or 0))
+        for line in lines if line.item_id in items}
+
+
 def basis_detail(db: Session, kind: str, doc_id: UUID) -> dict:
     """ردیف‌های یک مبنا با مقدار، برگشت‌خورده و باقیمانده‌ی مشتق."""
     if kind == "sales_return":
@@ -855,6 +867,8 @@ def basis_detail(db: Session, kind: str, doc_id: UUID) -> dict:
         contact = db.get(Contact, invoice.contact_id) if invoice and invoice.contact_id else None
         items = {i.id: i for i in db.query(Item).filter(Item.id.in_({l.item_id for l in doc.lines})).all()}
         returned = physically_returned_by_sales_return_line(db, [l.id for l in doc.lines])
+        unit_options = _basis_unit_options(db, doc.lines, items, returned,
+                                          WarehouseIssueReturnLine.sales_return_line_id)
         lines = []
         warehouse_id = None
         for line in doc.lines:
@@ -875,6 +889,7 @@ def basis_detail(db: Session, kind: str, doc_id: UUID) -> dict:
                 "qty": base_qty, "returned": done, "remaining": remaining,
                 "unit_cost": unit_cost, "amount": (remaining * unit_cost).quantize(Decimal(1)),
                 "source_warehouse_id": source_warehouse,
+                "return_unit_options": unit_options.get(line.id, []),
             })
         return {
             "kind": kind, "id": doc.id, "number": doc.number, "doc_date": doc.return_date,
@@ -889,6 +904,9 @@ def basis_detail(db: Session, kind: str, doc_id: UUID) -> dict:
             raise HTTPException(status.HTTP_409_CONFLICT, "این خروج باطل شده است")
         receiver = db.get(Contact, issue.receiver_id) if issue.receiver_id else None
         returned = returned_by_issue_line(db, [l.id for l in issue.lines])
+        items = {i.id: i for i in db.query(Item).filter(Item.id.in_({l.item_id for l in issue.lines})).all()}
+        unit_options = _basis_unit_options(db, issue.lines, items, returned,
+                                          WarehouseIssueReturnLine.warehouse_issue_line_id)
         lines = []
         for line in issue.lines:
             done = returned.get(line.id, Decimal(0))
@@ -900,6 +918,7 @@ def basis_detail(db: Session, kind: str, doc_id: UUID) -> dict:
                 "unit": line.unit_snapshot, "qty": line.qty, "returned": done, "remaining": remaining,
                 "unit_cost": unit_cost, "amount": (remaining * unit_cost).quantize(Decimal(1)),
                 "source_warehouse_id": issue.warehouse_id,
+                "return_unit_options": unit_options.get(line.id, []),
             })
         return {
             "kind": kind, "id": issue.id, "number": issue.number, "doc_date": issue.issue_date,

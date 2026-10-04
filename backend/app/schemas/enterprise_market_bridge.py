@@ -42,7 +42,8 @@ class MarketComponentSnapshot(BaseModel):
 
     market_item_ref: UUID
     name: str = Field(max_length=300)
-    qty: Decimal = Field(gt=0, max_digits=18, decimal_places=3)
+    unit: str = Field(default="", max_length=20)
+    qty: Decimal = Field(gt=0, max_digits=24, decimal_places=8)
 
 
 class MarketListingSnapshot(BaseModel):
@@ -66,7 +67,7 @@ class MarketListingSnapshot(BaseModel):
     min_order_qty: Decimal = Field(ge=0)
     max_order_qty: Decimal = Field(ge=0)
     daily_order_limit: int = Field(ge=0)
-    available_qty: Decimal = Field(ge=0, max_digits=18, decimal_places=3)
+    available_qty: Decimal = Field(ge=0, max_digits=24, decimal_places=8)
     components: list[MarketComponentSnapshot] = Field(min_length=1, max_length=100)
 
     @field_validator("images")
@@ -124,7 +125,7 @@ class MarketFinancialLine(BaseModel):
     market_item_ref: UUID
     name: str = Field(default="", max_length=300)
     unit: str = Field(default="", max_length=50)
-    qty: Decimal = Field(gt=0, max_digits=18, decimal_places=3)
+    qty: Decimal = Field(gt=0, max_digits=24, decimal_places=8)
     unit_price: Decimal = Field(ge=0, max_digits=18, decimal_places=0)
     discount: Decimal = Field(ge=0, max_digits=18, decimal_places=0)
     consumer_price: Decimal = Field(ge=0, max_digits=18, decimal_places=0)
@@ -169,7 +170,8 @@ class MarketFinancialEvent(BaseModel):
 
 
 def listing_snapshot(
-    listing: object, available_qty: Decimal, *, listing_ref: UUID, item_refs: dict[UUID, UUID]
+    listing: object, available_qty: Decimal, *, listing_ref: UUID, item_refs: dict[UUID, UUID],
+    item_units: dict[UUID, str] | None = None,
 ) -> MarketListingSnapshot:
     """شناسه‌های بازار مستقل‌اند؛ حتی شناسهٔ کالای محلی به VPS نمی‌رود."""
     return MarketListingSnapshot(
@@ -196,6 +198,7 @@ def listing_snapshot(
             MarketComponentSnapshot(
                 market_item_ref=item_refs[component.distributor_item_id],
                 name=component.item_name,
+                unit=(item_units or {}).get(component.distributor_item_id, ""),
                 qty=Decimal(component.qty),
             )
             for component in listing.components

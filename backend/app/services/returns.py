@@ -156,6 +156,19 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
     return rows
 
 
+def _historical_options_for_rows(db, rows, items, parent, movement, anchor):
+    """One grouped read of return movements; do not reload a graph for each line."""
+    ids = [row.line.id for row in rows]
+    grouped = {}
+    for move in db.query(movement).join(parent, parent.id == movement.return_id).filter(
+        anchor.in_(ids), parent.voided_at.is_(None)).all():
+        grouped.setdefault(getattr(move, anchor.key), []).append(move)
+    return {row.line.id: units.historical_return_options(
+        units.document_conversion(db, row.line, items[row.line.item_id]),
+        grouped.get(row.line.id, []), row.remaining, row.unit_price)
+        for row in rows if row.line.item_id in items}
+
+
 def get_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
     """برای هر **ردیفِ** فاکتور فروش: فروخته‌شده، قبلاً برگشت‌خورده، و باقی‌ماندهٔ قابل‌برگشت.
 
@@ -168,6 +181,8 @@ def get_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
     rows = _returnable_lines(db, invoice_id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    options = _historical_options_for_rows(db, rows, items, SalesReturn, SalesReturnLine,
+                                         SalesReturnLine.sales_invoice_line_id)
     return [
         {
             "sales_invoice_line_id": row.line.id,
@@ -180,6 +195,7 @@ def get_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
             "already_returned": row.returned,
             "remaining": row.remaining,
             "unit_price": row.unit_price,
+            "return_unit_options": options.get(row.line.id, []),
         }
         for row in rows
     ]
@@ -765,6 +781,8 @@ def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
     rows = _purchase_returnable_lines(db, invoice_id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    options = _historical_options_for_rows(db, rows, items, PurchaseReturn, PurchaseReturnLine,
+                                         PurchaseReturnLine.purchase_invoice_line_id)
     return [
         {
             "purchase_invoice_line_id": row.line.id,
@@ -777,6 +795,7 @@ def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]
             "already_returned": row.returned,
             "remaining": row.remaining,
             "unit_price": row.unit_cost,
+            "return_unit_options": options.get(row.line.id, []),
         }
         for row in rows
     ]
@@ -891,6 +910,8 @@ def get_receipt_returnable_summary(db: Session, receipt_id: UUID) -> list[dict]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "رسید انبار یافت نشد")
     rows = _receipt_returnable_lines(db, receipt_id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    options = _historical_options_for_rows(db, rows, items, PurchaseReturn, PurchaseReturnLine,
+                                         PurchaseReturnLine.warehouse_receipt_line_id)
     return [
         {
             "warehouse_receipt_line_id": row.line.id,
@@ -907,6 +928,7 @@ def get_receipt_returnable_summary(db: Session, receipt_id: UUID) -> list[dict]:
             "received": row.sold,
             "already_returned": row.returned,
             "remaining": row.remaining,
+            "return_unit_options": options.get(row.line.id, []),
             #: «فی» و «فی تمام‌شده» هر دو، چون فصل هر دو را در جدول دارد.
             "unit_cost": row.unit_price,
             "landed_unit_cost": row.unit_cost,

@@ -93,6 +93,13 @@ class SalesReturnOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class HistoricalReturnUnitOut(BaseModel):
+    unit_id: UUID
+    unit_name: str
+    remaining: Decimal
+    unit_price: Decimal
+
+
 class ReturnableLineOut(BaseModel):
     """یک **ردیفِ** «قابلِ برگشت» از یک فاکتور.
 
@@ -110,6 +117,7 @@ class ReturnableLineOut(BaseModel):
     already_returned: Decimal
     remaining: Decimal
     unit_price: Decimal
+    return_unit_options: list[HistoricalReturnUnitOut] = []
 
 
 class PurchaseReturnLineIn(BaseModel):
@@ -291,3 +299,4 @@ class ReceiptReturnableLineOut(BaseModel):
     unit_cost: Decimal
     landed_unit_cost: Decimal
     return_status: str
+    return_unit_options: list[HistoricalReturnUnitOut] = []

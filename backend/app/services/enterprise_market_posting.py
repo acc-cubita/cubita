@@ -23,7 +23,8 @@ from app.models.advanced_inventory import StockBatch
 from app.models.enterprise_market_bridge import (
     EnterpriseMarketCounterpartyMap, EnterpriseMarketItemMap, EnterpriseMarketLocalPosting,
 )
-from app.models.inventory import Contact, Item
+from app.models.inventory import Contact, Item, UnitOfMeasure
+from app.models.item_units import ItemUnit
 from app.schemas.enterprise_market_bridge import MarketFinancialEvent, MarketPostingReceipt
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, SalesInvoiceIn, SalesInvoiceLineIn
 from app.schemas.returns import PurchaseReturnIn, PurchaseReturnLineIn, SalesReturnIn, SalesReturnLineIn
@@ -31,13 +32,37 @@ from app.schemas.treasury import TreasuryTransactionIn
 from app.services import marketplace as marketplace_svc, treasury
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.sales_invoices import finalize_immediate_sale
-from app.services.returns import post_purchase_return, post_sales_return
+from app.services.returns import post_purchase_return, post_sales_return, get_returnable_summary, get_purchase_returnable_summary
 
 log = logging.getLogger(__name__)
 
 
 class MappingMissing(ValueError):
     pass
+
+
+def resolve_commercial_units(db: Session, local_items, lines, items_by_ref, *, side: str) -> dict[UUID, UUID]:
+    """Only an existing, enabled item-unit membership authorizes trade input.
+
+    The seller's base quantity is never assumed to be the buyer's base quantity.
+    Unit names are the public contract; private unit IDs stay inside this database.
+    """
+    item_ids = {item.id for item in local_items}
+    allowed = ItemUnit.sale_allowed if side == "seller" else ItemUnit.purchase_allowed
+    rows = db.query(ItemUnit.item_id, ItemUnit.unit_id, UnitOfMeasure.name).join(
+        UnitOfMeasure, (UnitOfMeasure.id == ItemUnit.unit_id) &
+        (UnitOfMeasure.tenant_id == ItemUnit.tenant_id)).filter(
+        ItemUnit.item_id.in_(item_ids), ItemUnit.is_active.is_(True),
+        allowed.is_(True), UnitOfMeasure.is_active.is_(True)).all()
+    by_name = {(row.item_id, row.name): row.unit_id for row in rows}
+    result = {}
+    for line in lines:
+        item = items_by_ref[line.market_item_ref]
+        unit_id = by_name.get((item.id, line.unit.strip() or item.unit))
+        if unit_id is None:
+            raise MappingMissing("commercial market unit missing")
+        result[line.market_item_ref] = unit_id
+    return result
 
 
 def lock_local_finance(db: Session, tenant_id: UUID) -> None:
@@ -128,12 +153,35 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
         if original is None or original.local_document_id is None:
             raise MappingMissing("original order document missing")
         description = f"مرجوعی بازار #{event.return_number} ({event.return_id})"
+        summary = (get_returnable_summary if event.side == "seller" else get_purchase_returnable_summary)(
+            db, original.local_document_id)
+        anchor = "sales_invoice_line_id" if event.side == "seller" else "purchase_invoice_line_id"
+        return_lines = []
+        for line in event.lines:
+            left = line.qty
+            for source in summary:
+                if source["item_id"] != items[line.market_item_ref].id:
+                    continue
+                options = source["return_unit_options"]
+                option = next((unit for unit in options if not line.unit or unit["unit_name"] == line.unit), None)
+                if option is None:
+                    continue
+                take = min(left, option["remaining"])
+                if take <= 0:
+                    continue
+                return_lines.append({anchor:source[anchor], "qty":take, "unit_id":option["unit_id"]})
+                option["remaining"] -= take
+                left -= take
+                if left == 0:
+                    break
+            if left > 0:
+                raise MappingMissing("historical market unit or remaining missing")
         if event.side == "seller":
             document = post_sales_return(
                 db, SalesReturnIn(
                     return_date=event.order_date, sales_invoice_id=original.local_document_id,
                     description=description,
-                    lines=[SalesReturnLineIn(item_id=items[line.market_item_ref].id, qty=line.qty) for line in event.lines],
+                    lines=[SalesReturnLineIn(**line) for line in return_lines],
                 ), actor, physical=True,
             )
         else:
@@ -141,7 +189,7 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
                 db, PurchaseReturnIn(
                     return_date=event.order_date, purchase_invoice_id=original.local_document_id,
                     description=description,
-                    lines=[PurchaseReturnLineIn(item_id=items[line.market_item_ref].id, qty=line.qty) for line in event.lines],
+                    lines=[PurchaseReturnLineIn(**line) for line in return_lines],
                 ), actor,
             )
         db.flush()
@@ -149,6 +197,7 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
     contact = _local_contact(db, tenant_id, event)
     warehouse = marketplace_svc._default_warehouse(db, tenant_id)
     description = f"سفارش بازار #{event.order_number} ({event.order_id})"
+    commercial_units = resolve_commercial_units(db, items.values(), event.lines, items, side=event.side)
     if event.side == "seller":
         invoice = post_sales_invoice(
             db,
@@ -156,7 +205,7 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
                 invoice_date=event.order_date, warehouse_id=warehouse.id,
                 contact_id=contact.id, description=description,
                 lines=[SalesInvoiceLineIn(
-                    item_id=items[line.market_item_ref].id, qty=line.qty,
+                    item_id=items[line.market_item_ref].id, qty=line.qty, unit_id=commercial_units[line.market_item_ref],
                     unit_price=line.unit_price, discount=line.discount,
                 ) for line in event.lines],
             ),
@@ -170,7 +219,7 @@ def _post_document(db: Session, tenant_id: UUID, event: MarketFinancialEvent) ->
                 invoice_date=event.order_date, warehouse_id=warehouse.id,
                 contact_id=contact.id, description=description,
                 lines=[PurchaseInvoiceLineIn(
-                    item_id=items[line.market_item_ref].id, qty=line.qty,
+                    item_id=items[line.market_item_ref].id, qty=line.qty, unit_id=commercial_units[line.market_item_ref],
                     unit_cost=line.unit_price, discount=line.discount,
                 ) for line in event.lines],
             ),
@@ -231,6 +280,10 @@ def consume(db: Session, tenant_id: UUID, event: MarketFinancialEvent) -> Market
         row.error_code = "item_mapping_missing"
         row.error_detail = ("فاکتور محلی سفارش اصلی پیدا نشد؛ ابتدا ثبت سفارش اصلی را تکمیل کنید."
                             if "original order" in str(exc) else
+                            "واحد تاریخی سفارش پیدا نشد؛ واحد رویداد و فاکتور اصلی را بررسی کنید."
+                            if "historical market unit" in str(exc) else
+                            "واحد معامله در واحدهای مجاز کالا تعریف نشده است؛ واحد و تبدیل معتبر همین کالا را تعریف و دوباره تلاش کنید."
+                            if "commercial market unit" in str(exc) else
                             "نگاشت کالا کامل نیست یا کالا غیرفعال است؛ نگاشت را اصلاح و دوباره تلاش کنید.")
     except Exception as exc:  # noqa: BLE001 — finance failure must remain retryable, not lose the event
         log.warning("local market posting failed: %s", type(exc).__name__)

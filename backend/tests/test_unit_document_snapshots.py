@@ -20,6 +20,119 @@ def seed_stock(db,user,item,qty):
         lines=[PurchaseInvoiceLineIn(item_id=item.id,qty=Decimal(qty),unit_cost=Decimal(100))]),user)
 
 
+def test_signed_adjustment_uses_selected_unit_and_void_keeps_frozen_input(db, user):
+    from app.schemas.inventory import StockAdjustmentIn
+    from app.services.inventory import post_stock_adjustment
+    from app.services.voiding import void_stock_adjustment
+    item, piece, carton = configured(db)
+    seed_stock(db,user,item,'100')
+    adjustment = post_stock_adjustment(db,StockAdjustmentIn(item_id=item.id,
+        warehouse_id=main_warehouse(db).id,qty_diff='-2.00000001',unit_id=carton.id,
+        adjustment_date=date.today(),reason='آزمون واحد'),user)
+    assert adjustment.qty_diff == Decimal('-48.00000024')
+    assert adjustment.entered_qty == Decimal('-2.00000001')
+    move = db.query(StockLedger).filter_by(source_type='adjustment',source_id=adjustment.id).one()
+    assert move.entered_qty == adjustment.entered_qty and move.qty == adjustment.qty_diff
+    rule=db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
+    units.configure_rule(db,item,ConversionRuleIn(from_unit_id=carton.id,to_unit_id=piece.id,factor='30'),rule_id=rule.id)
+    void_stock_adjustment(db,adjustment.id,reason='برگشت آزمون',user=user)
+    assert get_stock_qty(db,item.id,main_warehouse(db).id) == 100
+    assert adjustment.unit_conversion_snapshot['path'][0]['version'] == 1
+
+
+def test_bom_yield_and_plan_quantity_use_finished_item_unit(db,user,client,tenant_id):
+    from app.schemas.manufacturing import ProductionPlanIn
+    from app.models.manufacturing import Bom
+    from app.services import manufacturing
+    from tests.factories import make_item
+    from app.models.tenant import Tenant
+    db.get(Tenant,tenant_id).granted_modules=['manufacturing'];db.flush()
+    finished, piece, carton = configured(db)
+    component=make_item(db)
+    response=client.post('/api/boms',json={'finished_item_id':str(finished.id),'name':'بازده بسته',
+        'yield_qty':'1','unit_id':str(carton.id),'lines':[{'component_item_id':str(component.id),'qty':'12'}]})
+    assert response.status_code == 201,response.text
+    data=response.json()
+    assert Decimal(data['yield_qty']) == 24 and Decimal(data['entered_qty']) == 1
+    bom=db.get(Bom,data['id'])
+    plan=manufacturing.create_production_plan(db,ProductionPlanIn(bom_id=bom.id,
+        warehouse_id=main_warehouse(db).id,planned_date=date.today(),qty_planned='2',unit_id=carton.id),user)
+    assert plan.qty_planned == 48 and plan.entered_qty == 2
+    assert plan.recipe_snapshot['yield_qty'] == '24.00000000'
+    assert manufacturing.scaled_bom_components(db,bom,Decimal(48),recipe=plan.recipe_snapshot)[0][1].target_qty == 24
+
+
+def test_return_options_keep_historical_unit_and_remaining_after_partial(db, user, client):
+    from app.schemas.returns import PurchaseReturnIn
+    from app.services.returns import post_purchase_return
+    item, piece, carton = configured(db)
+    invoice = post_purchase_invoice(db, PurchaseInvoiceIn(invoice_date=date.today(),
+        warehouse_id=main_warehouse(db).id,
+        lines=[PurchaseInvoiceLineIn(item_id=item.id, qty='2', unit_id=carton.id, unit_cost='2400')]), user)
+    post_purchase_return(db, PurchaseReturnIn(return_date=date.today(), purchase_invoice_id=invoice.id,
+        lines=[{'purchase_invoice_line_id':invoice.lines[0].id,'qty':'1','unit_id':carton.id}]), user)
+    rule = db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
+    units.configure_rule(db, item, ConversionRuleIn(from_unit_id=carton.id, to_unit_id=piece.id, factor='30'), rule_id=rule.id)
+    carton.name = 'نام جدید'; db.flush()
+    response = client.get(f'/api/purchase-invoices/{invoice.id}/returnable')
+    assert response.status_code == 200, response.text
+    options = {row['unit_id']:row for row in response.json()[0]['return_unit_options']}
+    assert Decimal(options[str(piece.id)]['remaining']) == 24
+    assert Decimal(options[str(carton.id)]['remaining']) == 1
+    assert options[str(carton.id)]['unit_name'] == 'کارتن'
+
+
+def test_partial_production_closes_material_residual_and_freezes_plan_recipe(db, user):
+    from app.models.manufacturing import Bom
+    from app.schemas.manufacturing import BomLineIn, ProductionPlanIn, ProductionMaterialIssueIn
+    from app.services import manufacturing
+    from tests.factories import make_item
+    component, meter, kg = configured(db, variable=True)
+    finished = make_item(db)
+    rule = db.query(ItemUnitConversion).filter_by(item_id=component.id).one()
+    seed_stock(db, user, component, '1')
+    bom = Bom(finished_item_id=finished.id, yield_qty=Decimal(3), created_by_id=user.id,
+        lines=manufacturing.build_bom_lines(db,[BomLineIn(component_item_id=component.id,qty='3',unit_id=kg.id,
+            observations=[{'rule_id':rule.id,'from_qty':'3','to_qty':'1'}])]))
+    db.add(bom);db.flush()
+    plan = manufacturing.create_production_plan(db,ProductionPlanIn(bom_id=bom.id,warehouse_id=main_warehouse(db).id,
+        planned_date=date.today(),qty_planned='3'),user)
+    plan.status='started';db.flush()
+    # Editing the recipe for future plans cannot rewrite this plan's requirement.
+    bom.lines[0].qty=Decimal(9);bom.yield_qty=Decimal(6);db.flush()
+    quantities=[]
+    for _ in range(3):
+        issue = manufacturing.issue_materials_to_production(db,plan.id,
+            ProductionMaterialIssueIn(issue_date=date.today(),qty='1'),user)
+        quantities.append(issue.lines[0].qty)
+    assert quantities == [Decimal('0.33333333'),Decimal('0.33333334'),Decimal('0.33333333')]
+    assert get_stock_qty(db,component.id,main_warehouse(db).id) == 0
+    plan.qty_produced=Decimal(3);db.flush()
+    from app.services.production_reports import material_variance
+    variance=material_variance(db,plan_id=plan.id)[0]
+    assert variance['standard_qty'] == 1 and variance['actual_qty'] == 1
+    assert variance['variance_qty'] == 0
+    from fastapi import HTTPException
+    import pytest
+    with pytest.raises(HTTPException):
+        manufacturing.issue_materials_to_production(db,plan.id,
+            ProductionMaterialIssueIn(issue_date=date.today(),qty='1'),user)
+
+
+def test_kardex_exposes_original_quantity_and_frozen_unit_name(db,user):
+    from app.services.valuation import kardex_lines
+    item,piece,carton=configured(db)
+    invoice=post_purchase_invoice(db,PurchaseInvoiceIn(invoice_date=date.today(),
+        warehouse_id=main_warehouse(db).id,lines=[PurchaseInvoiceLineIn(item_id=item.id,
+            qty='2.00000001',unit_id=carton.id,unit_cost='2400')]),user)
+    carton.name='عنوان تازه';db.flush()
+    report=kardex_lines(db,item.id,warehouse_id=None,date_from=None,date_to=None)
+    move=next(row for row in report['lines'] if row['source_id']==invoice.id)
+    assert move['qty_in'] == Decimal('48.00000024')
+    assert move['entered_qty'] == Decimal('2.00000001')
+    assert move['unit_conversion_snapshot']['source_unit_name']=='کارتن'
+
+
 def test_purchase_duplicate_keeps_entered_unit_but_is_a_fresh_conversion(db, user, client):
     item, piece, carton = configured(db)
     invoice = post_purchase_invoice(db, PurchaseInvoiceIn(invoice_date=date.today(),

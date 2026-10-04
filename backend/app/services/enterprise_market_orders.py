@@ -18,6 +18,7 @@ from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, Sales
 from app.schemas.returns import PurchaseReturnIn, PurchaseReturnLineIn, SalesReturnIn, SalesReturnLineIn
 from app.schemas.treasury import TreasuryTransactionIn
 from app.services import marketplace as market, treasury
+from app.services import market_units
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.sales_invoices import finalize_immediate_sale
 from app.services.returns import post_purchase_return, post_sales_return
@@ -114,6 +115,7 @@ def _post_cloud_native_side(
                     consumer_by_item[item.id] = row["consumer_price"]
                 purchase_lines.append(PurchaseInvoiceLineIn(
                     item_id=item.id, qty=row["units"], unit_cost=row["unit_price"], discount=row["discount"],
+                    unit_id=market_units.commercial_unit(db, item, row["unit"], context="purchase"),
                 ))
             invoice = post_purchase_invoice(
                 db, PurchaseInvoiceIn(
@@ -205,7 +207,10 @@ def _post_cloud_native_return_side(
                 db, PurchaseReturnIn(
                     return_date=date.today(), purchase_invoice_id=order.retailer_purchase_invoice_id,
                     description=tag,
-                    lines=[PurchaseReturnLineIn(item_id=ids[item_id], qty=qty) for item_id, qty in dist_items.items()],
+                    lines=[PurchaseReturnLineIn(**line) for line in market_units.historical_return_lines(
+                        db, order.retailer_purchase_invoice_id, "buyer",
+                        [(ids[item_id], qty, market.return_component_units(order).get(item_id, ""))
+                         for item_id, qty in dist_items.items()])],
                 ), actor,
             )
         ret.retailer_purchase_return_id = document.id
@@ -239,6 +244,10 @@ def queue_return(db: Session, order: MarketplaceOrder, ret: MarketplaceReturn, d
         "unit_price": Decimal(0), "discount": Decimal(0), "consumer_price": Decimal(0),
     } for item_id, qty in dist_items.items()]
     lines = _public_lines(db, fulfillment, seller_linked="seller" in links)
+    # The original trade unit survives catalog renames and conversion edits.
+    original_lines = next(row.payload["lines"] for row in original if row.side == "seller")
+    original_units = {UUID(line["market_item_ref"]):line["unit"] for line in original_lines}
+    lines = [line.model_copy(update={"unit":original_units[line.market_item_ref]}) for line in lines]
     for side in ("seller", "buyer"):
         link = links.get(side)
         counterparty_id = order.retailer_tenant_id if side == "seller" else order.distributor_tenant_id

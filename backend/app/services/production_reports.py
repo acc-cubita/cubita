@@ -25,6 +25,7 @@ from app.models.invoices import (
     WarehouseReceiptLine,
 )
 from app.models.manufacturing import Bom, ProductionPlan
+from app.services.manufacturing import frozen_recipe
 
 
 def _plan_rows(db: Session, plan_id: UUID | None) -> list[ProductionPlan]:
@@ -71,6 +72,9 @@ def material_variance(db: Session, *, plan_id: UUID | None = None) -> list[dict]
 
     boms = {b.id: b for b in db.query(Bom).filter(Bom.id.in_({p.bom_id for p in plans})).all()}
     item_ids = {item_id for (_, item_id) in actual}
+    item_ids |= {plan.finished_item_id for plan in plans}
+    for plan in plans:
+        item_ids |= {UUID(line["component_item_id"]) for line in (plan.recipe_snapshot or {}).get("lines", [])}
     for bom in boms.values():
         item_ids |= {line.component_item_id for line in bom.lines}
     names = {i.id: i.name for i in db.query(Item).filter(Item.id.in_(item_ids)).all()} if item_ids else {}
@@ -79,13 +83,15 @@ def material_variance(db: Session, *, plan_id: UUID | None = None) -> list[dict]
     for plan in plans:
         bom = boms.get(plan.bom_id)
         produced = Decimal(plan.qty_produced)
-        batches = Fraction(produced) / Fraction(bom.yield_qty) if bom and Decimal(bom.yield_qty) else Fraction(0)
+        recipe = plan.recipe_snapshot or (frozen_recipe(db, bom) if bom else None)
+        batches = Fraction(produced) / Fraction(recipe["yield_qty"]) if recipe else Fraction(0)
 
         standard: dict[UUID, Decimal] = {}
-        if bom:
-            for line in bom.lines:
-                standard[line.component_item_id] = (
-                    standard.get(line.component_item_id, Decimal(0)) + rounded_quantity(Fraction(line.qty) * batches)
+        if recipe:
+            for line in recipe["lines"]:
+                component_id = UUID(line["component_item_id"])
+                standard[component_id] = (
+                    standard.get(component_id, Decimal(0)) + rounded_quantity(Fraction(line["conversion"]["target_qty"]) * batches)
                 )
 
         #: اجزایی که یا استاندارد دارند یا واقعاً مصرف شده‌اند — مصرفِ یک کالای

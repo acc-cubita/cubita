@@ -34,6 +34,7 @@ def selected_snapshots(db: Session, tenant_id: UUID) -> list[MarketListingSnapsh
     by_id = {row.id: row for row in listings}
     item_maps = db.query(EnterpriseMarketItemMap).filter(EnterpriseMarketItemMap.tenant_id == tenant_id).all()
     refs = {row.local_item_id: row.market_item_ref for row in item_maps}
+    item_units = dict(db.query(Item.id, Item.unit).filter(Item.id.in_(refs)).all())
     quantities = marketplace_svc._orderable_by_listing(db, listings, {tenant_id})
     snapshots: list[MarketListingSnapshot] = []
     for mapping in mappings:
@@ -43,7 +44,7 @@ def selected_snapshots(db: Session, tenant_id: UUID) -> list[MarketListingSnapsh
         try:
             snapshots.append(listing_snapshot(
                 listing, quantities.get(listing.id) or Decimal(0),
-                listing_ref=mapping.market_listing_ref, item_refs=refs,
+                listing_ref=mapping.market_listing_ref, item_refs=refs, item_units=item_units,
             ))
         except KeyError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, "همهٔ اجزای کالای انتخاب‌شده باید ابتدا نگاشت و تأیید شوند") from exc
@@ -161,7 +162,7 @@ def _publish_cloud_shadow(db: Session, link: EnterpriseMarketLink, row: Enterpri
             if item is None:
                 item = Item(
                     tenant_id=link.cloud_tenant_id, sku=f"EM-{component.market_item_ref.hex}",
-                    name=component.name, unit=snapshot.unit, sales_price=snapshot.wholesale_price,
+                    name=component.name, unit=component.unit or snapshot.unit, sales_price=snapshot.wholesale_price,
                     average_cost=0,
                 )
                 db.add(item)
@@ -172,7 +173,7 @@ def _publish_cloud_shadow(db: Session, link: EnterpriseMarketLink, row: Enterpri
                 ))
             else:
                 item.name = component.name
-                item.unit = snapshot.unit
+                item.unit = component.unit or snapshot.unit
                 item.sales_price = snapshot.wholesale_price
             cloud_components.append(MarketplaceListingComponent(
                 distributor_item_id=item.id, item_name=component.name, qty=component.qty,

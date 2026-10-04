@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.issue_returns import ISSUE_RETURN_TYPES
 from app.models.returns import RETURN_CONDITIONS
+from app.schemas.returns import HistoricalReturnUnitOut
 
 
 class IssueReturnLineIn(BaseModel):
@@ -174,6 +175,7 @@ class IssueReturnBasisLineOut(BaseModel):
     unit_cost: Decimal
     amount: Decimal
     source_warehouse_id: UUID | None = None
+    return_unit_options: list[HistoricalReturnUnitOut] = []
 
 
 class IssueReturnBasisOut(BaseModel):

@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
+from app.schemas.item_units import ObservedRatioIn
 
 from app.models.company import ADDRESS_TYPES, CHANNEL_TYPES
 from app.models.inventory import (
@@ -1024,6 +1025,8 @@ class StockAdjustmentIn(BaseModel):
     item_id: UUID
     warehouse_id: UUID
     qty_diff: Decimal
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
     reason: str = ""
     adjustment_date: date
     #: کدام **بارِ ورودی** کم/زیاد شد. تهی = تعدیلِ کلیِ کالا (رفتارِ پیش‌فرض).
@@ -1043,6 +1046,10 @@ class StockAdjustmentOut(BaseModel):
     item_id: UUID
     warehouse_id: UUID
     qty_diff: Decimal
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_cost: Decimal
     reason: str
     adjustment_date: date

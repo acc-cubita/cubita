@@ -1036,6 +1036,9 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
     lock_items(db, [data.item_id])
     item = db.query(Item).filter(Item.id == data.item_id).populate_existing().one()
 
+    conversion = units.convert_transaction(db, item, data.qty_diff, data.unit_id,
+        context="inventory", batch_id=data.batch_id, observations=data.observations)
+    data = data.model_copy(update={"qty_diff":conversion.target_qty})
     if data.qty_diff < 0:
         available = get_stock_qty(db, data.item_id, data.warehouse_id)
         if available < abs(data.qty_diff):
@@ -1080,6 +1083,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         item_id=data.item_id,
         warehouse_id=data.warehouse_id,
         qty_diff=data.qty_diff,
+        **units.snapshot_fields(conversion),
         unit_cost=unit_cost,
         reason=data.reason,
         adjustment_date=data.adjustment_date,
@@ -1095,6 +1099,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         item_id=data.item_id,
         warehouse_id=data.warehouse_id,
         qty=data.qty_diff,
+        **units.snapshot_fields(conversion),
         unit_cost=unit_cost,
         entry_date=data.adjustment_date,
         source_type="adjustment",

@@ -24,6 +24,51 @@ def _install(db, side):
     return tenant.id
 
 
+def test_commercial_unit_posts_each_installation_own_base_and_returns_frozen_ratio(db):
+    from app.models.item_units import ItemUnitConversion
+    from app.schemas.item_units import ConversionRuleIn
+    from app.schemas.enterprise_market_bridge import MarketFinancialLine
+    from app.services import units
+    from tests.test_item_unit_registry import configured
+    item_ref, order_id = uuid4(), uuid4()
+    installs = {side:_install(db, side) for side in ('seller', 'buyer')}
+    item_ids = {}
+    for side, tenant_id in installs.items():
+        with tenant_scope(db, tenant_id):
+            actor = market._tenant_actor(db, tenant_id)
+            item, base, carton = configured(db)
+            item_ids[side] = item.id
+            rule = db.query(ItemUnitConversion).filter_by(item_id=item.id).one()
+            units.configure_rule(db, item, ConversionRuleIn(from_unit_id=carton.id, to_unit_id=base.id,
+                factor='24' if side == 'seller' else '30'), rule_id=rule.id)
+            if side == 'seller':
+                warehouse = db.query(Warehouse).filter_by(code='MAIN').one()
+                inventory.post_purchase_invoice(db, PurchaseInvoiceIn(invoice_date=date.today(), warehouse_id=warehouse.id,
+                    lines=[PurchaseInvoiceLineIn(item_id=item.id,qty='100',unit_cost='100')]),actor)
+            db.add(EnterpriseMarketItemMap(tenant_id=tenant_id,market_item_ref=item_ref,local_item_id=item.id,
+                approved_by_id=actor.id,approved_at=datetime.now(timezone.utc)))
+            db.flush()
+            event = MarketFinancialEvent(event_id=uuid4(),operation_ref=order_id,order_id=order_id,kind='order',
+                side=side,counterparty_ref=uuid4(),counterparty_name='طرف آزمون واحد',order_date=date.today(),
+                order_number=1,cash_amount='0',lines=[MarketFinancialLine(market_item_ref=item_ref,name='کالا',
+                    unit='کارتن',qty='2',unit_price='2400',discount='0',consumer_price='0')])
+            receipt = posting.consume(db,tenant_id,event)
+            inbox = db.query(EnterpriseMarketLocalPosting).filter_by(event_id=event.event_id).one()
+            assert receipt.outcome == 'posted', inbox.error_detail
+            assert posting.consume(db,tenant_id,event) == receipt
+            assert inventory.get_total_stock_qty(db,item.id) == (52 if side == 'seller' else 60)
+            units.configure_rule(db,item,ConversionRuleIn(from_unit_id=carton.id,to_unit_id=base.id,factor='100'),rule_id=rule.id)
+            carton.name='کارتن تازه';db.flush()
+            returned=MarketFinancialEvent(event_id=uuid4(),operation_ref=uuid4(),order_id=order_id,kind='return',
+                return_id=uuid4(),return_number=1,return_total='2400',side=side,counterparty_ref=event.counterparty_ref,
+                counterparty_name=event.counterparty_name,order_date=date.today(),order_number=1,cash_amount='0',
+                lines=[MarketFinancialLine(market_item_ref=item_ref,unit='کارتن',qty='1',unit_price='0',discount='0',consumer_price='0')])
+            receipt=posting.consume(db,tenant_id,returned)
+            inbox=db.query(EnterpriseMarketLocalPosting).filter_by(event_id=returned.event_id).one()
+            assert receipt.outcome == 'posted',inbox.error_detail
+            assert inventory.get_total_stock_qty(db,item.id) == (76 if side == 'seller' else 30)
+
+
 @pytest.mark.parametrize("linked_sides", [("seller", "buyer"), ("seller",), ("buyer",)])
 def test_real_order_cash_return_and_lost_receipts(db, user, as_distributor, retailer_tenant, linked_sides):
     seller_id = _primary_id(db)

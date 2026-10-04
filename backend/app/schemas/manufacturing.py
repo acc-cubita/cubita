@@ -24,6 +24,8 @@ class BomLineIn(BaseModel):
 
 
 class BomIn(BaseModel):
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
     finished_item_id: UUID
     name: str = ""
     yield_qty: Decimal = Field(default=Decimal(1), max_digits=24, decimal_places=8)
@@ -46,6 +48,8 @@ class BomIn(BaseModel):
 
 
 class BomUpdateIn(BaseModel):
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
     name: str | None = None
     yield_qty: Decimal | None = Field(default=None, max_digits=24, decimal_places=8)
     is_active: bool | None = None
@@ -74,6 +78,10 @@ class BomLineOut(BaseModel):
 
 
 class BomOut(BaseModel):
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     id: UUID
     finished_item_id: UUID
     name: str
@@ -87,6 +95,8 @@ class BomOut(BaseModel):
 
 # ── سفارشِ تولید (برنامه) ────────────────────────────────
 class ProductionPlanIn(BaseModel):
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
     bom_id: UUID
     warehouse_id: UUID
     planned_date: date
@@ -113,6 +123,11 @@ class ProductionPlanStatusIn(BaseModel):
 
 
 class ProductionPlanOut(BaseModel):
+    recipe_snapshot: dict | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     id: UUID
     number: int
     bom_id: UUID
@@ -132,6 +147,8 @@ class ProductionPlanOut(BaseModel):
 
 # ── تحویلِ مواد به تولید / رسیدِ محصول از تولید ──────────
 class ProductionMaterialIssueIn(BaseModel):
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
     """تحویلِ موادِ اولیه‌ی یک سفارش (برنامه) به خطِ تولید.
 
     مقدار پیش‌فرض باقی‌ماندهٔ برنامه است؛ `qty` فقط برای تحویلِ جزئی داده می‌شود.
@@ -268,6 +285,10 @@ class ProductionOrderLineOut(BaseModel):
 
 
 class ProductionOrderOut(BaseModel):
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     id: UUID
     number: int | None
     bom_id: UUID
