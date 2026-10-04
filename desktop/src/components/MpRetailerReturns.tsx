@@ -8,11 +8,11 @@ import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { NumberInput } from './NumberInput'
 import { Pager, usePagination } from './Pager'
-import { formatJalali } from '../lib/jalali'
+import { formatJalali, toFaDigits } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
-const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
+const faNum = (v: string | number) => toFaDigits(String(v))
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'خطای ناشناخته')
 
 const RET_BADGE: Record<MpReturnStatus, { label: string; tone: string }> = {
@@ -57,7 +57,7 @@ export function MpRetailerReturns({ token }: { token: string }) {
     if (!selected) { setMsg('یک سفارشِ تأییدشده را انتخاب کنید.'); return }
     const lines = selected.lines
       .filter((ln) => ln.id && Number(qtys[ln.id]) > 0)
-      .map((ln) => ({ order_line_id: ln.id as string, qty: Number(qtys[ln.id as string]) }))
+      .map((ln) => ({ order_line_id: ln.id as string, qty: qtys[ln.id as string] }))
     if (lines.length === 0) { setMsg('برای حداقل یک قلم مقدارِ مرجوعی وارد کنید.'); return }
     setBusy(true)
     try {

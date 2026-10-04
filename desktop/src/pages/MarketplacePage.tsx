@@ -17,9 +17,11 @@ import { useTrades, labelOfTrade } from '../lib/useTrades'
 import { MarketplaceChatDrawer } from '../components/MarketplaceChatDrawer'
 import { MpRetailerReturns } from '../components/MpRetailerReturns'
 import { EnterpriseMarketStatus } from '../components/EnterpriseMarketStatus'
+import { toFaDigits } from '../lib/jalali'
+import { stepQuantity } from '../lib/quantityDisplay'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
-const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
+const faNum = (v: string | number) => toFaDigits(String(v))
 
 /** خلاصه‌ی محدودیت‌های سفارشِ یک لیستینگ برای نمایش به فروشگاه (خالی = بی‌حد). */
 function orderLimitHint(l: CatalogListing): string {
@@ -260,7 +262,7 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
 
   function addToCart(l: CatalogListing) {
     setMsg(null)
-    setCart((c) => ({ ...c, [l.id]: { listing: l, qty: String(Number(c[l.id]?.qty || 0) + 1) } }))
+    setCart((c) => ({ ...c, [l.id]: { listing: l, qty: stepQuantity(c[l.id]?.qty || '0',1) } }))
   }
   function setQty(id: string, qty: string) { setCart((c) => ({ ...c, [id]: { ...c[id], qty } })) }
   function removeLine(id: string) { setCart((c) => { const n = { ...c }; delete n[id]; return n }) }
@@ -276,7 +278,7 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
     for (const ln of valid) {
       const did = ln.listing.distributor_tenant_id
       const g = byDist.get(did) ?? { distributor_tenant_id: did, lines: [] }
-      g.lines.push({ listing_id: ln.listing.id, qty: Number(ln.qty) })
+      g.lines.push({ listing_id: ln.listing.id, qty: ln.qty })
       byDist.set(did, g)
     }
     setPlacing(true); setError(null); setMsg(null)
@@ -392,8 +394,8 @@ function Catalog({ token, trade }: { token: string; trade: string | null }) {
                   <div className="product-card-foot">
                     {qty > 0 ? (
                       <div className="product-qty">
-                        <button type="button" aria-label="کم" onClick={() => (qty <= 1 ? removeLine(l.id) : setQty(l.id, String(qty - 1)))}><Minus size={15} /></button>
-                        <span>{faNum(qty)}</span>
+                        <button type="button" aria-label="کم" onClick={() => (qty <= 1 ? removeLine(l.id) : setQty(l.id, stepQuantity(line?.qty || '0',-1)))}><Minus size={15} /></button>
+                        <span>{faNum(line?.qty || '0')}</span>
                         <button type="button" aria-label="زیاد" onClick={() => addToCart(l)}><Plus size={15} /></button>
                       </div>
                     ) : (

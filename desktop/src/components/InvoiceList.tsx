@@ -476,12 +476,12 @@ export function InvoiceDetail({
               const lineDiscount = Number(line.discount)
               const lineNet = qty * price - lineDiscount
               const unitCost = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_cost) : 0
-              const lineCost = qty * unitCost
+              const lineCost = Number(line.base_qty ?? line.qty) * unitCost
               const lineProfit = lineNet - lineCost
               const purchaseLine = line as PurchaseInvoiceRecord['lines'][number]
               return (
                 <tr key={line.id}>
-                  <td className="entity-name" data-label="کالا">{itemName(line.item_id)}</td>
+                  <td className="entity-name" data-label="کالا">{line.item_name_snapshot || itemName(line.item_id)}</td>
                   {!isSales && (
                     <td data-label="معین هزینه">
                       {/* Snapshotِ لحظه‌ی ثبت؛ برای کالا خالی است چون بهایش به موجودی نشسته. */}
@@ -490,8 +490,12 @@ export function InvoiceDetail({
                         : '—'}
                     </td>
                   )}
-                  <td data-label="تعداد">{qty.toLocaleString('fa-IR')}</td>
-                  <td data-label={isSales ? 'قیمت واحد' : 'بهای واحد'}>{fa(price)}</td>
+                  <td data-label="تعداد">{toFaDigits(line.qty)} {line.unit_conversion_snapshot?.source_unit_name || line.unit_snapshot}</td>
+                  <td data-label={isSales ? 'قیمت واحد' : 'بهای واحد'}>{fa(price)}
+                    {!isSales && line.unit_conversion_snapshot?.market_suggested_price && <p className="hint">
+                      قیمت پیشنهادی بازار: {toFaDigits(line.unit_conversion_snapshot.market_suggested_price.amount)} ریال / {line.unit_conversion_snapshot.market_suggested_price.unit_name}
+                    </p>}
+                  </td>
                   <td data-label="تخفیف">{lineDiscount ? fa(lineDiscount) : '—'}</td>
                   {isSales && <td data-label="اضافات/عوارض">{fa(Number(line.addition) + Number(line.duty_amount))}</td>}
                   <td data-label="خالص">{fa(lineNet)}</td>

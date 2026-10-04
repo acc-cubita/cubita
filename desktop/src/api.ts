@@ -6096,6 +6096,10 @@ export interface ListingComponent {
   item_id: string
   item_name: string
   qty: string
+  unit_id?: string | null
+  unit_name?: string
+  base_qty?: string | null
+  observations?: UnitObservation[]
 }
 
 export interface Listing {
@@ -6133,11 +6137,13 @@ export interface ListingIn {
   category?: string
   is_published?: boolean
   extra_trades?: string[]
-  min_order_qty?: number
-  max_order_qty?: number
+  min_order_qty?: number | string
+  max_order_qty?: number | string
   daily_order_limit?: number
   item_id?: string | null
-  components?: { item_id: string; qty: number }[]
+  unit_id?: string
+  observations?: UnitObservation[]
+  components?: { item_id: string; qty: number | string; unit_id?: string; observations?: UnitObservation[] }[]
 }
 
 // سمتِ پخش‌کننده
@@ -6312,7 +6318,7 @@ export interface MpReturn {
 }
 export interface MpReturnRequestIn {
   order_id: string
-  lines: { order_line_id: string; qty: number }[]
+  lines: { order_line_id: string; qty: number | string }[]
   reason?: string
 }
 // سمتِ فروشگاه
@@ -6447,7 +6453,7 @@ export interface MpOrder {
 
 export interface MpOrderPlaceIn {
   distributor_tenant_id: string
-  lines: { listing_id: string; qty: number }[]
+  lines: { listing_id: string; qty: number | string }[]
   note?: string
 }
 
@@ -10811,6 +10817,7 @@ export interface ItemConversionRule {
   is_active: boolean
 }
 export interface QuantityConversionSnapshot {
+  market_suggested_price?: { amount:string; unit_id:string; unit_name:string }
   source_qty: string
   source_unit_id: string
   target_qty: string

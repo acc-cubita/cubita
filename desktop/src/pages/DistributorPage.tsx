@@ -38,6 +38,7 @@ import { useGuidedForms } from '../lib/experienceMode'
 import { SearchSelect } from '../components/SearchSelect'
 import { EnterpriseMarketCatalogCard } from '../components/EnterpriseMarketCatalogCard'
 import { EnterpriseMarketStatus } from '../components/EnterpriseMarketStatus'
+import { TransactionUnitPicker } from '../components/TransactionUnitPicker'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
   pending: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
@@ -194,11 +195,10 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
         {form.kind === 'single' ? (
           <div className="field-row">
             <label>کالا (از انبارِ خودتان)
-              <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id })} />
+              <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id,unitId:undefined,observations:[],baseQtyPreview:undefined })} />
             </label>
-            <label>واحد
-              <input type="text" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-            </label>
+            <TransactionUnitPicker token={token} itemId={form.itemId} qty="1" unitId={form.unitId}
+              observations={form.observations} context="sale" onChange={patch=>setForm(previous=>({...previous,...patch,unit:patch.unitName || previous.unit}))} />
           </div>
         ) : (
           <div className="table-scroll">
@@ -207,7 +207,9 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
               <tbody>
                 {form.components.map((r, i) => (
                   <tr key={i}>
-                    <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id })} /></td>
+                    <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id,unitId:undefined,observations:[],baseQtyPreview:undefined })} />
+                      <TransactionUnitPicker token={token} itemId={r.itemId} qty={r.qty} unitId={r.unitId}
+                        observations={r.observations} context="sale" onChange={patch=>draft.setPackRow(i,patch)} /></td>
                     <td data-label="تعداد"><NumberInput allowDecimal value={r.qty} onChange={(v) => draft.setPackRow(i, { qty: v })} /></td>
                     <td className="card-actions"><button type="button" className="icon-btn-danger" onClick={() => draft.removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف"><Trash2 size={14} /></button></td>
                   </tr>
