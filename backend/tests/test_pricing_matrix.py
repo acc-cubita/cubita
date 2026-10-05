@@ -56,6 +56,19 @@ def announcement(db, user, rows, *, on=TODAY, name="اعلامیه"):
     return price_list
 
 
+def test_default_price_context_is_the_same_base_unit_used_by_posting(db, user):
+    from tests.test_item_unit_registry import configured
+    item, piece, carton = configured(db)
+    announcement(db, user, [
+        {"item_id": item.id, "price": Decimal(100)},
+        {"item_id": item.id, "unit_id": piece.id, "price": Decimal(120)},
+        {"item_id": item.id, "unit_id": carton.id, "price": Decimal(2400)},
+    ])
+    assert pricing.resolve_detail(db, item.id, on=TODAY).unit_price == 120
+    assert pricing.resolve_detail(db, item.id, on=TODAY, unit_id=piece.id).unit_price == 120
+    assert pricing.resolve_detail(db, item.id, on=TODAY, unit_id=carton.id).unit_price == 2400
+
+
 def sell(db, user, item, *, unit_price, discount=0, sale_type_id=None, qty=1):
     return post_sales_invoice(
         db,

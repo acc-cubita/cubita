@@ -1627,7 +1627,7 @@ export interface ItemIn {
   expense_account_id?: string | null
   primary_unit_id?: string | null
   secondary_unit_id?: string | null
-  conversion_factor?: number
+  conversion_factor?: string | number
   conversion_mode?: string
   unit_weight?: number
   unit_volume?: number
@@ -1825,7 +1825,7 @@ export async function downloadStorefrontBundle(token: string): Promise<{ blob: B
   return { blob, filename: m && m[1] ? m[1] : 'cubita-storefront.zip' }
 }
 
-export interface StockAdjustmentRecord {
+export interface StockAdjustmentRecord extends FrozenQuantityRecord {
   id: string
   item_id: string
   warehouse_id: string
@@ -1847,13 +1847,17 @@ export const voidStockAdjustment = (token: string, id: string, reason: string) =
 
 export const createStockAdjustment = (
   token: string,
-  data: { item_id: string; warehouse_id: string; qty_diff: number; reason: string; adjustment_date: string },
+  data: { item_id: string; warehouse_id: string; qty_diff: string | number; unit_id?: string; observations?: UnitObservation[]; reason: string; adjustment_date: string },
 ) => authedSend<StockAdjustmentRecord>(token, 'POST', '/api/stock-adjustments', data)
 
 export interface SalesQuotationLine {
   id: string
   item_id: string
   qty: string
+  entered_unit_id?: string | null
+  base_qty?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
   unit_price: string
   description: string
 }
@@ -1883,7 +1887,7 @@ export interface SalesQuotationInput {
   contact_id?: string | null
   customer_name?: string | null
   description: string
-  lines: { item_id: string; qty: number; unit_price: number; description: string }[]
+  lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[]; unit_price: number; description: string }[]
 }
 
 export const createSalesQuotation = (token: string, data: SalesQuotationInput) =>
@@ -2046,7 +2050,7 @@ export const fetchWarehouseReceipts = (token: string, invoiceId: string) =>
 export const createWarehouseReceipt = (
   token: string,
   invoiceId: string,
-  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number | string }[] },
 ) => authedSend<WarehouseReceiptRecord>(token, 'POST', `/api/purchase-invoices/${invoiceId}/warehouse-receipts`, data)
 
 export interface PurchasePricePoint {
@@ -2118,7 +2122,9 @@ export interface SalesReturnRecord {
 
 export const fetchSalesReturns = (token: string) => authedGetAll<SalesReturnRecord>(token, '/api/sales-returns')
 
+export interface HistoricalReturnUnit { unit_id: string; unit_name: string; remaining: string; unit_price: string }
 export interface ReturnableLine {
+  return_unit_options?: HistoricalReturnUnit[]
   /** هویتِ ردیفِ مبدأ. یک کالا می‌تواند در یک فاکتور چند ردیف با چند قیمت داشته باشد. */
   sales_invoice_line_id: string | null
   purchase_invoice_line_id: string | null
@@ -2146,7 +2152,7 @@ export const createSalesReturn = (
     return_date: string
     sales_invoice_id: string
     description: string
-    lines: { item_id?: string; sales_invoice_line_id?: string; qty: number; return_reason_id?: string | null }[]
+    lines: { item_id?: string; sales_invoice_line_id?: string; unit_id?: string | null; qty: string | number; return_reason_id?: string | null }[]
   },
   idempotencyKey?: string,
 ) => authedSend<SalesReturnRecord>(token, 'POST', '/api/sales-returns', data, idempotencyKey)
@@ -2195,7 +2201,7 @@ export const createPurchaseReturn = (
     return_date: string
     purchase_invoice_id: string
     description: string
-    lines: { item_id?: string; purchase_invoice_line_id?: string; qty: number }[]
+    lines: { item_id?: string; purchase_invoice_line_id?: string; unit_id?: string | null; qty: string | number }[]
   },
   idempotencyKey?: string,
 ) => authedSend<PurchaseReturnRecord>(token, 'POST', '/api/purchase-returns', data, idempotencyKey)
@@ -2222,7 +2228,7 @@ export const createStockTransfer = (
     from_warehouse_id: string
     to_warehouse_id: string
     description: string
-    lines: { item_id: string; qty: number }[]
+    lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[] }[]
   },
   //: تکرارِ شبکه‌ای نباید دو انتقال بسازد — کلید به همین حواله گره می‌خورد.
   idempotencyKey?: string,
@@ -2762,7 +2768,7 @@ export const createPurchaseInvoiceDirect = (
     invoice_discount?: number
     invoice_addition?: number
     duty_amount?: number
-    lines: { item_id: string; qty: number; unit_cost: number; discount?: number; addition?: number; duty_amount?: number; description?: string }[]
+    lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[]; unit_cost: number; discount?: number; addition?: number; duty_amount?: number; description?: string }[]
   },
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/purchase-invoices', data, idempotencyKey)
@@ -4683,7 +4689,7 @@ export interface SalesDashboard {
 export const fetchSalesDashboard = (token: string, months = 12) =>
   authedGet<SalesDashboard>(token, `/api/reports/dashboard?months=${months}`)
 
-export interface KardexLine {
+export interface KardexLine extends FrozenQuantityRecord {
   entry_date: string
   source_type: string
   source_label: string
@@ -5619,7 +5625,7 @@ export interface BomLineRecord {
   component_item_id: string
   qty: string
 }
-export interface BomRecord {
+export interface BomRecord extends FrozenQuantityRecord {
   id: string
   finished_item_id: string
   name: string
@@ -5633,7 +5639,7 @@ export interface ProductionOrderLineRecord {
   qty: string
   unit_cost: string
 }
-export interface ProductionOrderRecord {
+export interface ProductionOrderRecord extends FrozenQuantityRecord {
   id: string
   number: number | null
   bom_id: string
@@ -5650,7 +5656,7 @@ export interface ProductionOrderRecord {
 
 export type ProductionPlanStatus = 'draft' | 'started' | 'in_progress' | 'stopped' | 'finished' | 'cancelled'
 
-export interface ProductionPlanRecord {
+export interface ProductionPlanRecord extends FrozenQuantityRecord {
   id: string
   number: number
   bom_id: string
@@ -5666,6 +5672,8 @@ export interface ProductionPlanRecord {
 }
 
 export interface ProductionPlanIn {
+  unit_id?: string | null
+  observations?: UnitObservation[]
   bom_id: string
   warehouse_id: string
   planned_date: string
@@ -5682,8 +5690,8 @@ export interface BomInput {
 }
 
 export const fetchBoms = (token: string) => authedGet<BomRecord[]>(token, '/api/boms')
-export const createBom = (token: string, data: BomInput) => authedSend<BomRecord>(token, 'POST', '/api/boms', data)
-export const updateBom = (token: string, id: string, patch: Partial<BomInput> & { is_active?: boolean }) =>
+export const createBom = (token: string, data: UnitAwareBomInput) => authedSend<BomRecord>(token, 'POST', '/api/boms', data)
+export const updateBom = (token: string, id: string, patch: Partial<UnitAwareBomInput> & { is_active?: boolean }) =>
   authedSend<BomRecord>(token, 'PATCH', `/api/boms/${id}`, patch)
 export const deleteBom = (token: string, id: string) => authedDelete(token, `/api/boms/${id}`)
 
@@ -5693,7 +5701,7 @@ export const fetchProductionPlans = (token: string, query?: { status?: string })
   const suffix = qs.toString()
   return authedGetAll<ProductionPlanRecord>(token, `/api/production-plans${suffix ? `?${suffix}` : ''}`)
 }
-export const createProductionPlan = (token: string, data: ProductionPlanIn, idempotencyKey?: string) =>
+export const createProductionPlan = (token: string, data: Omit<ProductionPlanIn, 'qty_planned'> & { qty_planned: number | string }, idempotencyKey?: string) =>
   authedSend<ProductionPlanRecord>(token, 'POST', '/api/production-plans', data, idempotencyKey)
 export const changeProductionPlanStatus = (token: string, planId: string, status: ProductionPlanStatus) =>
   authedSend<ProductionPlanRecord>(token, 'PATCH', `/api/production-plans/${planId}/status`, { status })
@@ -5702,14 +5710,14 @@ export const changeProductionPlanStatus = (token: string, planId: string, status
 export const issueMaterialsToProduction = (
   token: string,
   planId: string,
-  data: { issue_date: string; qty?: number | null },
+  data: { issue_date: string; qty?: number | string | null; unit_id?: string; observations?: UnitObservation[] },
   idempotencyKey?: string,
 ) => authedSend<WarehouseIssueRecord>(token, 'POST', `/api/production-plans/${planId}/issue-materials`, data, idempotencyKey)
 
 export const receiveProductionOutput = (
   token: string,
   planId: string,
-  data: { receipt_date: string; qty: number },
+  data: ProductionOutputInput,
   idempotencyKey?: string,
 ) => authedSend<WarehouseReceiptFull>(token, 'POST', `/api/production-plans/${planId}/receive-output`, data, idempotencyKey)
 
@@ -6088,6 +6096,10 @@ export interface ListingComponent {
   item_id: string
   item_name: string
   qty: string
+  unit_id?: string | null
+  unit_name?: string
+  base_qty?: string | null
+  observations?: UnitObservation[]
 }
 
 export interface Listing {
@@ -6125,11 +6137,13 @@ export interface ListingIn {
   category?: string
   is_published?: boolean
   extra_trades?: string[]
-  min_order_qty?: number
-  max_order_qty?: number
+  min_order_qty?: number | string
+  max_order_qty?: number | string
   daily_order_limit?: number
   item_id?: string | null
-  components?: { item_id: string; qty: number }[]
+  unit_id?: string
+  observations?: UnitObservation[]
+  components?: { item_id: string; qty: number | string; unit_id?: string; observations?: UnitObservation[] }[]
 }
 
 // سمتِ پخش‌کننده
@@ -6304,7 +6318,7 @@ export interface MpReturn {
 }
 export interface MpReturnRequestIn {
   order_id: string
-  lines: { order_line_id: string; qty: number }[]
+  lines: { order_line_id: string; qty: number | string }[]
   reason?: string
 }
 // سمتِ فروشگاه
@@ -6439,7 +6453,7 @@ export interface MpOrder {
 
 export interface MpOrderPlaceIn {
   distributor_tenant_id: string
-  lines: { listing_id: string; qty: number }[]
+  lines: { listing_id: string; qty: number | string }[]
   note?: string
 }
 
@@ -8638,7 +8652,7 @@ export const voidWarehouseReceipt = (token: string, id: string, reason: string) 
 export const createWarehouseReceiptIdempotent = (
   token: string,
   invoiceId: string,
-  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number | string }[] },
   idempotencyKey: string,
 ) => authedSend<WarehouseReceiptRecord>(
   token,
@@ -8670,6 +8684,8 @@ export interface PurchaseInvoiceDuplicateDraft {
   lines: Array<{
     item_id: string
     qty: string | number
+    unit_id?: string | null
+    unit_name?: string
     unit_cost: string | number
     discount: string | number
     addition: string | number
@@ -8747,6 +8763,11 @@ export interface SalesInvoiceRecord {
 }
 
 export interface InvoiceLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  base_qty?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
   addition: string
   duty_amount: string
   item_code_snapshot: string
@@ -8781,7 +8802,9 @@ export interface SalesInvoiceCommercialInput {
   source_warehouse_issue_id?: string | null
   lines: Array<{
     item_id: string
-    qty: number
+    qty: number | string
+    unit_id?: string | null
+    observations?: UnitObservation[]
     unit_price: number
     discount?: number
     addition?: number
@@ -8799,7 +8822,7 @@ export const createSalesInvoiceCommercial = (
 
 export const createImmediateSalesInvoice = (
   token: string,
-  data: Parameters<typeof createSalesInvoiceDirect>[1],
+  data: ImmediateSalesInvoiceInput,
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/sales-invoices/immediate', data, idempotencyKey)
 
@@ -8858,7 +8881,7 @@ export const createWarehouseIssueIdempotent = (
     issue_date: string
     warehouse_id: string
     description?: string
-    lines: { sales_invoice_line_id: string; qty: number }[]
+    lines: { sales_invoice_line_id: string; qty: number | string }[]
   },
   idempotencyKey: string,
 ) => authedSend<WarehouseIssueRecord>(
@@ -8969,7 +8992,7 @@ export interface DirectWarehouseReceiptIn {
   freight_basis?: string
   tax_rate?: number
   description?: string
-  lines: { item_id: string; qty: number; unit_cost: number; description?: string }[]
+  lines: { item_id: string; unit_id?: string | null; observations?: UnitObservation[]; qty: string | number; unit_cost: string | number; description?: string }[]
 }
 
 export const createDirectWarehouseReceipt = (token: string, data: DirectWarehouseReceiptIn, idempotencyKey: string) =>
@@ -8979,6 +9002,7 @@ export const printWarehouseReceipt = (token: string, receiptId: string) =>
   openInvoicePrintView(token, `/api/warehouse-receipts/${receiptId}/print`)
 
 export interface ReceiptReturnableLine {
+  return_unit_options?: HistoricalReturnUnit[]
   warehouse_receipt_line_id: string
   purchase_invoice_line_id: string | null
   receipt_number: number
@@ -9007,7 +9031,8 @@ export interface ReceiptReturnIn {
   description?: string
   lines: {
     warehouse_receipt_line_id: string
-    qty: number
+    qty: string | number
+    unit_id?: string | null
     /** خالی یعنی «همان ارزشِ دفتری» — هیچ اختلافی ساخته نمی‌شود. */
     agreed_unit_value?: number | null
     description?: string
@@ -9177,10 +9202,10 @@ export interface SalesReviewSummary {
   tax: string
   return_amount: string
   net_sales: string
-  sold_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  issued_qty: string | null
   /** فروخته‌شده منهای خارج‌شده. */
-  unissued_qty: string
+  unissued_qty: string | null
   item_count: number
 }
 
@@ -9219,9 +9244,9 @@ export interface SalesByCustomer {
   group_name: string
   credit_limit: string
   invoice_count: number
-  sold_qty: string
-  returned_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string | null
   gross_amount: string
   discount: string
   tax: string
@@ -9237,7 +9262,7 @@ export interface SalesByWarehouse {
   warehouse_name: string
   issue_count: number
   invoice_count: number
-  issued_qty: string
+  issued_qty: string | null
   issued_cost: string
 }
 
@@ -9252,9 +9277,9 @@ export interface SalesReviewDocument {
   sale_type_name: string
   is_voided: boolean
   line_count: number
-  sold_qty: string
-  returned_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string | null
   gross_amount: string
   discount: string
   tax: string
@@ -9434,15 +9459,16 @@ export interface DirectWarehouseIssueIn {
   description?: string
   lines: {
     item_id: string
-    qty: number
+    qty: string | number
     unit_id?: string | null
+    observations?: UnitObservation[]
     account_id?: string | null
     description?: string
     /**
      * نقضِ FEFO (§۱۱) — مقدارها به **واحدِ اصلیِ کالا**.
      * `null`/نیامده = سرور خودش نزدیک‌ترین انقضا را برمی‌دارد.
      */
-    batch_allocations?: { batch_id: string; qty: number }[] | null
+    batch_allocations?: { batch_id: string; qty: string | number }[] | null
   }[]
 }
 
@@ -9612,7 +9638,7 @@ export interface IssueReturnIn {
   lines: {
     sales_return_line_id?: string | null
     warehouse_issue_line_id?: string | null
-    qty: number
+    qty: string | number
     unit_id?: string | null
     /**
      * §۱۴ — حالِ کالای برگشتی. سالم به موجودیِ قابلِ فروش برمی‌گردد؛
@@ -9651,6 +9677,7 @@ export const fetchIssueReturnBasis = (token: string, returnType: IssueReturnType
   authedGet<IssueReturnBasisDoc[]>(token, `/api/warehouse-issue-returns/basis?return_type=${returnType}`)
 
 export interface IssueReturnBasisLine {
+  return_unit_options?: HistoricalReturnUnit[]
   kind: 'sales_return' | 'issue'
   basis_line_id: string
   item_id: string
@@ -10757,7 +10784,7 @@ export interface EnterpriseMarketPostingError {
   attempts: number
   error_code: string
   error_detail: string
-  lines: Array<{ market_item_ref: string; name: string; unit: string }>
+  lines: Array<{ market_item_ref: string; name: string; unit: string; qty?: string; local_item_id?: string | null }>
 }
 export const fetchEnterpriseMarketSyncStatus = (token: string) =>
   authedGet<{ last_sync_at: string | null; offline: boolean; access_denied: boolean }>(token, '/api/local-market/sync-status')
@@ -10767,3 +10794,122 @@ export const retryEnterpriseMarketPosting = (token: string, eventId: string) =>
   authedSend<{ outcome: string }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/retry`, {})
 export const repairEnterpriseMarketPostingMapping = (token: string, eventId: string, marketRef: string, itemId: string) =>
   authedSend<{ mapped: boolean }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/mapping`, { market_item_ref: marketRef, local_item_id: itemId })
+
+
+export interface ItemUnitRecord {
+  unit_id: string
+  unit_name: string
+  is_base: boolean
+  purchase_allowed: boolean
+  sale_allowed: boolean
+  inventory_allowed: boolean
+  production_allowed: boolean
+  decimal_allowed: boolean
+  is_active: boolean
+}
+export interface ItemConversionRule {
+  id: string
+  from_unit_id: string
+  to_unit_id: string
+  mode: 'fixed' | 'variable'
+  factor: string | null
+  version: number
+  is_active: boolean
+}
+export interface QuantityConversionSnapshot {
+  market_suggested_price?: { amount:string; unit_id:string; unit_name:string }
+  source_qty: string
+  source_unit_id: string
+  target_qty: string
+  target_unit_id: string
+  source_unit_name?: string
+  target_unit_name?: string
+  rounding_adjustment?: string
+  numerator: string
+  denominator: string
+  path: Array<{ rule_id: string; version: number; source: string;
+    observation?: { from_qty: string; to_qty: string; from_unit_id: string; to_unit_id: string } }>
+}
+export interface UnitObservation { rule_id: string; from_qty: string; to_qty: string }
+export type ItemConversionInput = Pick<ItemConversionRule, 'from_unit_id' | 'to_unit_id' | 'mode' | 'factor'>
+export const fetchItemUnits = (token: string, itemId: string) =>
+  authedGet<ItemUnitRecord[]>(token, `/api/items/${itemId}/units`)
+export const addItemUnit = (token: string, itemId: string, unitId: string) =>
+  authedSend<ItemUnitRecord>(token, 'POST', `/api/items/${itemId}/units`, { unit_id: unitId })
+export const updateItemUnit = (token: string, itemId: string, unitId: string, data: Partial<ItemUnitRecord>) =>
+  authedSend<ItemUnitRecord>(token, 'PATCH', `/api/items/${itemId}/units/${unitId}`, data)
+export const fetchItemConversionRules = (token: string, itemId: string) =>
+  authedGet<ItemConversionRule[]>(token, `/api/items/${itemId}/unit-conversions`)
+export const saveItemConversionRule = (token: string, itemId: string, data: ItemConversionInput, ruleId?: string) =>
+  authedSend<ItemConversionRule>(token, ruleId ? 'PUT' : 'POST', `/api/items/${itemId}/unit-conversions${ruleId ? `/${ruleId}` : ''}`, data)
+export const deactivateItemConversionRule = (token: string, itemId: string, ruleId: string) =>
+  authedDelete(token, `/api/items/${itemId}/unit-conversions/${ruleId}`)
+export const previewItemQuantity = (token: string, itemId: string, data: {
+  qty: string; unit_id: string; context: 'purchase' | 'sale' | 'inventory' | 'production'
+  batch_id?: string; observations?: Array<{ rule_id: string; from_qty: string; to_qty: string }>
+}) => authedSend<QuantityConversionSnapshot>(token, 'POST', `/api/items/${itemId}/convert-quantity`, data)
+
+/** POS quantities retain entered decimal strings and transaction units. */
+export type ImmediateSalesInvoiceInput = Omit<Parameters<typeof createSalesInvoiceDirect>[1], 'lines'> & { lines: SalesInvoiceCommercialInput['lines'] }
+
+export interface BomLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+export interface ProductionOrderLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+export type UnitAwareBomInput = Omit<BomInput, 'yield_qty' | 'lines'> & {
+  unit_id?: string | null
+  observations?: UnitObservation[]
+  yield_qty?: string | number
+  lines: { component_item_id: string; qty: string | number; unit_id?: string; observations?: UnitObservation[] }[]
+}
+
+export interface ProductionOutputInput {
+  receipt_date: string
+  qty: string | number
+  unit_id?: string
+  observations?: UnitObservation[]
+}
+
+export interface SalesQuantityTotal {
+  unit_key: string
+  unit_name: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string
+  unissued_qty: string | null
+}
+export interface SalesReviewSummary { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesByCustomer { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesByWarehouse { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesReviewDocument { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesReviewLine {
+  entered_qty?: string | null
+  entered_unit_name?: string
+  entered_unit_price?: string | null
+}
+export interface PreinvoiceProgress { unit_name?: string }
+
+export interface FrozenQuantityRecord {
+  entered_qty?: string | null; entered_unit_id?: string | null; base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+
+export interface ProductionMaterialPreview {
+  qty: string; remaining: string; lines: { item_id: string; qty: string; unit: string; reserved_other: string }[]
+}
+export const previewProductionMaterials = (token: string, id: string, data: {
+  issue_date: string; qty?: string | null; unit_id?: string; observations?: UnitObservation[]
+}) => authedSend<ProductionMaterialPreview>(token, 'POST', `/api/production-plans/${id}/material-preview`, data)
+
+export const approveEnterpriseMarketQuantity = (token: string, eventId: string, data: {
+  line_index: number; unit_id: string; observations: UnitObservation[]
+}) => authedSend<{ approved: boolean; conversion: QuantityConversionSnapshot }>(token, 'POST',
+  `/api/local-market/posting-errors/${eventId}/quantity-input`, data)

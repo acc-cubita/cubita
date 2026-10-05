@@ -4,6 +4,7 @@ import type { CreditStatus, IssueInvoiceContext, SalesInvoiceRecord } from '../a
 import { CardPaymentButton } from './CardPaymentDialog'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
+import { TransactionUnitPicker } from './TransactionUnitPicker'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { PriceRuleHint } from './PriceRuleHint'
@@ -253,7 +254,7 @@ export function SalesInvoiceForm({
                 {d.lines.map((line, i) => {
                   const avail = d.availableStock(line.itemId)
                   const service = d.isService(line.itemId)
-                  const over = avail != null && Number(line.qty) > avail
+                  const over = avail != null && line.baseQtyPreview !== undefined && Number(line.baseQtyPreview) > avail
                   const unit = items.find((it) => it.id === line.itemId)?.unit
                   return (
                     <tr key={i}>
@@ -263,8 +264,11 @@ export function SalesInvoiceForm({
                       <td data-label="تعداد">
                         <div className="qty-with-unit">
                           <NumberInput allowDecimal value={line.qty} onChange={(v) => d.updateLine(i, { qty: v })} />
-                          {unit ? <span className="unit-suffix">{unit}</span> : null}
+                          {line.unitName || unit ? <span className="unit-suffix">{line.unitName || unit}</span> : null}
                         </div>
+                        {!d.sourceIssue && <TransactionUnitPicker token={token} itemId={line.itemId} qty={line.qty}
+                          unitId={line.unitId} observations={line.observations} context="sale"
+                          onChange={(patch) => d.changeLineUnit(i, patch)} />}
                       </td>
                       <td data-label="موجودی انبار">
                         {!line.itemId ? (
@@ -289,7 +293,7 @@ export function SalesInvoiceForm({
                             return u ? `قیمت هر ${u}` : 'قیمت واحد'
                           })()}
                         />
-                        <PriceRuleHint rule={d.priceInfo[line.itemId]} entered={line.unitPrice} />
+                        <PriceRuleHint rule={d.priceInfo[line.unitId ? `${line.itemId}:${line.unitId}` : line.itemId]} entered={line.unitPrice} />
                       </td>
                       <td data-label="تخفیف">
                         <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />

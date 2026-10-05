@@ -6,6 +6,8 @@ import { JalaliDatePicker } from '../JalaliDatePicker'
 import { TransferLinesTable } from '../TransferForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { SearchSelect } from '../../components/SearchSelect'
+import { quantityTotals } from '../../lib/quantityDisplay'
+import { toFaDigits } from '../../lib/jalali'
 
 /** ویزاردِ «انتقال بین انبار» — دو مرحله + پیش‌نمایشِ زنده. فهرست را صفحه زیرِ ویزارد می‌گذارد. */
 export function TransferWizard({
@@ -106,7 +108,11 @@ function LivePreview({ d, warehouses }: { d: TransferDraft; warehouses: Warehous
   const from = warehouses.find((w) => w.id === d.fromWarehouseId)
   const to = warehouses.find((w) => w.id === d.toWarehouseId)
   const lineCount = d.lines.filter((l) => l.itemId && Number(l.qty) > 0).length
-  const totalQty = d.lines.reduce((s, l) => (l.itemId ? s + (Number(l.qty) || 0) : s), 0)
+  const totals = quantityTotals(d.lines.filter(line => line.itemId).map(line => {
+    const item = d.itemById.get(line.itemId)
+    return { qty: line.qty, unitKey: line.unitId ?? (item?.unit ? `base-${item.unit}` : `unknown-${line.itemId}`),
+      unitName: line.unitName ?? item?.unit ?? 'واحد نامشخص' }
+  }))
   return (
     <div className="live-preview">
       <p className="live-preview-title">پیش‌نمایشِ حواله</p>
@@ -115,7 +121,9 @@ function LivePreview({ d, warehouses }: { d: TransferDraft; warehouses: Warehous
       <div className="live-preview-row"><span>تاریخ</span><strong>{d.transferDate}</strong></div>
       <div className="live-preview-divider" />
       <div className="live-preview-row"><span>تعداد ردیف</span><strong>{lineCount.toLocaleString('fa-IR')}</strong></div>
-      <div className="live-preview-row live-preview-total"><span>مجموع مقدار</span><strong>{totalQty.toLocaleString('fa-IR')}</strong></div>
+      {totals.map(total => <div key={total.unitKey} className="live-preview-row live-preview-total">
+        <span>مجموع {total.unitName}</span><strong>{toFaDigits(total.qty)}</strong>
+      </div>)}
     </div>
   )
 }

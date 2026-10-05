@@ -12,6 +12,7 @@
 می‌شود: اول مستأجر از `tenants.slug` (سراسری) پیدا می‌شود، بعد کلید سنجیده می‌شود.
 `payment_gateways.merchant_id` هم راز است (الگوی مؤدیان: فقط `has_merchant` برمی‌گردد).
 """
+from decimal import Decimal
 import uuid
 from datetime import datetime
 
@@ -178,7 +179,7 @@ class StorefrontOrderLine(TenantMixin, UUIDPKMixin, Base):
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     #: نامِ کالا در لحظه‌ی سفارش (snapshot) — اگر بعداً نامِ کالا عوض شد، سفارش دست‌نخورده بماند.
     item_name: Mapped[str] = mapped_column(String(300), default="")
-    qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0)
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0)
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
     line_total: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
 

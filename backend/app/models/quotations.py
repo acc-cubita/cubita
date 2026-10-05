@@ -1,3 +1,4 @@
+from decimal import Decimal
 import uuid
 from datetime import date as date_, datetime
 
@@ -5,7 +6,10 @@ from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, Str
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import CommercialQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
 
@@ -53,12 +57,16 @@ class SalesQuotation(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class SalesQuotationLine(TenantMixin, UUIDPKMixin, Base):
+class SalesQuotationLine(CommercialQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "sales_quotation_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_sales_quotation_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_sales_quotation_lines_base_unit_id"),
+    )
 
     quotation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sales_quotations.id"))
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
     description: Mapped[str] = mapped_column(Text, default="")
     item_code_snapshot: Mapped[str] = mapped_column(String(50), default="", server_default="")

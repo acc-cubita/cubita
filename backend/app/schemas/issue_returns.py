@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 from app.models.issue_returns import ISSUE_RETURN_TYPES
 from app.models.returns import RETURN_CONDITIONS
+from app.schemas.returns import HistoricalReturnUnitOut
 
 
 class IssueReturnLineIn(BaseModel):
@@ -14,7 +15,7 @@ class IssueReturnLineIn(BaseModel):
     sales_return_line_id: UUID | None = None
     warehouse_issue_line_id: UUID | None = None
     qty: Decimal
-    #: خالی یعنی واحدِ اصلی؛ تبدیل فقط در `units.to_primary`.
+    #: خالی یعنی واحد پایهٔ سند اصلی؛ نسبت برگشت از snapshot تاریخی است.
     unit_id: UUID | None = None
     #: **حالِ کالای برگشتی (§۱۴).** سالم به موجودیِ قابلِ فروش برمی‌گردد؛
     #: خراب/منقضی/قرنطینه فیزیکی برمی‌گردد ولی قابلِ فروش نمی‌شود. پیش‌فرض
@@ -71,6 +72,10 @@ class IssueReturnLineOut(BaseModel):
     sales_return_line_id: UUID | None = None
     item_id: UUID
     qty: Decimal
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_cost: Decimal
     amount: Decimal = Decimal(0)
     account_id: UUID | None = None
@@ -170,6 +175,7 @@ class IssueReturnBasisLineOut(BaseModel):
     unit_cost: Decimal
     amount: Decimal
     source_warehouse_id: UUID | None = None
+    return_unit_options: list[HistoricalReturnUnitOut] = []
 
 
 class IssueReturnBasisOut(BaseModel):

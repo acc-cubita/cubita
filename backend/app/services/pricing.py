@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import record_change
 from app.models.advanced_inventory import PriceList, PriceListItem
-from app.models.inventory import Contact
+from app.models.inventory import Contact, Item
 from app.models.sales_ops import BULK_PRICE_MODES, DiscountItemGroupMember
 
 
@@ -136,6 +136,9 @@ def _resolve_with_flag(
     currency_code: str = "IRR",
 ) -> tuple[PriceListItem | None, bool]:
     on = on or date_.today()
+    if unit_id is None:
+        # An omitted transaction unit means the item's base, in the form and posting alike.
+        unit_id = db.query(Item.primary_unit_id).filter(Item.id == item_id).scalar()
     contact_group_id = None
     if contact_id is not None:
         contact = db.get(Contact, contact_id)

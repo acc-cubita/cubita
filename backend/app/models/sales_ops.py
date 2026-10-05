@@ -9,6 +9,7 @@
 با `kind` یعنی هر اصلاحی یک‌بار انجام می‌شود. دو منوی عملیات روی همین یک جدول
 می‌نویسند و یک فهرستِ مشترک با فیلتر دارند — همان استثنای دومِ قاعده‌ی نظیر.
 """
+from decimal import Decimal
 import uuid
 from datetime import date as date_
 from datetime import datetime
@@ -223,7 +224,7 @@ class ProductBundleLine(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("product_bundles.id", ondelete="CASCADE"), index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3), default=1)
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=1)
 
     bundle: Mapped["ProductBundle"] = relationship(back_populates="lines")
 

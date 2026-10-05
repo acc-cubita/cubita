@@ -18,7 +18,22 @@ from app.services.printing import (
     format_jalali,
     gregorian_to_jalali,
     render_invoice,
+    render_issue_permit,
 )
+
+
+def test_eight_decimal_quantity_is_printed_without_scientific_notation():
+    assert fa_number(Decimal('0.00000001')) == '۰.۰۰۰۰۰۰۰۱'
+
+
+def test_issue_print_totals_do_not_add_unlike_units():
+    html = render_issue_permit(title='خروج', business_name='آزمون', number=1,
+        doc_date=date(2026, 10, 2), type_label='فروش', warehouse_code='', warehouse_name='',
+        party_label='', party_name='', party_detail='', total_qty=Decimal(999),
+        lines=[{'qty': Decimal('2.5'), 'unit': 'متر'}, {'qty': Decimal(3), 'unit': 'عدد'},
+               {'qty': Decimal('1.5'), 'unit': 'متر'}])
+    assert '۴ متر<br>۳ عدد' in html
+    assert '۹۹۹' not in html
 
 
 # --- تقویم ---------------------------------------------------------------------------

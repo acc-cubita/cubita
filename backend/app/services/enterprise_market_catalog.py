@@ -24,7 +24,7 @@ def selected_snapshots(db: Session, tenant_id: UUID) -> list[MarketListingSnapsh
     """Local-only read. An unmapped component fails the whole publication."""
     mappings = db.query(EnterpriseMarketListingMap).filter(
         EnterpriseMarketListingMap.tenant_id == tenant_id
-    ).order_by(EnterpriseMarketListingMap.market_listing_ref).all()
+    ).order_by(EnterpriseMarketListingMap.market_listing_ref).with_for_update().all()
     if not mappings:
         return []
     listings = db.query(MarketplaceListing).filter(
@@ -34,16 +34,27 @@ def selected_snapshots(db: Session, tenant_id: UUID) -> list[MarketListingSnapsh
     by_id = {row.id: row for row in listings}
     item_maps = db.query(EnterpriseMarketItemMap).filter(EnterpriseMarketItemMap.tenant_id == tenant_id).all()
     refs = {row.local_item_id: row.market_item_ref for row in item_maps}
+    item_units = dict(db.query(Item.id, Item.unit).filter(Item.id.in_(refs)).all())
     quantities = marketplace_svc._orderable_by_listing(db, listings, {tenant_id})
     snapshots: list[MarketListingSnapshot] = []
     for mapping in mappings:
         listing = by_id.get(mapping.local_listing_id)
         if listing is None:
             raise HTTPException(status.HTTP_409_CONFLICT, "نگاشت کاتالوگ به کالای این شرکت اشاره نمی‌کند")
+        contracts = dict(mapping.quantity_contracts or {})
+        for component in listing.components:
+            if component.trade_contract_ref and component.unit_conversion_snapshot:
+                if component.distributor_item_id not in refs:
+                    raise HTTPException(409,"همهٔ اجزای عرضه باید ابتدا نگاشت و تأیید شوند")
+                contracts[str(component.trade_contract_ref)] = {
+                    "item_id":str(component.distributor_item_id),
+                    "market_item_ref":str(refs[component.distributor_item_id]),
+                    "conversion":component.unit_conversion_snapshot}
+        mapping.quantity_contracts = contracts
         try:
             snapshots.append(listing_snapshot(
                 listing, quantities.get(listing.id) or Decimal(0),
-                listing_ref=mapping.market_listing_ref, item_refs=refs,
+                listing_ref=mapping.market_listing_ref, item_refs=refs, item_units=item_units,
             ))
         except KeyError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, "همهٔ اجزای کالای انتخاب‌شده باید ابتدا نگاشت و تأیید شوند") from exc
@@ -161,7 +172,7 @@ def _publish_cloud_shadow(db: Session, link: EnterpriseMarketLink, row: Enterpri
             if item is None:
                 item = Item(
                     tenant_id=link.cloud_tenant_id, sku=f"EM-{component.market_item_ref.hex}",
-                    name=component.name, unit=snapshot.unit, sales_price=snapshot.wholesale_price,
+                    name=component.name, unit=component.unit or snapshot.unit, sales_price=snapshot.wholesale_price,
                     average_cost=0,
                 )
                 db.add(item)
@@ -172,10 +183,12 @@ def _publish_cloud_shadow(db: Session, link: EnterpriseMarketLink, row: Enterpri
                 ))
             else:
                 item.name = component.name
-                item.unit = snapshot.unit
+                item.unit = component.unit or snapshot.unit
                 item.sales_price = snapshot.wholesale_price
             cloud_components.append(MarketplaceListingComponent(
                 distributor_item_id=item.id, item_name=component.name, qty=component.qty,
+                trade_contract_ref=component.trade_contract.ref if component.trade_contract else None,
+                trade_unit_name=component.unit,
             ))
     listing = db.get(MarketplaceListing, row.cloud_listing_id) if row.cloud_listing_id else None
     if listing is None:

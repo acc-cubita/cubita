@@ -14,6 +14,7 @@
 موتورِ **بها** همان میانگینِ موزونِ سراسری است و عوض نشده: بچ *مقدار* را ردیابی
 می‌کند، نه قیمت.
 """
+from decimal import Decimal
 import uuid
 from datetime import date as date_, datetime
 
@@ -184,6 +185,7 @@ class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     __table_args__ = (
         CheckConstraint(f"qc_status IN {QC_STATUSES}", name="ck_stock_batches_qc_status"),
+        UniqueConstraint("tenant_id", "item_id", "id", name="uq_stock_batch_item_identity"),
         CheckConstraint(f"hold_status IN {HOLD_STATUSES}", name="ck_stock_batches_hold_status"),
         #: پرسشِ همیشگیِ FEFO: «بارهای این کالا در این انبار، به ترتیبِ انقضا».
         Index("ix_stock_batches_fefo", "tenant_id", "item_id", "warehouse_id", "expiry_date"),
@@ -193,10 +195,10 @@ class StockBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     batch_number: Mapped[str] = mapped_column(String(80))
     expiry_date: Mapped[date_ | None] = mapped_column(Date, nullable=True, index=True)
-    qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
     #: مقدارِ اولیه‌ی ورودیِ این بار (پیش از کسر کسری/معیوب). با qty برابر است تا وقتی
     #: تعدیلی ثبت شود.
-    received_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    received_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
     #: بهای واحدِ این بار (ریالِ صحیح) — از فاکتورِ خرید snapshot می‌شود؛ برای مبلغِ زیانِ
     #: کسری/معیوب و گزارشِ ارزشِ بار. همان «قیمتِ خرید» است.
     #: چهار رقم اعشار، هم‌راستا با `StockLedger.unit_cost` — همان عدد است و

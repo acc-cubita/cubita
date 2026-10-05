@@ -384,3 +384,92 @@ def test_the_report_is_side_effect_free(client, db):
     db.expire_all()
 
     assert sales_review.summary(db, scope) == first
+
+def test_carton_sales_and_piece_fulfillment_use_same_frozen_base(db, user, client):
+    _mode(client, "staged")
+    from tests.test_item_unit_registry import configured
+    from tests.test_unit_document_snapshots import seed_stock
+    item, piece, carton = configured(db)
+    seed_stock(db, user, item, '100')
+    contact = _customer(client, 'مشتری چندواحدی')
+    from tests.factories import main_warehouse
+    wh = main_warehouse(db)
+    invoice = _sell(client, wh=str(wh.id), contact=contact,
+        lines=[{'item_id': str(item.id), 'qty': '2', 'unit_id': str(carton.id), 'unit_price': '2400'}])
+    line_id = _line_ids(db, invoice['id'])[0]
+    _issue(client, invoice['id'], str(wh.id), line_id, '1')
+    response = client.post('/api/sales-returns', json={'sales_invoice_id': invoice['id'],
+        'return_date': TODAY, 'lines': [{'sales_invoice_line_id': str(line_id), 'qty': '1', 'unit_id': str(carton.id)}]})
+    assert response.status_code == 201, response.text
+    scope = Scope(item_id=item.id)
+    row = sales_review.by_item(db, scope)[0]
+    assert row['sold_qty'] == 48 and row['returned_qty'] == 24 and row['issued_qty'] == 24
+    assert row['unissued_qty'] == 24 and row['unit_name'] == 'عدد'
+    assert row['gross_amount'] == 4800 and row['net_sales'] == 2400 and row['average_unit_price'] == 100
+    details = sales_review.lines(db, scope)[0]
+    assert details['entered_qty'] == 2 and details['entered_unit_name'] == 'کارتن'
+    assert details['entered_unit_price'] == 2400 and details['unit_price'] == 100
+    # Renaming units or changing current factors must not rewrite this report.
+    item.conversion_factor = 30; carton.name = 'نام جدید'; db.flush()
+    assert sales_review.by_item(db, scope)[0] == row
+    assert sales_review.lines(db, scope)[0] == details
+
+
+def test_mixed_unit_summaries_do_not_add_meters_and_pieces(db, user, client):
+    _mode(client, "staged")
+    from tests.test_item_unit_registry import configured
+    piece_item, _, _ = configured(db)
+    meter_item, _, _ = configured(db, variable=True)
+    contact = _customer(client, 'مشتری واحدهای متفاوت')
+    invoice = _sell(client, contact=contact, lines=[
+        {'item_id': str(piece_item.id), 'qty': '2.00000001', 'unit_price': '100'},
+        {'item_id': str(meter_item.id), 'qty': '3.12345678', 'unit_price': '200'}])
+    scope = Scope(contact_id=contact)
+    for row in [sales_review.summary(db, scope), sales_review.documents(db, scope)[0],
+                sales_review.by_customer(db, scope)[0]]:
+        assert row['sold_qty'] is None and row['issued_qty'] is None
+        grouped = {g['unit_name']: g['sold_qty'] for g in row['quantity_totals']}
+        assert grouped == {'عدد': Decimal('2.00000001'), 'متر': Decimal('3.12345678')}
+    response = client.get('/api/reports/sales-review/summary', params={'contact_id': contact})
+    assert response.status_code == 200, response.text
+    assert response.json()['sold_qty'] is None and len(response.json()['quantity_totals']) == 2
+
+
+def test_warehouse_groups_units_and_keeps_distinct_document_counts(db, user, client):
+    _mode(client, 'staged')
+    from tests.test_item_unit_registry import configured
+    from tests.test_unit_document_snapshots import seed_stock
+    from tests.factories import main_warehouse
+    first, _, _ = configured(db)
+    second, _, _ = configured(db, variable=True)
+    for item in (first, second):
+        seed_stock(db, user, item, '100')
+    wh = main_warehouse(db)
+    invoice = _sell(client, wh=str(wh.id), lines=[{'item_id': str(first.id), 'qty': '2', 'unit_price': '100'},
+        {'item_id': str(second.id), 'qty': '3', 'unit_price': '100'}])
+    for line in db.query(SalesInvoiceLine).filter_by(invoice_id=invoice['id']).all():
+        _issue(client, invoice['id'], str(wh.id), line.id, str(line.qty))
+    row = sales_review.by_warehouse(db, Scope())[0]
+    assert row['issued_qty'] is None and row['issue_count'] == 2 and row['invoice_count'] == 1
+    assert {group['unit_name']: group['issued_qty'] for group in row['quantity_totals']} == {'عدد': 2, 'متر': 3}
+    scoped = sales_review.by_warehouse(db, Scope(item_id=first.id))[0]
+    assert scoped['issued_qty'] == 2 and scoped['issue_count'] == 1 and scoped['invoice_count'] == 1
+
+def test_quotation_progress_compares_base_units_after_partial_invoice(db, user, client):
+    _mode(client, 'staged')
+    from tests.test_item_unit_registry import configured
+    from tests.test_unit_document_snapshots import seed_stock
+    from tests.factories import main_warehouse
+    from app.schemas.quotations import SalesQuotationIn, SalesQuotationConvertIn
+    from app.services import quotations
+    item, _, carton = configured(db)
+    seed_stock(db, user, item, '100')
+    wh = main_warehouse(db)
+    quote = quotations.create_quotation(db, SalesQuotationIn(quotation_date=date.today(), warehouse_id=wh.id,
+        lines=[{'item_id': item.id, 'qty': '2', 'unit_id': carton.id, 'unit_price': '2400'}]), user)
+    invoice = quotations.convert_quotation_to_invoice(db, quote.id, SalesQuotationConvertIn(
+        lines=[{'quotation_line_id': quote.lines[0].id, 'qty': '1'}]), user)
+    _issue(client, str(invoice.id), str(wh.id), invoice.lines[0].id, '1')
+    row = sales_review.preinvoices(db, Scope(item_id=item.id))[0]
+    assert row['quoted_qty'] == 48 and row['invoiced_qty'] == 24 and row['issued_qty'] == 24
+    assert row['remaining_invoiceable'] == 24 and row['remaining_issueable'] == 0 and row['unit_name'] == 'عدد'

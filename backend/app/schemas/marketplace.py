@@ -4,8 +4,9 @@ import re
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
+from app.schemas.item_units import ObservedRatioIn
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.marketplace import LISTING_KINDS, SETTLEMENT_MODES
 from app.services.trades import clean_trades, is_valid_trade
@@ -102,7 +103,9 @@ class MarketplaceSettingsOut(BaseModel):
 # ── لیستینگِ کاتالوگ (تکی/پک) ─────────────────────────────────────────
 class ListingComponentIn(BaseModel):
     item_id: UUID  # کالای خودِ پخش‌کننده
-    qty: Decimal = Decimal(1)
+    qty: Decimal = Field(default=Decimal(1),gt=0,max_digits=24,decimal_places=8)
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
 
     @field_validator("qty")
     @classmethod
@@ -116,6 +119,10 @@ class ListingComponentOut(BaseModel):
     item_id: UUID
     item_name: str
     qty: Decimal
+    unit_id: UUID | None = None
+    unit_name: str = ""
+    base_qty: Decimal | None = None
+    observations: list[ObservedRatioIn] = []
 
 
 class ListingIn(BaseModel):
@@ -143,6 +150,8 @@ class ListingIn(BaseModel):
     daily_order_limit: int = 0
     #: برای single: کالای متناظر. برای pack تهی (اجزا در components).
     item_id: UUID | None = None
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = []
     components: list[ListingComponentIn] = []
 
     @field_validator("kind")
@@ -294,7 +303,7 @@ class ConnectionZoneIn(BaseModel):
 # ── مرجوعیِ بازار ───────────────────────────────────────────────────────
 class ReturnRequestLineIn(BaseModel):
     order_line_id: UUID
-    qty: Decimal
+    qty: Decimal = Field(gt=0,max_digits=24,decimal_places=8)
 
     @field_validator("qty")
     @classmethod
@@ -376,6 +385,7 @@ class MessagesPage(BaseModel):
 class CatalogComponentOut(BaseModel):
     item_name: str
     qty: Decimal
+    unit: str = ""
 
 
 class CatalogListingOut(BaseModel):
@@ -413,7 +423,7 @@ class CatalogListingOut(BaseModel):
 # ── سفارش‌ها (M4) ──────────────────────────────────────────────────────
 class OrderLineIn(BaseModel):
     listing_id: UUID
-    qty: Decimal = Decimal(1)
+    qty: Decimal = Field(default=Decimal(1),gt=0,max_digits=24,decimal_places=8)
 
     @field_validator("qty")
     @classmethod

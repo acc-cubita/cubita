@@ -1387,7 +1387,7 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
         db.query(
             Item.id,
             Item.name,
-            func.coalesce(func.sum(SalesInvoiceLine.qty), 0),
+            func.coalesce(func.sum(func.coalesce(SalesInvoiceLine.base_qty, SalesInvoiceLine.qty)), 0),
             func.coalesce(func.sum(line_revenue), 0),
         )
         .join(SalesInvoiceLine, SalesInvoiceLine.item_id == Item.id)
@@ -1401,7 +1401,7 @@ def get_sales_dashboard(db: Session, months: int = 12) -> dict:
     for item_id, qty, revenue in (
         db.query(
             SalesReturnLine.item_id,
-            func.coalesce(func.sum(SalesReturnLine.qty), 0),
+            func.coalesce(func.sum(func.coalesce(SalesReturnLine.base_qty, SalesReturnLine.qty)), 0),
             func.coalesce(func.sum(ret_line_revenue), 0),
         )
         .join(SalesReturn, SalesReturnLine.return_id == SalesReturn.id)

@@ -30,6 +30,8 @@ from app.services.onboarding import get_opening_status
 from app.pagination import Page, PageParams, paginate
 from app.services import items as items_svc
 from app.services import units as units_svc
+from app.schemas.item_units import ItemUnitIn, ItemUnitPatch, ConversionRuleIn, ConvertQuantityIn, ObservedRatioIn
+from app.models.item_units import ItemUnit, ItemUnitConversion
 from app.services import warehouses as warehouses_svc
 from app.services import batches as batches_svc
 from app.services import reservations as reservations_svc
@@ -596,7 +598,7 @@ def _apply_group(db: Session, item: Item) -> None:
     items_svc.sync_item_category(db, item)
 
 
-def _apply_units(db: Session, item: Item, fields: dict) -> None:
+def _apply_units(db: Session, item: Item, fields: dict, *, old_secondary: UUID | None = None, old_primary: UUID | None = None) -> None:
     """واحدها را حل و اعتبارسنجی می‌کند و `Item.unit` را هم‌گام نگه می‌دارد.
 
     اگر `primary_unit_id` نیامده باشد، از نوشتارِ `unit` ساخته/پیدا می‌شود —
@@ -611,6 +613,7 @@ def _apply_units(db: Session, item: Item, fields: dict) -> None:
         units_svc.assert_usable(db, item.secondary_unit_id)
     units_svc.assert_conversion(item)
     units_svc.sync_item_unit(db, item)
+    units_svc.configure_legacy(db, item, old_secondary=old_secondary, old_primary=old_primary)
 
 
 # ─────────────────── گروه‌بندی و مشخصات کالا (§۳۴–§۳۶) ───────────────────
@@ -846,7 +849,7 @@ def delete_unit(
     except IntegrityError:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"واحدِ «{unit.name}» روی کالایی نشسته و حذف نمی‌شود؛ به‌جای حذف، غیرفعالش کنید.",
+            f"واحدِ «{unit.name}» در کالا یا سند تاریخی استفاده شده و حذف نمی‌شود؛ به‌جای حذف، غیرفعالش کنید.",
         )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -948,10 +951,13 @@ def update_item(
     db: Session = Depends(get_db),
     _=Depends(require_permission("inventory", "update")),
 ):
-    item = db.get(Item, item_id)
+    item = db.query(Item).filter(Item.id == item_id).with_for_update().one_or_none()
     if item is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "کالا یافت نشد")
+    old_primary, old_secondary = item.primary_unit_id, item.secondary_unit_id
     fields = data.model_dump(exclude_unset=True)
+    if "primary_unit_id" in fields:
+        units_svc.assert_base_change_allowed(db, item, fields["primary_unit_id"])
     if "barcode" in fields:
         _assert_barcode_free(db, fields["barcode"], exclude_id=item.id)
     if "sku" in fields:
@@ -993,7 +999,7 @@ def update_item(
         items_svc.set_warehouses(db, item, links)
     if attributes is not None:
         items_svc.set_attributes(db, item, attributes)
-    _apply_units(db, item, fields)
+    _apply_units(db, item, fields, old_secondary=old_secondary, old_primary=old_primary)
     _apply_group(db, item)
     db.flush()
     db.refresh(item)
@@ -1394,3 +1400,61 @@ def release_stock_reservation(
     if freed == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ادعای بازی با این شناسه نیست")
     return {"released": str(freed)}
+
+
+def _unit_item(db: Session, item_id: UUID) -> Item:
+    item = db.query(Item).filter(Item.id == item_id).one_or_none()
+    if item is None:
+        raise HTTPException(404, "کالا یافت نشد")
+    return item
+
+
+@router.get("/api/items/{item_id}/units")
+def list_item_units(item_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    item = _unit_item(db, item_id)
+    rows = db.query(ItemUnit).filter_by(item_id=item.id, tenant_id=item.tenant_id).order_by(ItemUnit.created_at).all()
+    return [units_svc.item_unit_row(db, item, row) for row in rows]
+
+
+@router.post("/api/items/{item_id}/units", status_code=201)
+def add_item_unit(item_id: UUID, data: ItemUnitIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "update"))):
+    return units_svc.configure_item_unit(db, _unit_item(db, item_id), data)
+
+
+@router.patch("/api/items/{item_id}/units/{unit_id}")
+def patch_item_unit(item_id: UUID, unit_id: UUID, data: ItemUnitPatch, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "update"))):
+    return units_svc.update_item_unit(db, _unit_item(db, item_id), unit_id, data)
+
+
+@router.get("/api/items/{item_id}/unit-conversions")
+def list_unit_rules(item_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    item = _unit_item(db, item_id)
+    return [units_svc.rule_row(row) for row in db.query(ItemUnitConversion).filter_by(item_id=item.id, tenant_id=item.tenant_id).order_by(ItemUnitConversion.id)]
+
+
+@router.post("/api/items/{item_id}/unit-conversions", status_code=201)
+def add_unit_rule(item_id: UUID, data: ConversionRuleIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "update"))):
+    return units_svc.configure_rule(db, _unit_item(db, item_id), data)
+
+
+@router.put("/api/items/{item_id}/unit-conversions/{rule_id}")
+def replace_unit_rule(item_id: UUID, rule_id: UUID, data: ConversionRuleIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "update"))):
+    return units_svc.configure_rule(db, _unit_item(db, item_id), data, rule_id=rule_id)
+
+
+@router.delete("/api/items/{item_id}/unit-conversions/{rule_id}", status_code=204)
+def deactivate_unit_rule(item_id: UUID, rule_id: UUID, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "update"))):
+    units_svc.deactivate_rule(db, _unit_item(db, item_id), rule_id)
+    return Response(status_code=204)
+
+
+@router.post("/api/items/{item_id}/convert-quantity")
+def preview_unit_quantity(item_id: UUID, data: ConvertQuantityIn, db: Session = Depends(get_db), _=Depends(require_permission("inventory", "view"))):
+    overrides = {row.rule_id: units_svc.ObservedRatio(row.from_qty, row.to_qty) for row in data.observations}
+    return units_svc.convert_item_quantity(db, _unit_item(db, item_id), data.qty, data.unit_id,
+        context=data.context, batch_id=data.batch_id, transaction_overrides=overrides).snapshot()
+
+
+@router.put("/api/items/{item_id}/batches/{batch_id}/unit-conversion")
+def put_batch_unit_ratio(item_id: UUID, batch_id: UUID, data: ObservedRatioIn, db: Session = Depends(get_db), user: User = Depends(require_permission("inventory", "update"))):
+    return units_svc.configure_batch_ratio(db, _unit_item(db, item_id), batch_id, data, user.id)

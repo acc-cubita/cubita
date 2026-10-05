@@ -3,11 +3,14 @@ import { RotateCw } from 'lucide-react'
 import {
   fetchEnterpriseMarketSyncStatus, fetchEnterpriseMarketPostingErrors, fetchItemsLive,
   retryEnterpriseMarketPosting, repairEnterpriseMarketPostingMapping,
+  approveEnterpriseMarketQuantity,
+  fetchItemUnits,
   type EnterpriseMarketPostingError, type ItemRecord,
 } from '../api'
 import { SectionCard } from './SectionCard'
 import { ItemPicker } from './ItemPicker'
-import { formatJalali } from '../lib/jalali'
+import { formatJalali, toFaDigits } from '../lib/jalali'
+import { TransactionUnitPicker, type TransactionUnitPatch } from './TransactionUnitPicker'
 
 export function EnterpriseMarketStatus({ token, side }: { token: string; side: 'buyer' | 'seller' }) {
   const [status, setStatus] = useState<Awaited<ReturnType<typeof fetchEnterpriseMarketSyncStatus>> | null>(null)
@@ -50,7 +53,37 @@ export function EnterpriseMarketStatus({ token, side }: { token: string; side: '
           <button type="button" className="btn-ghost" disabled={busy || !selected[line.market_item_ref]} onClick={() => { void act(() => repairEnterpriseMarketPostingMapping(token, row.event_id, line.market_item_ref, selected[line.market_item_ref])) }}>ذخیرهٔ نگاشت</button>
         </div>)}
       </>}
+      {row.kind === 'order' && row.lines.map((line,index) => line.local_item_id && line.qty &&
+        <PrivateQuantityInput key={index} token={token} eventId={row.event_id} index={index}
+          line={line} side={side} busy={busy || Boolean(status?.access_denied)} act={act} />)}
       <button type="button" className="btn-primary" disabled={busy || status?.access_denied} onClick={() => { void act(() => retryEnterpriseMarketPosting(token, row.event_id)) }}>تلاش دوبارهٔ ثبت مالی</button>
     </div>)}
   </SectionCard>
+}
+
+function PrivateQuantityInput({token,eventId,index,line,side,busy,act}: {
+  token:string; eventId:string; index:number; line:EnterpriseMarketPostingError['lines'][number];
+  side:'buyer'|'seller'; busy:boolean; act:(work:()=>Promise<unknown>)=>Promise<void>
+}) {
+  const [unit,setUnit]=useState<TransactionUnitPatch>({})
+  useEffect(()=>{
+    let cancelled=false
+    setUnit({})
+    if (!line.local_item_id) return
+    fetchItemUnits(token,line.local_item_id).then(rows=>{
+      const base=rows.find(row=>row.is_base && row.is_active && (side==='buyer'?row.purchase_allowed:row.sale_allowed))
+      if (!cancelled && base) setUnit(previous=>previous.unitId?previous:{...previous,unitId:base.unit_id})
+    }).catch(()=>{ /* The picker displays the same request's actionable error. */ })
+    return ()=>{cancelled=true}
+  },[token,line.local_item_id,side])
+  return <details><summary>واحد و نسبت واقعی محلیِ {line.name || 'این ردیف'}</summary>
+    <p>مقدار معامله: {toFaDigits(line.qty || '')} {line.unit}</p>
+    <p className="hint">مقدار معامله در واحد محلی انتخاب‌شده ثبت می‌شود. نسبت واقعی را برای همین رویداد وارد کنید؛ این اندازه‌گیری به ابر ارسال نمی‌شود.</p>
+    <TransactionUnitPicker token={token} itemId={line.local_item_id || ''} qty={line.qty || ''}
+      unitId={unit.unitId} observations={unit.observations} context={side==='buyer'?'purchase':'sale'}
+      onChange={(patch)=>setUnit(previous=>({...previous,...patch}))} />
+    <button type="button" className="btn-ghost" disabled={busy || !unit.unitId || !unit.baseQtyPreview}
+      onClick={()=>{void act(()=>approveEnterpriseMarketQuantity(token,eventId,{
+        line_index:index,unit_id:unit.unitId!,observations:unit.observations || []}))}}>تأیید مقدار و نسبت محلی</button>
+  </details>
 }

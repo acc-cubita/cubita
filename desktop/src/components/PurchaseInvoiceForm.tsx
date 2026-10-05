@@ -3,6 +3,7 @@ import type { ItemCache, WarehouseCache } from '../electron.d'
 import type { PurchaseInvoiceDuplicateDraft } from '../api'
 import { SectionCard } from './SectionCard'
 import { NumberInput } from './NumberInput'
+import { TransactionUnitPicker } from './TransactionUnitPicker'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { ItemPicker } from './ItemPicker'
 import { QuickItemForm } from './QuickItemForm'
@@ -128,14 +129,17 @@ export function PurchaseInvoiceForm({
                     <td data-label="تعداد">
                       <div className="qty-with-unit">
                         <NumberInput allowDecimal value={line.qty} onChange={(v) => d.updateLine(i, { qty: v })} />
-                        {(() => { const u = d.unitOf(line.itemId); return u ? <span className="unit-suffix">{u}</span> : null })()}
+                        {(() => { const u = line.unitName || d.unitOf(line.itemId); return u ? <span className="unit-suffix">{u}</span> : null })()}
                       </div>
+                      <TransactionUnitPicker token={token} itemId={line.itemId} qty={line.qty}
+                        unitId={line.unitId} observations={line.observations} context="purchase"
+                        onChange={(patch) => d.updateLine(i, patch)} />
                     </td>
                     <td data-label="بهای واحد">
                       <NumberInput
                         value={line.unitCost}
                         onChange={(v) => d.updateLine(i, { unitCost: v })}
-                        title={(() => { const u = d.unitOf(line.itemId); return u ? `بهای هر ${u}` : 'بهای واحد' })()}
+                        title={(() => { const u = line.unitName || d.unitOf(line.itemId); return u ? `بهای هر ${u}` : 'بهای واحد' })()}
                       />
                       {line.itemId && d.priceHints[line.itemId]?.latest && (
                         <span className="hint">

@@ -64,11 +64,11 @@ class EnterpriseMarketCatalog(UUIDPKMixin, TimestampMixin, Base):
     #: Schema validated by MarketListingSnapshot at ingress and egress.  Its keys
     #: are deliberately allowlisted rather than derived from local ORM models.
     public_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    available_qty: Mapped[Decimal] = mapped_column(Numeric(18, 3), nullable=False)
+    available_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     sync_generation: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     staged_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    staged_available_qty: Mapped[Decimal | None] = mapped_column(Numeric(18, 3), nullable=True)
+    staged_available_qty: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -170,10 +170,12 @@ class EnterpriseMarketListingMap(UUIDPKMixin, TenantMixin, TimestampMixin, Base)
     __table_args__ = (
         UniqueConstraint("tenant_id", "market_listing_ref", name="uq_em_listing_map_ref"),
         UniqueConstraint("tenant_id", "local_listing_id", name="uq_em_listing_map_local"),
+        Index("ix_em_listing_contracts_gin", "quantity_contracts", postgresql_using="gin"),
     )
 
     market_listing_ref: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     local_listing_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("marketplace_listings.id"), nullable=False)
+    quantity_contracts: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     approved_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -203,6 +205,7 @@ class EnterpriseMarketLocalPosting(UUIDPKMixin, TenantMixin, TimestampMixin, Bas
     side: Mapped[str] = mapped_column(String(8), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    quantity_inputs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     error_code: Mapped[str] = mapped_column(String(60), nullable=False, default="", server_default="")

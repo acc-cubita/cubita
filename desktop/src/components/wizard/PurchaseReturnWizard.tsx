@@ -1,14 +1,16 @@
+import { quantityTotals } from '../../lib/quantityDisplay'
 import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { usePurchaseReturnDraft, type PurchaseReturnDraft } from '../../lib/purchaseReturnDraft'
 import { JalaliDatePicker } from '../JalaliDatePicker'
+import { toFaDigits } from '../../lib/jalali'
 import { formatJalali } from '../../lib/jalali'
 import { ReturnableTable } from '../SalesReturnForm'
 import { PurchaseReturnsList } from '../PurchaseReturnForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { SearchSelect } from '../../components/SearchSelect'
 
-const fa = (n: number) => n.toLocaleString('fa-IR')
+const fa = (n: number | string) => toFaDigits(String(n))
 
 /** ویزاردِ «برگشت از خرید» — قرینه‌ی [SalesReturnWizard] با api و شناسه‌ی خرید. */
 export function PurchaseReturnWizard({ token }: { token: string }) {
@@ -146,7 +148,7 @@ function ReviewStep({ r }: { r: PurchaseReturnDraft }) {
 }
 
 function LivePreview({ r }: { r: PurchaseReturnDraft }) {
-  const totalQty = r.enteredRows.reduce((s, row) => s + row.qty, 0)
+  const totalQty = quantityTotals(r.enteredRows.map((row) => ({ qty: row.qty, unitKey: row.unit_id ?? row.unit, unitName: row.unit }))).map((group) => `${fa(group.qty)} ${group.unitName}`).join(' · ')
   return (
     <div className="live-preview">
       <p className="live-preview-title">پیش‌نمایشِ برگشت</p>
@@ -154,7 +156,7 @@ function LivePreview({ r }: { r: PurchaseReturnDraft }) {
       <div className="live-preview-row"><span>تاریخ برگشت</span><strong>{r.returnDate}</strong></div>
       <div className="live-preview-divider" />
       <div className="live-preview-row"><span>تعداد ردیف</span><strong>{r.enteredRows.length.toLocaleString('fa-IR')}</strong></div>
-      <div className="live-preview-row live-preview-total"><span>مجموع مقدار</span><strong>{fa(totalQty)}</strong></div>
+      <div className="live-preview-row live-preview-total"><span>مجموع مقدار</span><strong>{totalQty || '—'}</strong></div>
     </div>
   )
 }

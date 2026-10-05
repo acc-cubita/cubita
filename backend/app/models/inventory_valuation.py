@@ -8,6 +8,7 @@
 (بهای تمام‌شده، هزینه‌ی مصرف، مغایرتِ انبار…) در برابرِ معینِ موجودیِ انبارِ همان حرکت.
 ابطالِ اجرا سندش را معکوس و اصلاح‌هایش را غیرفعال می‌کند.
 """
+from decimal import Decimal
 import uuid
 from datetime import date as date_
 
@@ -69,7 +70,7 @@ class InventoryValuationAdjustment(TenantMixin, UUIDPKMixin, Base):
     entry_date: Mapped[date_] = mapped_column(Date)
     source_type: Mapped[str] = mapped_column(String(50))
     source_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     previous_cost: Mapped[float] = mapped_column(Numeric(18, 4))
     new_cost: Mapped[float] = mapped_column(Numeric(18, 4))
     #: اثرِ علامت‌دار بر ارزشِ موجودی: ریالِ «مقدار × بهای تازه» منهای ریالِ «مقدار × بهای قبلی».

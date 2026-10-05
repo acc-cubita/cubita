@@ -22,12 +22,18 @@ export interface AllocatableBatch {
 
 export interface Allocation {
   batch_id: string
-  qty: number
+  qty: string | number
 }
 
-const num = (v: string | number | null | undefined): number => {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
+const SCALE = 100000000n
+export function quantityAtoms(value: string | number): bigint {
+  const match = /^(\d+)(?:\.(\d{0,8}))?$/.exec(String(value).trim())
+  if (!match) throw new Error('مقدار نامعتبر است؛ حداکثر هشت رقم اعشار مجاز است.')
+  return BigInt(match[1]) * SCALE + BigInt((match[2] ?? '').padEnd(8, '0'))
+}
+export function atomQuantity(value: bigint): string {
+  const fraction = (value % SCALE).toString().padStart(8, '0').replace(/0+$/, '')
+  return `${value / SCALE}${fraction ? `.${fraction}` : ''}`
 }
 
 /**
@@ -47,52 +53,46 @@ export function fefoOrder(batches: AllocatableBatch[]): AllocatableBatch[] {
 }
 
 /** پیشنهادِ پیش‌فرض: از نزدیک‌ترین انقضا بردار تا مقدار تمام شود. */
-export function fefoPlan(batches: AllocatableBatch[], qty: number): Allocation[] {
-  let remaining = qty
+export function fefoPlan(batches: AllocatableBatch[], qty: string | number): Allocation[] {
+  let remaining = quantityAtoms(qty)
   const plan: Allocation[] = []
   for (const batch of fefoOrder(batches)) {
-    if (remaining <= 0) break
-    const take = Math.min(num(batch.sellable_qty), remaining)
-    if (take <= 0) continue
-    plan.push({ batch_id: batch.id, qty: take })
+    if (remaining <= 0n) break
+    const available = quantityAtoms(batch.sellable_qty || '0')
+    const take = available < remaining ? available : remaining
+    if (take <= 0n) continue
+    plan.push({ batch_id: batch.id, qty: atomQuantity(take) })
     remaining -= take
   }
   return plan
 }
 
-export function allocationTotal(allocations: Allocation[]): number {
-  return allocations.reduce((sum, a) => sum + a.qty, 0)
+export function allocationTotal(allocations: Allocation[]): string {
+  return atomQuantity(allocations.reduce((sum, a) => sum + quantityAtoms(a.qty), 0n))
 }
 
-/**
- * پیامِ خطای تفکیک، یا `null` اگر درست است.
- *
- * عمداً **همان سه سنجه‌ای** را می‌گوید که سرور می‌سنجد، با همان لحن: جمع باید
- * برابرِ مقدارِ ردیف باشد، هیچ باری بیشتر از موجودی‌اش ندهد، و مقدارِ منفی نباشد.
- * اگر این‌جا چیزی را نگوییم که سرور می‌گوید، کاربر خطا را بعد از «ثبت» می‌بیند.
- */
-export function allocationError(
-  allocations: Allocation[],
-  qty: number,
-  batches: AllocatableBatch[],
-): string | null {
+export function allocationError(allocations: Allocation[], qty: string | number,
+  batches: AllocatableBatch[]): string | null {
   const byId = new Map(batches.map((b) => [b.id, b]))
-  for (const a of allocations) {
-    if (a.qty <= 0) return 'مقدارِ هر بار باید بزرگ‌تر از صفر باشد.'
-    const batch = byId.get(a.batch_id)
-    if (!batch) return 'یکی از بارهای انتخاب‌شده دیگر در این انبار نیست.'
-    if (a.qty > num(batch.sellable_qty)) {
-      return `موجودیِ قابلِ فروشِ بارِ «${batch.batch_number}» کافی نیست.`
+  const seen = new Set<string>()
+  try {
+    for (const a of allocations) {
+      if (quantityAtoms(a.qty) <= 0n) return 'مقدارِ هر بار باید بزرگ‌تر از صفر باشد.'
+      if (seen.has(a.batch_id)) return 'هر بار را فقط یک بار انتخاب کنید.'
+      seen.add(a.batch_id)
+      const batch = byId.get(a.batch_id)
+      if (!batch) return 'یکی از بارهای انتخاب‌شده دیگر در این انبار نیست.'
+      if (quantityAtoms(a.qty) > quantityAtoms(batch.sellable_qty))
+        return `موجودیِ قابلِ فروشِ بارِ «${batch.batch_number}» کافی نیست.`
     }
-  }
-  const total = allocationTotal(allocations)
-  if (total !== qty) {
-    return 'جمعِ تفکیکِ بارها باید دقیقاً برابرِ مقدارِ ردیف باشد.'
+    if (quantityAtoms(allocationTotal(allocations)) !== quantityAtoms(qty))
+      return 'جمعِ تفکیکِ بارها باید دقیقاً برابرِ مقدارِ ردیف باشد.'
+  } catch {
+    return 'مقدار نامعتبر است؛ حداکثر هشت رقم اعشار مجاز است.'
   }
   return null
 }
 
-/** جمعِ قابلِ فروشِ همه‌ی بارها — برای پیامِ «اصلاً این‌قدر نداریم». */
-export function totalSellable(batches: AllocatableBatch[]): number {
-  return batches.reduce((sum, b) => sum + num(b.sellable_qty), 0)
+export function totalSellable(batches: AllocatableBatch[]): string {
+  return atomQuantity(batches.reduce((sum, b) => sum + quantityAtoms(b.sellable_qty || '0'), 0n))
 }

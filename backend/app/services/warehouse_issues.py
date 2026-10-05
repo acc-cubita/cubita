@@ -14,6 +14,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from fractions import Fraction
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -101,6 +102,7 @@ class _Row:
     #: «خودت تصمیم بگیر» و سرور FEFO می‌زند. کالای بی‌ردیابی اصلاً واردِ این مسیر
     #: نمی‌شود و تخصیصش خالی می‌ماند — همان رفتارِ دیروز.
     batch_allocations: list[tuple[UUID, Decimal]] | None = None
+    conversion: units.QuantityConversion | None = None
 
 
 # ─────────────────────────── قاعده‌های مشترک ───────────────────────────
@@ -197,7 +199,7 @@ def _secondary(db: Session, item: Item, qty: Decimal) -> tuple[Decimal | None, s
     if factor <= 0:
         return None, ""
     unit = db.get(UnitOfMeasure, item.secondary_unit_id)
-    return (qty / factor).quantize(Decimal("0.001")), unit.name if unit else ""
+    return units.rounded_quantity(Fraction(qty) / Fraction(factor)), unit.name if unit else ""
 
 
 def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User) -> WarehouseIssue:
@@ -254,7 +256,9 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
         #: خریدِ بیستم را بخورد. سندِ هم‌تاریخ یا تازه‌تر همان میانگینِ ذخیره‌شده را.
         unit_cost = valuation.cost_for_posting(db, item, issue.issue_date)
         secondary_qty, secondary_unit = _secondary(db, item, row.qty)
+        conversion = row.conversion or units.convert_transaction(db, item, row.qty)
         line = WarehouseIssueLine(
+            **units.snapshot_fields(conversion),
             seq=seq,
             sales_invoice_line_id=row.sales_invoice_line_id,
             item_id=item.id,
@@ -279,6 +283,7 @@ def _post_issue(db: Session, issue: WarehouseIssue, rows: list[_Row], user: User
         splits = plan or [(None, row.qty)]
         for batch_id, take in splits:
             move = StockLedger(
+                **units.movement_snapshot_fields(conversion, -take),
                 item_id=item.id, warehouse_id=issue.warehouse_id, qty=-take, unit_cost=unit_cost,
                 entry_date=issue.issue_date, source_type="warehouse_issue", source_id=issue.id,
                 batch_id=batch_id,
@@ -351,10 +356,25 @@ def create_warehouse_issue(
     if any(line.item.is_service for line in invoice_lines):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "خدمت، خروج فیزیکی انبار ندارد")
     already = issued_by_line(db, invoice.id)
+    prior = db.query(WarehouseIssueLine).join(WarehouseIssue).filter(
+        WarehouseIssueLine.sales_invoice_line_id.in_(requested),
+        WarehouseIssue.voided_at.is_(None)).all()
+    conversions = {}
     for line in invoice_lines:
-        remaining = Decimal(line.qty) - already.get(line.id, Decimal(0))
-        if requested[line.id] > remaining:
-            raise HTTPException(status.HTTP_409_CONFLICT, "مقدار خروج از ماندهٔ ردیف فاکتور بیشتر است")
+        incoming = next(row for row in data.lines if row.sales_invoice_line_id == line.id)
+        if incoming.observations:
+            raise HTTPException(400, "نسبت خروج از فاکتور اصلی محفوظ است؛ نسبت تازه نفرستید")
+        original = units.document_conversion(db, line, line.item)
+        consumed = sum((Fraction(p.entered_qty)
+            if p.entered_unit_id == original.source_unit_id and p.entered_qty is not None
+            else Fraction(p.qty) / original.ratio
+            for p in prior if p.sales_invoice_line_id == line.id), Fraction(0))
+        try:
+            conversions[line.id] = units.historical_return_conversion(original, incoming.qty,
+                incoming.unit_id or original.source_unit_id,
+                returned_base=already.get(line.id, Decimal(0)), returned_in_source=consumed)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         items_svc.assert_warehouse_allowed(db, line.item, data.warehouse_id)
 
     by_id = {line.id: line for line in invoice_lines}
@@ -362,13 +382,14 @@ def create_warehouse_issue(
     rows = [
         _Row(
             item=by_id[row.sales_invoice_line_id].item,
-            qty=Decimal(row.qty),
+            qty=conversions[row.sales_invoice_line_id].target_qty,
+            conversion=conversions[row.sales_invoice_line_id],
             account_id=cogs,
             description=row.description,
             sales_invoice_line_id=row.sales_invoice_line_id,
             code=by_id[row.sales_invoice_line_id].item_code_snapshot or "",
             name=by_id[row.sales_invoice_line_id].item_name_snapshot or "",
-            unit=by_id[row.sales_invoice_line_id].unit_snapshot or "",
+            unit=conversions[row.sales_invoice_line_id].target_unit_name,
             batch_allocations=[(a.batch_id, Decimal(a.qty)) for a in (row.batch_allocations or [])] or None,
         )
         #: ترتیبِ ردیف‌ها همان ترتیبی است که کاربر فرستاده، نه ترتیبِ تصادفیِ UUID.
@@ -390,7 +411,8 @@ def create_warehouse_issue(
 # ─────────────────────────── خروجِ مستقل ───────────────────────────
 
 
-def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, user: User) -> WarehouseIssue:
+def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, user: User, *,
+                                  frozen_conversions: dict[int, units.QuantityConversion] | None = None) -> WarehouseIssue:
     """خروجی که فاکتور ندارد — فروشی که تحویلش جلوتر از فاکتور است، مصرف، یا سایر."""
     assert_period_open(db, data.issue_date)
     warehouses.assert_usable(db, data.warehouse_id, action="خروج انبار")
@@ -416,14 +438,20 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
     checked: dict[UUID, UUID] = {}
 
     rows: list[_Row] = []
-    for line in data.lines:
+    unit_registry = units.OperationUnitRegistry(db, items_by_id.values(),
+        batch_ids=[allocation.batch_id for line in data.lines for allocation in (line.batch_allocations or [])])
+    for line_index, line in enumerate(data.lines):
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "کالای ردیفِ خروج یافت نشد")
         if item.is_service:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"«{item.name}» خدمت است و خروجِ انبار ندارد")
         items_svc.assert_warehouse_allowed(db, item, data.warehouse_id)
-        qty = units.to_primary(db, item, Decimal(line.qty), line.unit_id)
+        selected_batch = line.batch_allocations[0].batch_id if line.batch_allocations and len(line.batch_allocations) == 1 else None
+        conversion = (frozen_conversions or {}).get(line_index) or units.convert_transaction(db, item, Decimal(line.qty), line.unit_id,
+            context="sale" if sale else "production" if data.issue_type == "production" else "inventory",
+            batch_id=selected_batch, observations=line.observations, registry=unit_registry)
+        qty = conversion.target_qty
         if auto_account:
             account_id = auto_account_id
         else:
@@ -432,7 +460,7 @@ def create_direct_warehouse_issue(db: Session, data: DirectWarehouseIssueIn, use
                 checked[wanted] = _debit_account(db, wanted, inventory_ids).id
             account_id = checked[wanted]
         rows.append(_Row(
-            item=item, qty=qty, account_id=account_id, description=line.description.strip(),
+            item=item, qty=qty, account_id=account_id, description=line.description.strip(), conversion=conversion,
             batch_allocations=[(a.batch_id, Decimal(a.qty)) for a in (line.batch_allocations or [])] or None,
         ))
     if sale:
@@ -504,6 +532,7 @@ def void_warehouse_issue(
     valuation.guard_void(db, ("warehouse_issue",), issue.id)
     for move in moves:
         db.add(StockLedger(
+            **units.negated_snapshot_fields(move),
             item_id=move.item_id, warehouse_id=move.warehouse_id, qty=-Decimal(move.qty),
             unit_cost=move.unit_cost, entry_date=effective, source_type="void", source_id=issue.id,
         ))
@@ -564,7 +593,7 @@ def _net_issue_qty(db: Session, issue: WarehouseIssue) -> dict[UUID, Decimal]:
 
 def _lock_issue_for_invoice(
     db: Session, data: SalesInvoiceIn
-) -> tuple[WarehouseIssue, dict[int, UUID], dict[UUID, Decimal]]:
+) -> tuple[WarehouseIssue, dict[int, UUID], dict[UUID, Decimal], dict[int, units.QuantityConversion]]:
     issue = (
         db.query(WarehouseIssue)
         .options(selectinload(WarehouseIssue.lines))
@@ -599,6 +628,7 @@ def _lock_issue_for_invoice(
         )
     by_id = {line.id: line for line in issue.lines if net[line.id] > 0}
     linked: dict[int, UUID] = {}
+    frozen = {}
     for index, line in enumerate(data.lines):
         if line.source_issue_line_id is None:
             item = db.get(Item, line.item_id)
@@ -614,7 +644,16 @@ def _lock_issue_for_invoice(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "ردیفی از فاکتور به ردیفِ خروجِ دیگری اشاره می‌کند")
         if source.id in linked.values():
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "هر ردیفِ خروج فقط یک بار در فاکتور می‌آید")
-        if line.item_id != source.item_id or Decimal(line.qty) != net[source.id]:
+        if line.observations:
+            raise HTTPException(400, "نسبت فاکتور از خروج اصلی محفوظ است؛ نسبت تازه نفرستید")
+        original = units.document_conversion(db, source, source.item)
+        try:
+            frozen[index] = units.historical_return_conversion(original, line.qty, line.unit_id,
+                returned_base=original.target_qty - net[source.id],
+                returned_in_source=Fraction(original.target_qty - net[source.id]) / original.ratio)
+        except ValueError as exc:
+            raise HTTPException(400, f"مقدار فاکتور باید برابر خالص خروج ({net[source.id]}) باشد؛ {exc}") from exc
+        if line.item_id != source.item_id or frozen[index].target_qty != net[source.id]:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 f"مقدارِ «{source.item_name_snapshot}» در فاکتور باید همان مقدارِ خالصِ خروج "
@@ -623,7 +662,7 @@ def _lock_issue_for_invoice(
         linked[index] = source.id
     if set(by_id) - set(linked.values()):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "همه‌ی ردیف‌های خروج باید در فاکتور بیایند")
-    return issue, linked, net
+    return issue, linked, net, frozen
 
 
 def post_sales_invoice_from_issue(
@@ -636,10 +675,11 @@ def post_sales_invoice_from_issue(
     (درآمد و طلب) طبقِ سیاستِ صدورِ همان کسب‌وکار زده می‌شود؛ COGS را خروج از قبل
     زده و فاکتور هرگز دوباره نمی‌زند.
     """
-    issue, linked, net = _lock_issue_for_invoice(db, data)
+    issue, linked, net, frozen = _lock_issue_for_invoice(db, data)
     payload = data.model_copy(update={"warehouse_id": issue.warehouse_id, "source_warehouse_issue_id": None})
     invoice = post_sales_invoice(
         db, payload, user, enforce_credit=enforce_credit, move_inventory=False, issue_accounting=issue_accounting,
+        frozen_conversions=frozen,
     )
 
     #: `post_sales_invoice` ردیف‌ها را به ترتیبِ ورودی می‌سازد ولی رابطه با UUID
@@ -654,7 +694,7 @@ def post_sales_invoice_from_issue(
         match = next(
             line for line in pool
             if line.item_id == source.item_id
-            and Decimal(line.qty) == net[source_id]
+            and Decimal(line.qty) == Decimal(wanted.qty)
             and Decimal(line.unit_price) == Decimal(wanted.unit_price)
         )
         pool.remove(match)

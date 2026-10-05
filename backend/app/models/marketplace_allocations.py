@@ -22,6 +22,7 @@
 ستون‌کردنِ آن دو یعنی سه عدد که باید همیشه با هم بخوانند و روزی نمی‌خوانند —
 دقیقاً همان چیزی که این مجموعه مهاجرت برای رفعش نوشته شد.
 """
+from decimal import Decimal
 import uuid
 
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Numeric, Text, UniqueConstraint
@@ -50,7 +51,7 @@ class MarketplaceCatalogAllocation(TenantMixin, UUIDPKMixin, TimestampMixin, Bas
     batch_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="RESTRICT"), index=True
     )
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: غیرفعال یعنی «دیگر از این بار عرضه نکن» — بی آنکه تاریخچه پاک شود. §۱۶
     #: فراخوان را هم همین‌طور خاموش می‌کند، بی حذفِ ردیف.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")

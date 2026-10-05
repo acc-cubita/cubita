@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from fractions import Fraction
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -15,6 +16,7 @@ from app.schemas.invoices import SalesInvoiceIn, SalesInvoiceLineIn
 from app.schemas.quotations import SalesQuotationConvertIn, SalesQuotationIn
 from app.services.inventory import post_sales_invoice
 from app.services.numbering import next_document_number
+from app.services import units
 
 QUOTATION_TRANSITIONS = {"draft": {"sent", "accepted", "rejected"}, "sent": {"accepted", "rejected"}}
 
@@ -35,17 +37,21 @@ def _customer(db: Session, data: SalesQuotationIn) -> tuple[Contact | None, dict
 
 def _make_lines(db: Session, data: SalesQuotationIn) -> tuple[list[SalesQuotationLine], Decimal]:
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_([line.item_id for line in data.lines])).all()}
+    registry = units.OperationUnitRegistry(db, items.values())
     lines: list[SalesQuotationLine] = []
     total = Decimal(0)
     for incoming in data.lines:
         item = items.get(incoming.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {incoming.item_id} یافت نشد")
+        conversion = units.convert_transaction(db, item, incoming.qty, incoming.unit_id,
+            context="sale", observations=incoming.observations, registry=registry)
         total += incoming.qty * incoming.unit_price
         lines.append(SalesQuotationLine(
+            **units.snapshot_fields(conversion, commercial=True),
             item_id=incoming.item_id, qty=incoming.qty, unit_price=incoming.unit_price,
             description=incoming.description, item_code_snapshot=item.sku,
-            item_name_snapshot=item.name, unit_snapshot=item.unit,
+            item_name_snapshot=item.name, unit_snapshot=conversion.source_unit_name,
         ))
     return lines, total
 
@@ -55,12 +61,14 @@ def attach_progress(db: Session, quotations: list[SalesQuotation]) -> None:
         return
     ids = [q.id for q in quotations]
     rows = (
-        db.query(SalesInvoiceLine.source_quotation_line_id, func.sum(SalesInvoiceLine.qty))
+        db.query(SalesInvoiceLine)
         .join(SalesInvoice, SalesInvoice.id == SalesInvoiceLine.invoice_id)
         .filter(SalesInvoice.source_quotation_id.in_(ids), SalesInvoice.voided_at.is_(None), SalesInvoiceLine.source_quotation_line_id.is_not(None))
-        .group_by(SalesInvoiceLine.source_quotation_line_id).all()
+        .all()
     )
-    invoiced = {line_id: Decimal(qty) for line_id, qty in rows}
+    invoiced = {}
+    for row in rows:
+        invoiced.setdefault(row.source_quotation_line_id, []).append(row)
     invoice_ids: dict[UUID, list[UUID]] = {}
     for invoice_id, quotation_id in db.query(SalesInvoice.id, SalesInvoice.source_quotation_id).filter(
         SalesInvoice.source_quotation_id.in_(ids), SalesInvoice.voided_at.is_(None)
@@ -70,14 +78,15 @@ def attach_progress(db: Session, quotations: list[SalesQuotation]) -> None:
     for quotation in quotations:
         done = quoted = Decimal(0)
         for line in quotation.lines:
-            line.invoiced_qty = invoiced.get(line.id, Decimal(0))
-            line.remaining_invoiceable_qty = max(Decimal(line.qty) - line.invoiced_qty, Decimal(0))
+            line.remaining_invoiceable_qty = units.remaining_entered_quantity(line, invoiced.get(line.id, []))
+            line.invoiced_qty = Decimal(line.qty) - line.remaining_invoiceable_qty
             # خروج، سند مستقل می‌خواهد؛ آن را با تبدیل تجاری یکی نمی‌کنیم.
             line.issued_qty = Decimal(0)
             line.remaining_issueable_qty = Decimal(line.qty) if not line.item.is_service else Decimal(0)
             quoted += Decimal(line.qty)
             done += line.invoiced_qty
-        quotation.commercial_status = "not_invoiced" if done == 0 else "fully_invoiced" if done >= quoted else "partially_invoiced"
+        quotation.commercial_status = ("not_invoiced" if done == 0 else "fully_invoiced"
+            if all(line.remaining_invoiceable_qty == 0 for line in quotation.lines) else "partially_invoiced")
         quotation.is_expired = bool(quotation.valid_until and quotation.valid_until < today)
         quotation.invoiced_invoice_ids = invoice_ids.get(quotation.id, [])
 
@@ -165,12 +174,14 @@ def duplicate_quotation(db: Session, quotation_id: UUID, user: User) -> SalesQuo
         customer_name2=source.customer_name2, delivery_location=source.delivery_location,
         sale_type_id=source.sale_type_id, currency_code=source.currency_code,
         exchange_rate=Decimal(source.exchange_rate), description=source.description,
-        lines=[{"item_id": l.item_id, "qty": l.qty, "unit_price": l.unit_price, "description": l.description} for l in source.lines],
+        lines=[{"item_id": l.item_id, "qty": l.qty, "unit_id": l.entered_unit_id,
+                "unit_price": l.unit_price, "description": l.description} for l in source.lines],
     ), user)
 
 
 def convert_quotation_to_invoice(db: Session, quotation_id: UUID, data: SalesQuotationConvertIn, user: User) -> SalesInvoice:
-    quotation = db.query(SalesQuotation).options(selectinload(SalesQuotation.lines)).filter(SalesQuotation.id == quotation_id).with_for_update().one_or_none()
+    quotation = db.query(SalesQuotation).options(selectinload(SalesQuotation.lines).selectinload(
+        SalesQuotationLine.item)).filter(SalesQuotation.id == quotation_id).with_for_update().one_or_none()
     if quotation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "پیش‌فاکتور یافت نشد")
     if quotation.terminated_at is not None:
@@ -185,13 +196,29 @@ def convert_quotation_to_invoice(db: Session, quotation_id: UUID, data: SalesQuo
     if not requested:
         requested = {line.id: line.remaining_invoiceable_qty for line in quotation.lines if line.remaining_invoiceable_qty > 0}
     invoice_lines = []
+    frozen = {}
+    prior = db.query(SalesInvoiceLine).join(SalesInvoice).filter(
+        SalesInvoice.source_quotation_id == quotation.id, SalesInvoice.voided_at.is_(None)).all()
     for line_id, qty in requested.items():
         line = by_id.get(line_id)
         if line is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "ردیف انتخاب‌شده متعلق به این پیش‌فاکتور نیست")
         if qty > line.remaining_invoiceable_qty:
             raise HTTPException(status.HTTP_409_CONFLICT, f"مقدار تبدیل «{line.item_name_snapshot or line.item.name}» از مانده بیشتر است")
-        invoice_lines.append(SalesInvoiceLineIn(item_id=line.item_id, qty=qty, unit_price=line.unit_price, description=line.description, source_quotation_line_id=line.id))
+        original = units.document_conversion(db, line, line.item)
+        linked = [row for row in prior if row.source_quotation_line_id == line.id]
+        used_base = sum((row.base_qty if row.base_qty is not None else row.qty for row in linked), Decimal(0))
+        used_source = sum((Fraction(row.entered_qty) if row.entered_unit_id == original.source_unit_id
+            and row.entered_qty is not None else Fraction(row.base_qty if row.base_qty is not None else row.qty)
+            / original.ratio for row in linked), Fraction(0))
+        try:
+            frozen[len(invoice_lines)] = units.historical_return_conversion(original, qty,
+                original.source_unit_id, returned_base=used_base, returned_in_source=used_source)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        invoice_lines.append(SalesInvoiceLineIn(item_id=line.item_id, qty=qty,
+            unit_id=original.source_unit_id, unit_price=line.unit_price,
+            description=line.description, source_quotation_line_id=line.id))
     if not invoice_lines:
         raise HTTPException(status.HTTP_409_CONFLICT, "تمام مقدار این پیش‌فاکتور قبلاً فاکتور شده است")
     warehouse_id = data.warehouse_id or quotation.warehouse_id
@@ -201,7 +228,7 @@ def convert_quotation_to_invoice(db: Session, quotation_id: UUID, data: SalesQuo
         description=quotation.description, sale_type_id=quotation.sale_type_id,
         currency_code=quotation.currency_code, exchange_rate=quotation.exchange_rate,
         source_quotation_id=quotation.id, lines=invoice_lines,
-    ), user, move_inventory=False, issue_accounting=False)
+    ), user, move_inventory=False, issue_accounting=False, frozen_conversions=frozen)
     if quotation.converted_invoice_id is None:
         quotation.converted_invoice_id = invoice.id
     db.flush(); attach_progress(db, [quotation])

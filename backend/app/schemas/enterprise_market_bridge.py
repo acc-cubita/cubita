@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator, model_serializer
 
 from app.schemas.marketplace import (
     CatalogListingOut, CommissionPeriodOut, ConnectionOut, DistributorCardOut,
@@ -37,12 +37,30 @@ class MarketViewSnapshot(BaseModel):
     seller_unread: int
 
 
-class MarketComponentSnapshot(BaseModel):
+class MarketTradeContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    ref: UUID
+
+
+class TradeContractMixin(BaseModel):
+    trade_contract: MarketTradeContract | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_contract(self, handler):
+        result = handler(self)
+        if self.trade_contract is None:
+            result.pop("trade_contract", None)
+        return result
+
+
+class MarketComponentSnapshot(TradeContractMixin):
     model_config = ConfigDict(extra="forbid")
 
     market_item_ref: UUID
     name: str = Field(max_length=300)
-    qty: Decimal = Field(gt=0, max_digits=18, decimal_places=3)
+    unit: str = Field(default="", max_length=20)
+    qty: Decimal = Field(gt=0, max_digits=24, decimal_places=8)
 
 
 class MarketListingSnapshot(BaseModel):
@@ -66,7 +84,7 @@ class MarketListingSnapshot(BaseModel):
     min_order_qty: Decimal = Field(ge=0)
     max_order_qty: Decimal = Field(ge=0)
     daily_order_limit: int = Field(ge=0)
-    available_qty: Decimal = Field(ge=0, max_digits=18, decimal_places=3)
+    available_qty: Decimal = Field(ge=0, max_digits=24, decimal_places=8)
     components: list[MarketComponentSnapshot] = Field(min_length=1, max_length=100)
 
     @field_validator("images")
@@ -118,13 +136,13 @@ class MarketPostingReceipt(BaseModel):
     error_code: str = Field(default="", max_length=60)
 
 
-class MarketFinancialLine(BaseModel):
+class MarketFinancialLine(TradeContractMixin):
     model_config = ConfigDict(extra="forbid")
 
     market_item_ref: UUID
     name: str = Field(default="", max_length=300)
     unit: str = Field(default="", max_length=50)
-    qty: Decimal = Field(gt=0, max_digits=18, decimal_places=3)
+    qty: Decimal = Field(gt=0, max_digits=24, decimal_places=8)
     unit_price: Decimal = Field(ge=0, max_digits=18, decimal_places=0)
     discount: Decimal = Field(ge=0, max_digits=18, decimal_places=0)
     consumer_price: Decimal = Field(ge=0, max_digits=18, decimal_places=0)
@@ -169,7 +187,8 @@ class MarketFinancialEvent(BaseModel):
 
 
 def listing_snapshot(
-    listing: object, available_qty: Decimal, *, listing_ref: UUID, item_refs: dict[UUID, UUID]
+    listing: object, available_qty: Decimal, *, listing_ref: UUID, item_refs: dict[UUID, UUID],
+    item_units: dict[UUID, str] | None = None,
 ) -> MarketListingSnapshot:
     """شناسه‌های بازار مستقل‌اند؛ حتی شناسهٔ کالای محلی به VPS نمی‌رود."""
     return MarketListingSnapshot(
@@ -196,7 +215,9 @@ def listing_snapshot(
             MarketComponentSnapshot(
                 market_item_ref=item_refs[component.distributor_item_id],
                 name=component.item_name,
-                qty=Decimal(component.qty),
+                unit=(getattr(component,"unit_conversion_snapshot",None) or {}).get("source_unit_name") or getattr(component,"trade_unit_name","") or (item_units or {}).get(component.distributor_item_id, ""),
+                qty=Decimal((getattr(component,"unit_conversion_snapshot",None) or {}).get("source_qty", component.qty)),
+                trade_contract=MarketTradeContract(ref=component.trade_contract_ref) if getattr(component,"trade_contract_ref",None) else None,
             )
             for component in listing.components
         ],

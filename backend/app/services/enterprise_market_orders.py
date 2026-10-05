@@ -8,7 +8,6 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models.advanced_inventory import StockBatch
 from app.models.enterprise_market_bridge import EnterpriseMarketCloudItemMap, EnterpriseMarketEvent, EnterpriseMarketLink
 from app.models.inventory import Item
 from app.models.marketplace import MarketplaceConnection, MarketplaceItemLink, MarketplaceListing, MarketplaceOrder, MarketplaceReturn
@@ -18,6 +17,7 @@ from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn, Sales
 from app.schemas.returns import PurchaseReturnIn, PurchaseReturnLineIn, SalesReturnIn, SalesReturnLineIn
 from app.schemas.treasury import TreasuryTransactionIn
 from app.services import marketplace as market, treasury
+from app.services import market_units
 from app.services.inventory import post_purchase_invoice, post_sales_invoice
 from app.services.sales_invoices import finalize_immediate_sale
 from app.services.returns import post_purchase_return, post_sales_return
@@ -46,6 +46,7 @@ def _public_lines(db: Session, fulfillment: list[dict], *, seller_linked: bool) 
         name=row["name"], unit=row["unit"],
         qty=row["units"], unit_price=row["unit_price"], discount=row["discount"],
         consumer_price=row["consumer_price"],
+        trade_contract=row.get("trade_contract"),
     ) for row in fulfillment]
 
 
@@ -85,12 +86,15 @@ def _post_cloud_native_side(
                     lines=[SalesInvoiceLineIn(
                         item_id=row["distributor_item_id"], qty=row["units"],
                         unit_price=row["unit_price"], discount=row["discount"],
+                        unit_id=row["conversion"].source_unit_id if row.get("conversion") else None,
                     ) for row in fulfillment],
                 ), distributor_user, move_inventory=False, issue_accounting=False,
+                frozen_conversions={index:row["conversion"] for index,row in enumerate(fulfillment) if row.get("conversion")},
             )
-            finalize_immediate_sale(db, invoice, warehouse.id, distributor_user)
-            order.distributor_sales_invoice_id = invoice.id
             market._release_order_stock(db, order, consumed=True)
+            finalize_immediate_sale(db, invoice, warehouse.id, distributor_user)
+            market_units.freeze_trade_refs(db, invoice, [row.get("trade_contract") for row in fulfillment])
+            order.distributor_sales_invoice_id = invoice.id
     else:
         with tenant_scope(db, order.distributor_tenant_id):
             barcodes = {
@@ -103,17 +107,15 @@ def _post_cloud_native_side(
             supplier = market._find_or_create_supplier(db, conn, order.distributor_tenant_id)
             warehouse = market._default_warehouse(db, order.retailer_tenant_id)
             purchase_lines = []
-            consumer_by_item: dict[UUID, Decimal] = {}
             for row in fulfillment:
                 item = market._resolve_retailer_item(
                     db, order.retailer_tenant_id, order.distributor_tenant_id,
                     row["distributor_item_id"], row["name"], row["unit"], row["unit_price"],
                     barcode=barcodes.get(row["distributor_item_id"]),
                 )
-                if row["consumer_price"] > 0:
-                    consumer_by_item[item.id] = row["consumer_price"]
                 purchase_lines.append(PurchaseInvoiceLineIn(
                     item_id=item.id, qty=row["units"], unit_cost=row["unit_price"], discount=row["discount"],
+                    unit_id=market_units.commercial_unit(db, item, row["unit"], context="purchase"),
                 ))
             invoice = post_purchase_invoice(
                 db, PurchaseInvoiceIn(
@@ -122,11 +124,8 @@ def _post_cloud_native_side(
                 ), actor,
             )
             order.retailer_purchase_invoice_id = invoice.id
-            if consumer_by_item:
-                for batch in db.query(StockBatch).filter(StockBatch.source_id == invoice.id).all():
-                    price = consumer_by_item.get(batch.item_id)
-                    if price is not None:
-                        batch.consumer_price = price
+            market_units.freeze_trade_refs(db, invoice, [row.get("trade_contract") for row in fulfillment])
+            market_units.apply_purchase_suggestions(db, invoice, [row["consumer_price"] for row in fulfillment])
     _post_cash_side(db, order, conn, side, cash_amount)
 
 
@@ -177,6 +176,7 @@ def _post_cloud_native_return_side(
     dist_items: dict[UUID, Decimal], side: str, distributor_user: User,
 ) -> None:
     tag = f"مرجوعی بازار #{ret.return_number}"
+    components = market.return_components(db,order,ret)
     if side == "seller":
         if order.distributor_sales_invoice_id is None:
             raise HTTPException(status.HTTP_409_CONFLICT, "فاکتور فروش سفارش یافت نشد")
@@ -185,7 +185,9 @@ def _post_cloud_native_return_side(
                 db, SalesReturnIn(
                     return_date=date.today(), sales_invoice_id=order.distributor_sales_invoice_id,
                     description=tag,
-                    lines=[SalesReturnLineIn(item_id=item_id, qty=qty) for item_id, qty in dist_items.items()],
+                    lines=[SalesReturnLineIn(**line) for line in market_units.historical_return_lines(
+                        db, order.distributor_sales_invoice_id, "seller",
+                        [(row["item_id"],row["qty"],row["unit"],(row["trade_contract"] or {}).get("ref")) for row in components])],
                 ), distributor_user, physical=True,
             )
         ret.distributor_sales_return_id = document.id
@@ -205,7 +207,10 @@ def _post_cloud_native_return_side(
                 db, PurchaseReturnIn(
                     return_date=date.today(), purchase_invoice_id=order.retailer_purchase_invoice_id,
                     description=tag,
-                    lines=[PurchaseReturnLineIn(item_id=ids[item_id], qty=qty) for item_id, qty in dist_items.items()],
+                    lines=[PurchaseReturnLineIn(**line) for line in market_units.historical_return_lines(
+                        db, order.retailer_purchase_invoice_id, "buyer",
+                        [(ids[row["item_id"]],row["qty"],row["unit"],(row["trade_contract"] or {}).get("ref"))
+                         for row in components])],
                 ), actor,
             )
         ret.retailer_purchase_return_id = document.id
@@ -232,13 +237,18 @@ def queue_return(db: Session, order: MarketplaceOrder, ret: MarketplaceReturn, d
     if len(public_items) != len(dist_items):
         raise HTTPException(status.HTTP_409_CONFLICT, "اطلاعات عمومی یکی از اقلام مرجوعی در دسترس نیست")
     fulfillment = [{
-        "distributor_item_id": item_id, "name": public_items[item_id].name,
-        "unit": public_items[item_id].unit, "units": qty,
+        "distributor_item_id": row["item_id"], "name": public_items[row["item_id"]].name,
+        "unit": row["unit"] or public_items[row["item_id"]].unit, "units": row["qty"],
+        "trade_contract":row["trade_contract"],
         # The original local invoice determines the return valuation; the
         # public return event only needs item/quantity and total for display.
         "unit_price": Decimal(0), "discount": Decimal(0), "consumer_price": Decimal(0),
-    } for item_id, qty in dist_items.items()]
+    } for row in market.return_components(db,order,ret)]
     lines = _public_lines(db, fulfillment, seller_linked="seller" in links)
+    # The original trade unit survives catalog renames and conversion edits.
+    original_lines = next(row.payload["lines"] for row in original if row.side == "seller")
+    original_units = {UUID(line["market_item_ref"]):line["unit"] for line in original_lines}
+    lines = [line.model_copy(update={"unit":original_units[line.market_item_ref]}) if not line.trade_contract else line for line in lines]
     for side in ("seller", "buyer"):
         link = links.get(side)
         counterparty_id = order.retailer_tenant_id if side == "seller" else order.distributor_tenant_id

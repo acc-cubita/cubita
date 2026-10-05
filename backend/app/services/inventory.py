@@ -32,6 +32,7 @@ from app.services import chart_codes as cc
 from app.services import items as items_svc
 from app.services import pricing
 from app.services import valuation
+from app.services import units
 from app.services import warehouses
 from app.services.common import get_account as _get_account
 from app.services.common import get_or_create_account
@@ -261,6 +262,7 @@ def post_sales_invoice(
     enforce_credit: bool = True,
     move_inventory: bool = True,
     issue_accounting: bool = True,
+    frozen_conversions: dict[int, units.QuantityConversion] | None = None,
 ) -> SalesInvoice:
     """فاکتورِ فروش را ثبت می‌کند.
 
@@ -301,12 +303,20 @@ def post_sales_invoice(
     # وگرنه فاکتوری با دو ردیف ۶تایی از یک کالا در برابر موجودی ۱۰ پاس می‌شد، چون هر
     # ردیف جدا با همان ۱۰ مقایسه می‌شد. این تک‌نخی هم رخ می‌داد و نیازی به همزمانی نداشت.
     requested_by_item: dict[UUID, Decimal] = {}
-    for line in data.lines:
+    lock_items(db, items_by_id.keys())
+    unit_registry = units.OperationUnitRegistry(db, items_by_id.values())
+    conversions = []
+    for index, line in enumerate(data.lines):
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
+        conversion = (frozen_conversions or {}).get(index)
+        if conversion is None:
+            conversion = units.convert_transaction(db, item, line.qty, line.unit_id,
+                context="sale", observations=line.observations, registry=unit_registry)
+        conversions.append(conversion)
         if move_inventory and not item.is_service:
-            requested_by_item[line.item_id] = requested_by_item.get(line.item_id, Decimal(0)) + line.qty
+            requested_by_item[line.item_id] = requested_by_item.get(line.item_id, Decimal(0)) + conversion.target_qty
 
     #: §۷ §۵۳ — موادِ اولیه و موادِ بسته‌بندی موجودی دارند ولی فروختنی نیستند.
     items_svc.assert_sellable(db, [items_by_id[line.item_id] for line in data.lines])
@@ -326,12 +336,13 @@ def post_sales_invoice(
             items_by_id[line.item_id],
             Decimal(line.unit_price),
             discount=Decimal(line.discount or 0),
+            unit_id=conversions[idx].source_unit_id,
             on=data.invoice_date,
             sale_type_id=data.sale_type_id,
             contact_id=data.contact_id,
             currency_code=data.currency_code or "IRR",
         )
-        for line in data.lines
+        for idx, line in enumerate(data.lines)
     ]
 
     # قفل قبل از خواندن موجودی: وگرنه دو فاکتور موازی هر دو همان موجودی را می‌خوانند،
@@ -375,7 +386,8 @@ def post_sales_invoice(
 
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
-        unit_cost = item.average_cost if not item.is_service else Decimal(0)
+        conversion = conversions[idx]
+        unit_cost = Decimal(item.average_cost) if not item.is_service else Decimal(0)
         # تخفیفِ مؤثرِ ردیف = تخفیفِ خودِ ردیف + سهمِ تسهیم‌شده‌ی تخفیفِ کلِ فاکتور
         line_discount = Decimal(line.discount or 0) + allocated[idx]
         # خالصِ ردیف = ناخالص − تخفیف. جمعِ همین‌ها می‌شود total_amount، یعنی درآمد و
@@ -388,6 +400,7 @@ def post_sales_invoice(
         total_duties += Decimal(line.duty_amount or 0)
         invoice_lines.append(
             SalesInvoiceLine(
+                **units.snapshot_fields(conversion, commercial=True),
                 item_id=line.item_id,
                 qty=line.qty,
                 unit_price=line.unit_price,
@@ -398,7 +411,7 @@ def post_sales_invoice(
                 description=line.description,
                 item_code_snapshot=item.sku,
                 item_name_snapshot=item.name,
-                unit_snapshot=item.unit,
+                unit_snapshot=conversion.source_unit_name,
                 source_quotation_line_id=line.source_quotation_line_id,
                 #: وضعیتِ مالیاتی **در لحظه‌ی فروش** قفل می‌شود. اگر گزارش بعداً از
                 #: خودِ کالا می‌خواند، معاف‌شدنِ امسالِ کالا فروشِ پارسال را هم معاف
@@ -486,6 +499,7 @@ def post_sales_invoice(
         lines=invoice_lines,
     )
     db.add(invoice)
+    invoice._inv02_input_lines = tuple(invoice_lines)
     # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
     # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
     # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
@@ -533,7 +547,8 @@ def post_sales_invoice(
     return invoice
 
 
-def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> PurchaseInvoice:
+def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User, *,
+                          frozen_conversions: dict[int, units.QuantityConversion] | None = None) -> PurchaseInvoice:
     assert_period_open(db, data.invoice_date)
     warehouses.assert_usable(db, data.warehouse_id, action="فاکتور خرید")
 
@@ -648,10 +663,16 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
     line_nets: list[Decimal] = []
     # هر ردیفِ کالا یک «بارِ ورودی» جدا می‌سازد تا کسری/معیوب قابلِ ردیابی به همان بار باشد.
     batch_seeds: list[dict] = []
+    unit_registry = units.OperationUnitRegistry(db, items_by_id.values())
 
     for idx, line in enumerate(data.lines):
         item = items_by_id[line.item_id]
         line_discount = Decimal(line.discount or 0) + allocated[idx]
+        conversion = (frozen_conversions or {}).get(idx)
+        if conversion is None:
+            conversion = units.convert_transaction(db, item, line.qty, line.unit_id,
+                context="purchase", observations=line.observations, registry=unit_registry)
+        base_qty = conversion.target_qty
         line_addition = Decimal(line.addition or 0) + allocated_additions[idx]
         line_duty = line_duties_own[idx] + allocated_duties[idx]
         line_net = (line.qty * line.unit_cost) - line_discount + line_addition + line_duty
@@ -659,11 +680,12 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         # بهای واقعیِ تمام‌شده‌ی هر واحد پس از تخفیف. موجودی باید به همین ارزش‌گذاری
         # شود، وگرنه انبار گران‌تر از چیزی که پول داده‌ایم در دفاتر می‌نشیند و سودِ
         # فروشِ بعدی کمتر از واقع گزارش می‌شود.
-        effective_unit_cost = (line_net / line.qty) if line.qty else Decimal(0)
+        effective_unit_cost = (line_net / base_qty) if base_qty else Decimal(0)
         total_amount += line_net
         total_discount += line_discount
         invoice_lines.append(
             PurchaseInvoiceLine(
+                **units.snapshot_fields(conversion, commercial=True),
                 item_id=line.item_id,
                 qty=line.qty,
                 unit_cost=line.unit_cost,  # قیمتِ فهرستِ تأمین‌کننده، همان‌طور که در فاکتورش هست
@@ -680,7 +702,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
                 vat_status=item.purchase_vat_status,
                 item_code_snapshot=item.sku,
                 item_name_snapshot=item.name,
-                unit_snapshot=item.unit,
+                unit_snapshot=conversion.source_unit_name,
                 #: معینِ هزینه‌ی ردیفِ خدمت همین حالا حل و قفل می‌شود (فصلِ خرید خدمات
                 #: §۱۳ §۴۹): انتخابِ صریحِ کاربر، وگرنه معینِ خودِ خدمت، وگرنه پیش‌فرضِ نقش.
                 #: کالا `NULL` می‌ماند — بهایش به موجودیِ انبار می‌نشیند.
@@ -703,14 +725,15 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         # هیچ حرکت فیزیکی ندارند و بعداً از WarehouseReceipt وارد می‌شوند.
         if data.warehouse_id is not None and not item.is_service:
             existing_qty = get_total_stock_qty(db, item.id)
-            new_qty = existing_qty + line.qty
+            new_qty = existing_qty + base_qty
             if new_qty > 0:
                 item.average_cost = ((existing_qty * item.average_cost) + line_net) / new_qty
             stock_moves.append(
                 StockLedger(
+                    **units.movement_snapshot_fields(conversion, base_qty),
                     item_id=line.item_id,
                     warehouse_id=data.warehouse_id,
-                    qty=line.qty,
+                    qty=base_qty,
                     unit_cost=effective_unit_cost,
                     entry_date=data.invoice_date,
                     source_type="purchase_invoice",
@@ -719,7 +742,8 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
             batch_seeds.append(
                 {
                     "item_id": line.item_id,
-                    "qty": Decimal(line.qty),
+                    "qty": base_qty,
+                    "conversion": conversion,
                     "unit_cost": effective_unit_cost.quantize(Decimal(1)),
                     "idx": idx + 1,
                     #: ردیفِ متناظر، تا حرکتِ دفتر بداند از کدام ردیف آمده. شیء
@@ -887,6 +911,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         lines=invoice_lines,
     )
     db.add(invoice)
+    invoice._inv02_input_lines = tuple(invoice_lines)
     # flush اجباری است و تزئینی نیست: شناسه‌ی کلید اصلی با default=uuid4 در لحظه‌ی
     # INSERT ساخته می‌شود، نه موقع ساختن شیء. بدون این خط، مقدارِ خوانده‌شده None
     # است و حرکت انبار بی‌صدا بدون منشأ ذخیره می‌شود — کاردکس و ابطال هر دو می‌شکنند.
@@ -925,6 +950,7 @@ def post_purchase_invoice(db: Session, data: PurchaseInvoiceIn, user: User) -> P
         move.source_id = invoice.id
         move.batch_id = batch.id
         move.source_line_id = seed["line"].id
+        units.record_batch_observations(db, batch, seed["conversion"], user)
         db.add(move)
     valuation.settle_posting(db, stock_moves)
 
@@ -974,7 +1000,9 @@ def duplicate_purchase_invoice_draft(db: Session, invoice_id: UUID) -> dict:
         "lines": [
             {
                 "item_id": line.item_id,
-                "qty": Decimal(line.qty),
+                "qty": format(Decimal(line.qty), "f"),
+                "unit_id": line.entered_unit_id or line.base_unit_id,
+                "unit_name": (line.unit_conversion_snapshot or {}).get("source_unit_name", line.unit_snapshot),
                 "unit_cost": transaction_amount(line.unit_cost),
                 "discount": transaction_amount(line.discount),
                 "addition": transaction_amount(line.addition),
@@ -1013,6 +1041,9 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
     lock_items(db, [data.item_id])
     item = db.query(Item).filter(Item.id == data.item_id).populate_existing().one()
 
+    conversion = units.convert_transaction(db, item, data.qty_diff, data.unit_id,
+        context="inventory", batch_id=data.batch_id, observations=data.observations)
+    data = data.model_copy(update={"qty_diff":conversion.target_qty})
     if data.qty_diff < 0:
         available = get_stock_qty(db, data.item_id, data.warehouse_id)
         if available < abs(data.qty_diff):
@@ -1057,6 +1088,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         item_id=data.item_id,
         warehouse_id=data.warehouse_id,
         qty_diff=data.qty_diff,
+        **units.snapshot_fields(conversion),
         unit_cost=unit_cost,
         reason=data.reason,
         adjustment_date=data.adjustment_date,
@@ -1072,6 +1104,7 @@ def post_stock_adjustment(db: Session, data: StockAdjustmentIn, user: User) -> S
         item_id=data.item_id,
         warehouse_id=data.warehouse_id,
         qty=data.qty_diff,
+        **units.snapshot_fields(conversion),
         unit_cost=unit_cost,
         entry_date=data.adjustment_date,
         source_type="adjustment",

@@ -6,14 +6,16 @@ import {
   fetchContacts,
   fetchStockLevels,
   newIdempotencyKey,
+  resolvePrice,
   type ContactRecord,
   type SalesQuotationRecord,
   type StockLevel,
 } from '../api'
 import { todayIso } from './jalali'
 import { usePersistentState } from './usePersistentState'
+import type { TransactionUnitPatch } from '../components/TransactionUnitPicker'
 
-export interface QuotationDraftLine {
+export interface QuotationDraftLine extends TransactionUnitPatch {
   itemId: string
   qty: string
   unitPrice: string
@@ -102,7 +104,11 @@ export function useQuotationDraft({
     }
     setLines(
       editing.lines.length
-        ? editing.lines.map((l) => ({ itemId: l.item_id, qty: String(Number(l.qty)), unitPrice: String(Number(l.unit_price)) }))
+        ? editing.lines.map((l) => ({ itemId: l.item_id, qty: l.qty,
+            unitId: l.entered_unit_id ?? undefined, unitName: l.unit_snapshot,
+            observations: (l.unit_conversion_snapshot?.path ?? []).flatMap(step => step.observation
+              ? [{ rule_id: step.rule_id, from_qty: step.observation.from_qty, to_qty: step.observation.to_qty }] : []),
+            unitPrice: l.unit_price }))
         : [{ itemId: '', qty: '1', unitPrice: '' }],
     )
     setMessage(null)
@@ -121,7 +127,24 @@ export function useQuotationDraft({
     return row ? Number(row.qty) : 0
   }
   function updateLine(index: number, patch: Partial<QuotationDraftLine>) {
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+    setLines((prev) => prev.map((line, i) => (i === index ? { ...line,
+      ...(patch.itemId !== undefined && patch.itemId !== line.itemId ? {
+        unitId: undefined, unitName: undefined, observations: [], baseQtyPreview: undefined,
+      } : {}), ...(patch.qty !== undefined ? { baseQtyPreview: undefined } : {}), ...patch } : line)))
+  }
+  function changeLineUnit(index: number, patch: TransactionUnitPatch) {
+    updateLine(index, patch)
+    if (patch.unitId === undefined) return
+    const itemId = lines[index].itemId
+    updateLine(index, { unitPrice: '' })
+    fillUnitPrice(index, itemId, patch.unitId)
+  }
+  function fillUnitPrice(index: number, itemId: string, unitId?: string) {
+    void resolvePrice(token, itemId, { unitId, on: quotationDate,
+      contactId: contactId || null }).then(rule => setLines(prev => prev.map((line, i) =>
+        i === index && line.itemId === itemId && line.unitId === unitId
+          ? { ...line, unitPrice: rule ? rule.unit_price
+              : unitId ? '' : items.find(item => item.id === itemId)?.sales_price ?? '' } : line))).catch(() => {})
   }
   function chooseLineItem(index: number, itemId: string) {
     if (!itemId) {
@@ -131,10 +154,16 @@ export function useQuotationDraft({
     const it = items.find((x) => x.id === itemId)
     const price = it ? Number(it.sales_price) : 0
     updateLine(index, { itemId, unitPrice: price ? String(price) : '' })
+    fillUnitPrice(index, itemId)
   }
   function useInventoryPrice(index: number, itemId: string) {
+    if (lines[index].unitId) {
+      changeLineUnit(index, { unitId: lines[index].unitId })
+      return
+    }
     const it = items.find((x) => x.id === itemId)
     if (it) updateLine(index, { unitPrice: String(Number(it.sales_price)) })
+    fillUnitPrice(index, itemId)
   }
   function addLine() {
     setLines((prev) => [...prev, { itemId: '', qty: '1', unitPrice: '' }])
@@ -166,7 +195,9 @@ export function useQuotationDraft({
       description,
       lines: validLines.map((l) => ({
         item_id: l.itemId,
-        qty: Number(l.qty),
+        qty: l.qty,
+        unit_id: l.unitId ?? null,
+        observations: l.observations ?? [],
         unit_price: Number(l.unitPrice) || 0,
         description: '',
       })),
@@ -196,6 +227,7 @@ export function useQuotationDraft({
   }
 
   return {
+    token,
     editing,
     warehouseId,
     setWarehouseId,
@@ -208,6 +240,7 @@ export function useQuotationDraft({
     setDescription,
     lines,
     updateLine,
+    changeLineUnit,
     chooseLineItem,
     useInventoryPrice,
     addLine,

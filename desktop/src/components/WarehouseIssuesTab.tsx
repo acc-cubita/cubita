@@ -49,16 +49,17 @@ import { Pager, usePagination } from './Pager'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
 import { formatJalali, todayIso } from '../lib/jalali'
 import { AsyncBlock, Note, faAmount, type Msg } from '../pages/accounting/kit'
+import { TransactionUnitPicker, type TransactionUnitPatch } from './TransactionUnitPicker'
+import { toFaDigits } from '../lib/jalali'
 import { SearchSelect } from '../components/SearchSelect'
 
-const faQty = (v: string | number | null | undefined) =>
-  Number(v || 0).toLocaleString('fa-IR', { maximumFractionDigits: 3 })
+const faQty = (v: string | number | null | undefined) => toFaDigits(String(v ?? '—'))
 const faNum = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString('fa-IR'))
 const errText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback)
 
 type IssueKind = 'sale' | 'consumption' | 'other' | 'transfer'
 const KINDS: IssueKind[] = ['sale', 'consumption', 'other', 'transfer']
-type DraftLine = {
+type DraftLine = TransactionUnitPatch & {
   key: number
   itemId: string
   qty: string
@@ -225,7 +226,7 @@ function IssueForm({
     const requested = new Map<string, number>()
     for (const line of lines) {
       if (line.itemId && Number(line.qty) > 0) {
-        requested.set(line.itemId, (requested.get(line.itemId) ?? 0) + Number(line.qty))
+        requested.set(line.itemId, (requested.get(line.itemId) ?? 0) + Number(line.baseQtyPreview ?? 0))
       }
     }
     return [...requested.entries()].map(([itemId, qty]) => {
@@ -240,6 +241,7 @@ function IssueForm({
     setMsg(null)
     const valid = lines.filter((line) => line.itemId && Number(line.qty) > 0)
     if (!warehouseId) return setMsg({ text: 'انبار را انتخاب کنید.', kind: 'err' })
+    if (valid.some((line) => !line.baseQtyPreview)) return setMsg({ text: 'واحد و تبدیل معتبر همهٔ ردیف‌ها را تکمیل کنید.', kind: 'err' })
     if (valid.length === 0) return setMsg({ text: 'حداقل یک ردیف با کالا و مقدار لازم است.', kind: 'err' })
     if (kind === 'sale' && !receiverId) return setMsg({ text: 'برای خروجِ فروش، تحویل‌گیرنده را انتخاب کنید.', kind: 'err' })
     if (kind === 'transfer' && (!destinationId || destinationId === warehouseId)) {
@@ -259,7 +261,7 @@ function IssueForm({
             from_warehouse_id: warehouseId,
             to_warehouse_id: destinationId,
             description: description.trim(),
-            lines: valid.map((line) => ({ item_id: line.itemId, qty: Number(line.qty) })),
+            lines: valid.map((line) => ({ item_id: line.itemId, qty: line.qty, unit_id: line.unitId || null, observations: line.observations || [] })),
           },
           requestKey.current,
         )
@@ -277,7 +279,7 @@ function IssueForm({
             description: description.trim(),
             lines: valid.map((line) => ({
               item_id: line.itemId,
-              qty: Number(line.qty),
+              qty: line.qty, unit_id: line.unitId || null, observations: line.observations || [],
               account_id: needsAccount && line.accountId ? line.accountId : null,
               description: line.description.trim(),
               //: کالای بی‌ردیابی هیچ‌وقت تفکیک نمی‌فرستد — همان رفتارِ دیروز. کالای
@@ -414,7 +416,7 @@ function IssueForm({
               {lines.map((line) => (
                 <tr key={line.key}>
                   <td data-label="کالا">
-                    <SearchSelect value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value })}>
+                    <SearchSelect value={line.itemId} onChange={(e) => updateLine(line.key, { itemId: e.target.value, unitId: undefined, unitName: undefined, observations: [], baseQtyPreview: undefined, batches: null })}>
                       <option value="">— انتخاب کالا —</option>
                       {goods.map((it) => (
                         <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>
@@ -430,10 +432,12 @@ function IssueForm({
                     <NumberInput
                       allowDecimal
                       value={line.qty}
-                      onChange={(v) => updateLine(line.key, { qty: v, batches: null })}
+                      onChange={(v) => updateLine(line.key, { qty: v, batches: null, baseQtyPreview: undefined })}
                     />
                   </td>
-                  <td data-label="واحد">{itemById.get(line.itemId)?.unit || '—'}</td>
+                  <td data-label="واحد"><TransactionUnitPicker token={token} itemId={line.itemId} qty={line.qty}
+                    unitId={line.unitId} observations={line.observations} context="inventory"
+                    onChange={(patch) => updateLine(line.key, { ...patch, batches: null })} /></td>
                   {needsAccount && (
                     <td data-label="حساب معین ردیف">
                       <SearchSelect value={line.accountId} onChange={(e) => updateLine(line.key, { accountId: e.target.value })}>
@@ -467,7 +471,7 @@ function IssueForm({
               {/* انتخابگرِ بار فقط برای کالای ردیابی‌شده — بقیه اصلاً نمی‌بینندش (§۲۸). */}
               {kind !== 'transfer' &&
                 lines
-                  .filter((line) => trackedIds.has(line.itemId) && Number(line.qty) > 0)
+                  .filter((line) => trackedIds.has(line.itemId) && Number(line.baseQtyPreview ?? 0) > 0)
                   .map((line) => (
                     <tr key={`batch-${line.key}`}>
                       <td className="card-full" colSpan={needsAccount ? 6 : 5}>
@@ -478,7 +482,7 @@ function IssueForm({
                           token={token}
                           itemId={line.itemId}
                           warehouseId={warehouseId}
-                          qty={Number(line.qty)}
+                          qty={line.baseQtyPreview ?? '0'}
                           value={line.batches}
                           onChange={(next) => updateLine(line.key, { batches: next })}
                         />

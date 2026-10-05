@@ -28,6 +28,7 @@ from app.schemas.transfers import StockTransferIn
 from app.services import items as items_svc
 from app.services import batches as batches_svc
 from app.services import valuation
+from app.services import units
 from app.services import warehouses
 from app.services.common import make_journal_entry
 from app.services.inventory import get_stock_qty, lock_items
@@ -45,13 +46,21 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
 
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_([l.item_id for l in data.lines])).all()}
     requested: dict[UUID, Decimal] = defaultdict(Decimal)
+    lock_items(db, items_by_id.keys())
+    unit_registry = units.OperationUnitRegistry(db, items_by_id.values(),
+        batch_ids=[allocation.batch_id for line in data.lines for allocation in (line.batch_allocations or [])])
+    conversions = []
     for line in data.lines:
         item = items_by_id.get(line.item_id)
         if item is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"کالا با شناسه {line.item_id} یافت نشد")
         if item.is_service:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"«{item.name}» خدمت است و قابل جابه‌جایی بین انبارها نیست")
-        requested[line.item_id] += Decimal(line.qty)
+        selected_batch = line.batch_allocations[0].batch_id if line.batch_allocations and len(line.batch_allocations) == 1 else None
+        conversion = units.convert_transaction(db, item, line.qty, line.unit_id,
+            context="inventory", batch_id=selected_batch, observations=line.observations, registry=unit_registry)
+        conversions.append(conversion)
+        requested[line.item_id] += conversion.target_qty
     for item_id in requested:
         #: §۲۹ فصلِ کالا — کالا فقط به انبارهای مرتبطش وارد می‌شود.
         items_svc.assert_warehouse_allowed(db, items_by_id[item_id], data.to_warehouse_id)
@@ -73,17 +82,19 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
         to_warehouse_id=data.to_warehouse_id,
         description=data.description,
         created_by_id=user.id,
-        lines=[StockTransferLine(item_id=line.item_id, qty=line.qty) for line in data.lines],
+        lines=[StockTransferLine(item_id=line.item_id, qty=conversion.target_qty,
+            **units.snapshot_fields(conversion)) for line, conversion in zip(data.lines, conversions, strict=True)],
     )
+    stored_lines = list(transfer.lines)
     db.add(transfer)
     db.flush()
 
     total = Decimal(0)
     moves: list[StockLedger] = []
-    for line in data.lines:
+    for line, conversion, stored_line in zip(data.lines, conversions, stored_lines, strict=True):
         #: انتقالِ پیش‌تاریخ با میانگینِ همان روز — همان قاعده‌ی خروج.
         unit_cost = valuation.cost_for_posting(db, fresh[line.item_id], data.transfer_date)
-        total += (Decimal(line.qty) * unit_cost).quantize(Decimal(1))
+        total += (conversion.target_qty * unit_cost).quantize(Decimal(1))
         #: **بار باید از مرزِ انبار رد شود، وگرنه گم می‌شود.**
         #:
         #: `StockBatch` به `(کالا، انبار)` بسته است. بی این تفکیک، انتقال از
@@ -91,12 +102,13 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
         #: که دیگر هیچ‌جا نوشته نبود. برای هر بارِ مبدأ یک بارِ آینه در مقصد ساخته
         #: می‌شود که `parent_batch_id`ش زنجیره را نگه می‌دارد.
         plan = batches_svc.plan_outflow(
-            db, fresh[line.item_id], data.from_warehouse_id, Decimal(line.qty), data.transfer_date
+            db, fresh[line.item_id], data.from_warehouse_id, conversion.target_qty, data.transfer_date,
+            wanted=[(a.batch_id, a.qty) for a in line.batch_allocations] if line.batch_allocations else None,
         )
-        splits = plan or [(None, Decimal(line.qty))]
+        splits = plan or [(None, conversion.target_qty)]
         for batch_id, take in splits:
             mirror_id = (
-                batches_svc.mirror_batch(db, batch_id, data.to_warehouse_id, user).id
+                batches_svc.mirror_batch(db, batch_id, data.to_warehouse_id, user, conversion=conversion).id
                 if batch_id is not None
                 else None
             )
@@ -105,9 +117,11 @@ def post_stock_transfer(db: Session, data: StockTransferIn, user: User) -> Stock
                 (data.to_warehouse_id, take, "transfer_in", mirror_id),
             ):
                 move = StockLedger(
+                    **units.movement_snapshot_fields(conversion, qty),
                     item_id=line.item_id, warehouse_id=warehouse_id, qty=qty, unit_cost=unit_cost,
                     entry_date=data.transfer_date, source_type=source_type, source_id=transfer.id,
                     batch_id=tag,
+                    source_line_id=stored_line.id,
                 )
                 db.add(move)
                 moves.append(move)
@@ -164,10 +178,19 @@ def void_stock_transfer(
 
     #: ابطالِ انتقال ورودِ انبارِ مقصد را برمی‌دارد؛ خروجی که بعد از آن رفته بی‌پشتوانه نشود.
     valuation.guard_void(db, ("transfer_out", "transfer_in"), transfer.id)
+    needed_by_batch = defaultdict(Decimal)
+    for move in moves:
+        if move.source_type == "transfer_in" and move.batch_id is not None:
+            needed_by_batch[move.batch_id] += Decimal(move.qty)
+    available_by_batch = batches_svc.on_hand(db, list(needed_by_batch))
+    if any(available_by_batch.get(key, Decimal(0)) < qty for key, qty in needed_by_batch.items()):
+        raise HTTPException(409, "بار منتقل‌شده در مقصد مصرف شده است؛ ابتدا خروج‌های همان بار را باطل کنید")
     for move in moves:
         db.add(StockLedger(
+            **units.negated_snapshot_fields(move),
             item_id=move.item_id, warehouse_id=move.warehouse_id, qty=-Decimal(move.qty),
             unit_cost=move.unit_cost, entry_date=effective, source_type="void", source_id=transfer.id,
+            batch_id=move.batch_id, source_line_id=move.source_line_id,
         ))
     original = db.get(JournalEntry, transfer.journal_entry_id) if transfer.journal_entry_id else None
     if original is not None:
@@ -194,9 +217,9 @@ def transfer_print_projection(db: Session, transfer: StockTransfer) -> dict:
             "code": item.sku if item else "",
             "name": item.name if item else "",
             "qty": line.qty,
-            "unit": item.unit if item else "",
-            "secondary_qty": None,
-            "secondary_unit": "",
+            "unit": (line.unit_conversion_snapshot or {}).get("target_unit_name") or (item.unit if item else ""),
+            "secondary_qty": line.entered_qty if line.entered_unit_id != line.base_unit_id else None,
+            "secondary_unit": (line.unit_conversion_snapshot or {}).get("source_unit_name", ""),
             "description": "",
         })
     return {

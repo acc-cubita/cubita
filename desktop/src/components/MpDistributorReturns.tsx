@@ -7,10 +7,10 @@ import {
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
-import { formatJalali } from '../lib/jalali'
+import { formatJalali, toFaDigits } from '../lib/jalali'
 
 const faMoney = (v: string | number) => Math.round(Number(v)).toLocaleString('fa-IR')
-const faNum = (v: string | number) => Number(v).toLocaleString('fa-IR')
+const faNum = (v: string | number) => toFaDigits(String(v))
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'خطای ناشناخته')
 
 const RET_BADGE: Record<MpReturnStatus, { label: string; tone: string }> = {

@@ -4,6 +4,7 @@ import type { ItemCache, WarehouseCache } from '../../electron.d'
 import type { IssueInvoiceContext, SalesInvoiceRecord } from '../../api'
 import { useSalesInvoiceDraft, type SalesInvoiceDraft } from '../../lib/salesInvoiceDraft'
 import { NumberInput } from '../NumberInput'
+import { TransactionUnitPicker } from '../TransactionUnitPicker'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { ItemPicker } from '../ItemPicker'
 import { PriceRuleHint } from '../PriceRuleHint'
@@ -13,6 +14,7 @@ import { TaskFlow, type WizardStep } from './TaskFlow'
 import { BlacklistBanner } from '../BlacklistBanner'
 import { SearchSelect } from '../../components/SearchSelect'
 import { FormField } from '../form/FormKit'
+import { toFaDigits } from '../../lib/jalali'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -301,7 +303,7 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
             {d.lines.map((line, i) => {
               const avail = d.availableStock(line.itemId)
               const service = d.isService(line.itemId)
-              const over = avail != null && Number(line.qty) > avail
+              const over = avail != null && line.baseQtyPreview !== undefined && Number(line.baseQtyPreview) > avail
               const unit = items.find((it) => it.id === line.itemId)?.unit
               return (
                 <tr key={i}>
@@ -311,8 +313,11 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
                   <td data-label="تعداد">
                     <div className="qty-with-unit">
                       <NumberInput allowDecimal value={line.qty} onChange={(v) => d.updateLine(i, { qty: v })} />
-                      {unit ? <span className="unit-suffix">{unit}</span> : null}
+                      {line.unitName || unit ? <span className="unit-suffix">{line.unitName || unit}</span> : null}
                     </div>
+                    {!d.sourceIssue && <TransactionUnitPicker token={d.token} itemId={line.itemId} qty={line.qty}
+                      unitId={line.unitId} observations={line.observations} context="sale"
+                      onChange={(patch) => d.changeLineUnit(i, patch)} />}
                   </td>
                   <td data-label="موجودی انبار">
                     {!line.itemId ? (
@@ -337,7 +342,7 @@ function LinesStep({ d, items }: { d: SalesInvoiceDraft; items: ItemCache[] }) {
                         return u ? `قیمت هر ${u}` : 'قیمت واحد'
                       })()}
                     />
-                    <PriceRuleHint rule={d.priceInfo[line.itemId]} entered={line.unitPrice} />
+                    <PriceRuleHint rule={d.priceInfo[line.unitId ? `${line.itemId}:${line.unitId}` : line.itemId]} entered={line.unitPrice} />
                   </td>
                   <td data-label="تخفیف">
                     <NumberInput value={line.discount} onChange={(v) => d.updateLine(i, { discount: v })} placeholder="۰" />
@@ -483,7 +488,7 @@ function ReviewStep({ d, items, warehouses }: { d: SalesInvoiceDraft; items: Ite
               return (
                 <tr key={i}>
                   <td data-label="کالا">{it?.name ?? '—'}</td>
-                  <td data-label="تعداد">{Number(line.qty).toLocaleString('fa-IR')} {it?.unit ?? ''}</td>
+                  <td data-label="تعداد">{toFaDigits(line.qty)} {line.unitName ?? it?.unit ?? ''}</td>
                   <td data-label="قیمت واحد">{Number(line.unitPrice || 0).toLocaleString('fa-IR')}</td>
                   <td data-label="تخفیف">{Number(line.discount || 0).toLocaleString('fa-IR')}</td>
                   <td data-label="مبلغ">{amount.toLocaleString('fa-IR')}</td>

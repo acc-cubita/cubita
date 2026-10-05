@@ -1,3 +1,4 @@
+from decimal import Decimal
 import uuid
 from datetime import date as date_, datetime
 
@@ -73,8 +74,8 @@ class StockCountLine(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("stock_count_sessions.id", ondelete="CASCADE"), index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    system_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
-    counted_qty: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    system_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
+    counted_qty: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     #: کِی این شمارش وارد شد — لنگرِ «عکس در لحظه‌ی شمارش» و پاسخِ «چه‌قدرش را
     #: واقعاً شمردیم؟». `NULL` یعنی هنوز هیچ.
