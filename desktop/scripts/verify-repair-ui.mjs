@@ -8,7 +8,7 @@ const browser = await chromium.launch({ headless: true })
 await mkdir('../_deploy/repair-qa', { recursive: true })
 try {
   for (const width of [1440,390]) {
-    const page = await browser.newPage({ viewport: { width,height:1000 } })
+    const page = await browser.newPage({ viewport: { width,height:1000 },timezoneId:'America/Denver' })
     const errors = []
     page.on('pageerror', e => { errors.push(e.message); console.error(e.message) })
     page.on('console', m => { if(m.type() === 'error') { errors.push(m.text()); console.error(m.text()) } })
@@ -32,7 +32,7 @@ try {
       else if(url.pathname === '/api/repair/message-templates') data = []
       else if(url.pathname.endsWith('/notifications')) data = {sms_available:false,messages:[]}
       else if(url.pathname === '/api/repair/fee-rules') data = []
-      else if(url.pathname === '/api/repair/service-requests') data = {items:[],next_cursor:null}
+      else if(url.pathname === '/api/repair/service-requests') data = {items:[{id:'88888888-8888-4888-8888-888888888888',version:1,branch_id:branches[0].id,contact_id:contacts[0].id,type_id:types[0].id,device_description:'درخواست شبانه آزمون',reported_issue:'آزمون تاریخ محلی',address:'نشانی آزمون',coordinator_name:'نماینده',coordinator_phone:'09123456789',status:'open',case_id:null,appointments:[{id:'99999999-9999-4999-8999-999999999999',technician_id:'test-user',starts_at:'2026-10-07T01:00:00Z',ends_at:'2026-10-07T02:00:00Z',status:'scheduled',result:''}],events:[]}],next_cursor:null}
       else if(['/api/repair/maintenance-contracts','/api/repair/maintenance-plans','/api/repair/consolidated-bills'].includes(url.pathname)) data = []
       else if(url.pathname.endsWith('/contract')) data = null
       else if(url.pathname.endsWith('/custody') || url.pathname.endsWith('/loans')) data = []
@@ -73,6 +73,9 @@ try {
     assert.equal(requests.length,1)
     assert.ok(requests[0].key)
     await page.locator('details').evaluateAll(elements=>elements.forEach(element=>{element.open=true}))
+    const field=page.locator('article.repair-task').filter({hasText:'درخواست شبانه آزمون'})
+    await field.getByText(/۱۴۰۵\/۰۷\/۱۴.*۱۹:۰۰/).waitFor()
+    assert.equal(await field.getByText(/۱۴۰۵\/۰۷\/۱۵/).count(),0,'Appointment must use the local day, not the UTC day')
     await page.screenshot({ path:`../_deploy/repair-qa/case-${width}.png`,fullPage:true })
     await page.getByRole('heading',{name:/پذیرش ۱ —/}).scrollIntoViewIfNeeded()
     await page.screenshot({path:`../_deploy/repair-qa/case-viewport-${width}.png`})
