@@ -191,8 +191,8 @@ def list_assets(db: Session, *, include_disposed: bool = True) -> list[dict]:
     return [to_out(a, contacts, centers, periods.get(a.id, 0)) for a in assets]
 
 
-def get_asset(db: Session, asset_id: UUID) -> FixedAsset:
-    asset = db.get(FixedAsset, asset_id)
+def get_asset(db: Session, asset_id: UUID, *, lock: bool = False) -> FixedAsset:
+    asset = db.query(FixedAsset).filter_by(id=asset_id).with_for_update(of=FixedAsset).populate_existing().one_or_none() if lock else db.get(FixedAsset, asset_id)
     if asset is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "دارایی پیدا نشد")
     return asset
@@ -278,7 +278,8 @@ def dispose_asset(db: Session, asset_id: UUID, data: AssetDisposalIn, user: User
     اسقاط و اهدا حالتِ خاص نیستند؛ فقط مبلغِ دریافتی‌شان صفر است، پس کلِ ارزشِ
     دفتری زیان می‌شود.
     """
-    asset = get_asset(db, asset_id)
+    asset = get_asset(db, asset_id, lock=True)
+    _assert_not_loaned(db,asset_id)
     if asset.is_disposed:
         raise HTTPException(status.HTTP_409_CONFLICT, "این دارایی قبلاً خارج شده است")
     if data.disposal_date < asset.acquired_date:
@@ -446,13 +447,14 @@ def list_disposals(
 # ── تحویل/استقرار و جابه‌جایی ───────────────────────────
 
 
-def _assign(db: Session, asset_id: UUID, data: AssetAssignmentIn, user: User, *, kind: str) -> dict:
+def _assign(db: Session, asset_id: UUID, data: AssetAssignmentIn, user: User, *, kind: str, commit: bool = True, return_assignment: bool = False, repair_loan_id: UUID | None = None):
     """هسته‌ی مشترکِ «تحویل» و «جابه‌جایی» — فقط `kind` فرق می‌کند.
 
     مبدأ از وضعیتِ *فعلیِ* دارایی برداشته می‌شود، نه از ورودیِ کاربر: تنها منبعِ
     درستِ «از کجا» همان چیزی است که تا این لحظه در سیستم نشسته.
     """
-    asset = get_asset(db, asset_id)
+    asset = get_asset(db, asset_id, lock=True)
+    _assert_not_loaned(db,asset_id,except_loan=repair_loan_id)
     if asset.is_disposed:
         raise HTTPException(status.HTTP_409_CONFLICT, "این دارایی واگذار شده و جابه‌جا نمی‌شود")
     if data.to_custodian_id is not None and db.get(Contact, data.to_custodian_id) is None:
@@ -489,7 +491,9 @@ def _assign(db: Session, asset_id: UUID, data: AssetAssignmentIn, user: User, *,
     if data.to_cost_center_id is not None:
         asset.cost_center_id = data.to_cost_center_id
 
-    db.commit()
+    db.flush()
+    if commit: db.commit()
+    if return_assignment: return row
     db.refresh(asset)
     return _out_with_names(db, asset)
 
@@ -944,3 +948,11 @@ def asset_card(db: Session, asset_id: UUID) -> dict:
         "estimate_changes": list_estimate_changes(db, asset_id=asset_id),
         "disposal": next((d for d in disposals if d["asset_id"] == asset_id), None),
     }
+
+
+def _assert_not_loaned(db: Session, asset_id: UUID, *, except_loan: UUID | None = None):
+    from app.models.repair import RepairLoan
+    query=db.query(RepairLoan).filter_by(asset_id=asset_id,returned_at=None)
+    if except_loan is not None: query=query.filter(RepairLoan.id!=except_loan)
+    if query.first():
+        raise HTTPException(status.HTTP_409_CONFLICT,'این دارایی به‌عنوان دستگاه جایگزین امانت است؛ ابتدا بازگشت واقعی آن را ثبت کنید.')

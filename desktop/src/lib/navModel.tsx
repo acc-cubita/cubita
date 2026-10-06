@@ -106,6 +106,7 @@ import { isEnterprise } from '../platform'
 export type PageKey =
   | 'overview'
   | 'automation'
+  | 'repair'
   | 'letternew'
   | 'letterlist'
   | 'pos'
@@ -501,6 +502,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'assurancehealth', label: 'کارنامه سلامت دفتر', icon: <Gauge size={18} /> },
     ],
   },
+  { heading: 'تعمیرگاه', icon: <Wrench size={17} />, items: [{ key: 'repair', label: 'تعمیرگاه', icon: <Wrench size={18} /> }] },
   {
     heading: 'اتوماسیون اداری',
     icon: <ClipboardList size={17} />,
@@ -604,6 +606,7 @@ PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 
 //: «ورود گروهی اشخاص» داده‌اش طرف‌حساب است؛ پس کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
 PAGE_MODULE_KEY.contactimport = 'contacts'
+PAGE_MODULE_KEY.repair = 'repair'
 for (const key of ['automation', 'letternew', 'letterlist'] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'automation'
 }

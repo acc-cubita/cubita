@@ -99,7 +99,8 @@ def send_text(to: str, text: str) -> bool:
         logger.warning("ارسالِ پیامکِ متنی به %s ناموفق بود: %s", phone, data.get("status"))
         return False
     except Exception as exc:
-        logger.warning("ارسالِ پیامکِ متنی به %s خطا داد: %s", phone, exc)
+        # خطای HTTP می‌تواند URL حاوی کلیدِ حامل را داشته باشد.
+        logger.warning("ارسالِ پیامکِ متنی به %s خطا داد؛ نوع خطا: %s", phone, type(exc).__name__)
         return False
 
 
