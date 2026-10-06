@@ -23,7 +23,7 @@
  */
 import { createHash } from 'node:crypto'
 import { execFileSync, spawn } from 'node:child_process'
-import { readFileSync, existsSync, mkdtempSync, rmSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, existsSync, mkdtempSync, rmSync, readdirSync, statSync, openSync, closeSync, readSync, writeFileSync } from 'node:fs'
 import { request as httpsRequest } from 'node:https'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -111,6 +111,9 @@ for (const f of files) {
 // عمداً `BatchMode=yes` نیست: آن *همه‌ی* پرسش‌ها را می‌بندد، از جمله پرسیدنِ
 // عبارتِ عبورِ خودِ کلید — که پرسشِ به‌جایی است و باید بماند.
 const BASE_OPTS = [
+  ...(process.env.CUBITA_DEPLOY_BIND_ADDRESS ? ['-o', `BindAddress=${process.env.CUBITA_DEPLOY_BIND_ADDRESS}`] : []),
+  '-o', 'ConnectTimeout=15',
+  '-o', 'ConnectionAttempts=1',
   '-i', KEY,
   '-o', 'IdentitiesOnly=yes',
   '-o', 'PasswordAuthentication=no',
@@ -131,9 +134,12 @@ const BASE_OPTS = [
 // کانال باز رد می‌شوند — چه رگرسیون رخ بدهد چه ندهد، این عدد اتصال جدید را از
 // ده‌ها به یکی می‌رساند.
 const CONTROL_PATH = path.join(tmpdir(), `cubita-ssh-ctrl-${process.pid}`)
-const SCP_OPTS = [...BASE_OPTS, '-o', `ControlPath=${CONTROL_PATH}`]
+// OpenSSH ویندوز ControlPath را با خطای Not a socket رد می‌کند؛ اتصال عادی لازم است.
+const USE_CONTROL_MASTER = process.platform !== 'win32'
+const SCP_OPTS = USE_CONTROL_MASTER ? [...BASE_OPTS, '-o', `ControlPath=${CONTROL_PATH}`] : BASE_OPTS
 
 function startControlMaster() {
+  if (!USE_CONTROL_MASTER) return null
   const master = spawn(
     'ssh',
     [...BASE_OPTS, '-M', '-N', '-o', `ControlPath=${CONTROL_PATH}`, '-o', 'ControlPersist=600', HOST],
@@ -155,6 +161,7 @@ function startControlMaster() {
 }
 
 function stopControlMaster() {
+  if (!USE_CONTROL_MASTER) return
   try {
     execFileSync('ssh', ['-o', `ControlPath=${CONTROL_PATH}`, '-O', 'exit', HOST], { stdio: 'ignore' })
   } catch { /* اگر ماستر از اول برقرار نشده بود، چیزی برای بستن نیست */ }
@@ -162,7 +169,7 @@ function stopControlMaster() {
 
 const scpOnce = (local, remotePath) =>
   execFileSync('scp', [...SCP_OPTS, local, `${HOST}:${remotePath}`], { stdio: 'inherit', timeout: 5 * 60 * 1000 })
-const ssh = (cmd) => execFileSync('ssh', [...SCP_OPTS, HOST, cmd], { stdio: 'inherit' })
+const ssh = (cmd) => execFileSync('ssh', [...SCP_OPTS, HOST, cmd], { stdio: 'inherit', timeout: 60 * 1000 })
 
 // نصب‌کننده دوبار پشت‌سرهم با «Connection reset by peer» شکست خورد — یک قطعی
 // شبکه‌ی واقعی روی انتقال ۱۱۶ مگابایتی پیوسته، نه کندی. راه‌حل تکرار همان تلاش
@@ -200,6 +207,15 @@ function scpWithRetry(local, remotePath) {
 
 function scpLargeFile(local, remoteName) {
   const remotePath = `${REMOTE}/${remoteName}`
+  // بازسازی تفاضلی/تلاش قبلی فقط با هش کامل یکسان قابل استفادهٔ دوباره است.
+  if (process.env.CUBITA_PUBLISH_REUSE_INSTALLER === '1') {
+    const expected = createHash('sha256').update(readFileSync(local)).digest('hex')
+    const got = execFileSync('ssh', [...SCP_OPTS, HOST, `sha256sum "${remotePath}"`],
+      { encoding: 'utf8', timeout: 60 * 1000 }).trim().split(/\s+/)[0]
+    if (got !== expected) throw new Error(`هش نصب‌کنندهٔ موجود با فایل محلی یکسان نیست: ${remoteName}`)
+    console.log('  نصب‌کنندهٔ موجود با هش کامل تأیید شد')
+    return
+  }
   const size = statSync(local).size
   if (size < CHUNK_MB * 1024 * 1024 * 2) {
     scpWithRetry(local, remotePath)
@@ -208,7 +224,18 @@ function scpLargeFile(local, remoteName) {
 
   const chunkDir = mkdtempSync(path.join(tmpdir(), 'cubita-chunks-'))
   try {
-    execFileSync('split', ['-b', `${CHUNK_MB}m`, '-d', '-a', '3', local, path.join(chunkDir, 'part_')])
+    // split در ویندوز نصب نیست؛ یک بافر محدود، همان تکه‌های ترتیبی را می‌سازد.
+    const fd = openSync(local, 'r')
+    try {
+      const buffer = Buffer.alloc(CHUNK_MB * 1024 * 1024)
+      let offset = 0, index = 0
+      while (offset < size) {
+        const count = readSync(fd, buffer, 0, Math.min(buffer.length, size - offset), offset)
+        if (!count) throw new Error('فایل نصب پیش از پایان خواندن تغییر کرد')
+        writeFileSync(path.join(chunkDir, `part_${String(index++).padStart(3, '0')}`), buffer.subarray(0, count))
+        offset += count
+      }
+    } finally { closeSync(fd) }
     const parts = readdirSync(chunkDir).sort()
     console.log(`  ${parts.length} تکه‌ی ${CHUNK_MB} مگابایتی`)
 
@@ -237,7 +264,11 @@ function scpLargeFile(local, remoteName) {
     }
     console.log(`  sha256 تأیید شد: ${localHash.slice(0, 16)}…`)
   } finally {
-    rmSync(chunkDir, { recursive: true, force: true })
+    const cleanupPath = path.resolve(chunkDir)
+    if (path.dirname(cleanupPath) !== path.resolve(tmpdir()) || !path.basename(cleanupPath).startsWith('cubita-chunks-')) {
+      throw new Error('پوشهٔ موقت انتشار خارج از مسیر مورد انتظار است')
+    }
+    rmSync(cleanupPath, { recursive: true, force: true })
   }
 }
 
@@ -286,7 +317,7 @@ try {
   ssh(`chown -R hesabdari:hesabdari ${REMOTE} && ls -la ${REMOTE}`)
 } finally {
   stopControlMaster()
-  if (!master.killed) master.kill()
+  if (master && !master.killed) master.kill()
 }
 
 // راستی‌آزمایی از بیرون: نامی که در latest.yml نوشته شده باید واقعاً قابل دانلود
