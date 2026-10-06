@@ -315,7 +315,6 @@ export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
 // («فاکتور فروش»، «بسته محصول») و دفترش **جمع** («فاکتورهای فروش»، «بسته‌های محصول»)؛ صفحه‌ای که فرم و
 // دفترش یکی است جمع است («صندوق‌ها»، «حساب‌های بانکی»). پسوندِ «جدید» رفت — کارِ هر ردیفِ عملیات ساختن است.
 export const NAV_GROUPS: NavGroup[] = [
-  { heading: 'تعمیرگاه', icon: <Wrench size={17} />, items: [{ key: 'repair', label: 'تعمیرگاه', icon: <Wrench size={18} /> }] },
   {
     heading: 'میزکار',
     items: [{ key: 'overview', label: 'داشبورد', icon: <LayoutDashboard size={18} /> }],
@@ -503,6 +502,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'assurancehealth', label: 'کارنامه سلامت دفتر', icon: <Gauge size={18} /> },
     ],
   },
+  { heading: 'تعمیرگاه', icon: <Wrench size={17} />, items: [{ key: 'repair', label: 'تعمیرگاه', icon: <Wrench size={18} /> }] },
   {
     heading: 'اتوماسیون اداری',
     icon: <ClipboardList size={17} />,

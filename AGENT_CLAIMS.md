@@ -34,7 +34,6 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
-| Codex | `backend/app/{models,schemas,services,routers}/repair*`، مدل و روتر inventory برای مشتری، `services/warehouse_issues.py` برای اتصال چند خروج به یک فاکتور، `services/receipts.py` و آزمون رسید برای اصلاح حساب وجوه در راه، `services/sms.py` برای جلوگیری از لاگ URL کلید، `services/assets.py` و آزمون دارایی برای امانت جایگزین از گردش تحویل موجود، `backend/alembic/versions/0190*`، `backend/scripts/*repair*`، آزمون repair، رجیستری مدل/روتر/ماژول/مجوز/شماره‌گذاری، `desktop/src/pages/repair/`، `desktop/src/main.tsx` برای صفحهٔ عمومی مشتری، ناوبری و API، مستندات تعمیرگاه؛ pytest/alembic منفرد | توسعهٔ مرحله‌ای تعمیرگاه؛ 0190 رزرو، سر فعلی 0189؛ بدون استقرار | 2026-10-06 |
 
 
 
@@ -117,6 +116,8 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 ---
 
 ## تاریخچه‌ی ادعاهای بسته‌شده
+
+- 2026-10-06 — Codex: تعمیرگاه در PR268 تحویل پیش‌نویس شد؛ 0190 با ۴۷ جدول، بک‌اند ۴۶۲۷ و فرانت‌اند ۱۰۷۴ پاس. ادعای فایل‌ها و pytest/alembic آزاد شد؛ استقرار انجام نشده.
 
 نگه‌داشتنِ چند ردیفِ آخر کافی است؛ قدیمی‌ترها را پاک کن.
 
