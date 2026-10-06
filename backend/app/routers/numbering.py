@@ -20,6 +20,7 @@ router = APIRouter(prefix="/api/numbering", tags=["numbering"])
 
 #: برچسبِ فارسیِ هر نوعِ سند. کلیدها همان `DOC_TYPES` هستند و تست تضمین می‌کند جا نمانند.
 DOC_LABELS: dict[str, str] = {
+    "repair_admission": "پذیرش تعمیرگاه",
     "office_incoming": "نامهٔ وارده",
     "office_outgoing": "نامهٔ صادره",
     "office_internal": "نامهٔ داخلی",

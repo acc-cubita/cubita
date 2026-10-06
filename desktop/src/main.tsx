@@ -4,6 +4,15 @@ import './index.css'
 import App from './App.tsx'
 import { applyTheme, getStoredThemeId } from './lib/theme'
 import { applyExperience, getStoredMode } from './lib/experienceMode'
+import { RepairPortalPage } from './pages/repair/RepairPortalPage'
+
+const repairPortal=window.location.pathname==='/repair-track'
+const repairCredential=repairPortal?new URLSearchParams(window.location.hash.slice(1)).get('token')||'':''
+if(repairPortal){
+  // لینک در حافظهٔ همین صفحه می‌ماند؛ نه در تاریخچهٔ مرورگر و نه ذخیرهٔ دائمی.
+  window.history.replaceState(null,'',window.location.pathname)
+  const policy=document.createElement('meta');policy.name='referrer';policy.content='no-referrer';document.head.append(policy)
+}
 
 // پیش از render تا صفحه بدونِ پرش با پوسته‌ی ذخیره‌شده بالا بیاید
 applyTheme(getStoredThemeId())
@@ -14,6 +23,6 @@ applyExperience(getStoredMode())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {repairPortal?<RepairPortalPage credential={repairCredential}/>:<App />}
   </StrictMode>,
 )

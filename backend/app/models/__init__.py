@@ -162,7 +162,24 @@ from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
 from app.models.staff_audit import StaffAuditLog
 from app.models.user import Role, User
 
+from app.models.repair import RepairBranch, RepairBranchAccess, RepairDeviceType, RepairDevice, RepairCase, RepairEvent, RepairAttachment, RepairTask, RepairFault, RepairEstimate, RepairEstimateDecision
+from app.models.repair import RepairPart, RepairPartMovement, RepairWork, RepairOutsource, RepairQualityCheck, RepairRemovedPart, RepairDeviceSecret
+from app.models.repair import RepairPurchaseRequest
+from app.models.repair import RepairDocument, RepairDelivery
+from app.models.repair import RepairMessageTemplate, RepairNotification, RepairNotificationAttempt
+from app.models.repair import RepairPortalToken, RepairPortalSubmission, RepairCustomerMessage
+from app.models.repair import RepairOnlineSettings,RepairPaymentIntent
+
 __all__ = [
+    "RepairBranch", "RepairBranchAccess", "RepairDeviceType", "RepairDevice", "RepairCase", "RepairEvent", "RepairAttachment",
+    "RepairTask",
+    "RepairFault", "RepairEstimate", "RepairEstimateDecision",
+    "RepairPart", "RepairPartMovement", "RepairWork", "RepairOutsource", "RepairQualityCheck", "RepairRemovedPart", "RepairDeviceSecret",
+    "RepairPurchaseRequest",
+    "RepairDocument", "RepairDelivery",
+    "RepairMessageTemplate", "RepairNotification", "RepairNotificationAttempt",
+    "RepairPortalToken", "RepairPortalSubmission", "RepairCustomerMessage",
+    "RepairOnlineSettings", "RepairPaymentIntent",
     "AssuranceEngagement",
     "PlatformAdmin",
     "StaffAuditLog",
@@ -348,3 +365,21 @@ __all__ = [
     "SalesInquiry",
     "OfficeLetter", "OfficeReferral", "OfficeAttachment", "OfficeEvent",
 ]
+
+from app.models.repair import RepairWarranty, RepairWarrantyClaim
+__all__ += ["RepairWarranty", "RepairWarrantyClaim"]
+
+from app.models.repair import RepairFeeRule, RepairTechnicianFee
+__all__ += ["RepairFeeRule", "RepairTechnicianFee"]
+
+from app.models.repair import RepairServiceRequest, RepairTechnicianSkill, RepairAppointment, RepairFieldEvent
+__all__ += ["RepairServiceRequest", "RepairTechnicianSkill", "RepairAppointment", "RepairFieldEvent"]
+
+from app.models.repair import RepairCustodyTransfer, RepairCustodyLeg
+__all__ += ["RepairCustodyTransfer", "RepairCustodyLeg"]
+
+from app.models.repair import RepairLoan
+__all__ += ["RepairLoan"]
+
+from app.models.repair import RepairMaintenanceContract, RepairContractDevice, RepairContractCase, RepairMaintenancePlan, RepairMaintenanceVisit, RepairConsolidatedBill, RepairConsolidatedBillMember
+__all__ += ["RepairMaintenanceContract", "RepairContractDevice", "RepairContractCase", "RepairMaintenancePlan", "RepairMaintenanceVisit", "RepairConsolidatedBill", "RepairConsolidatedBillMember"]

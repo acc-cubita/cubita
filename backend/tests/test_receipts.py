@@ -149,6 +149,8 @@ def test_a_receipt_can_carry_four_instruments_in_one_entry(db, user):
     assert len(_lines(db, receipt)) == 5
     assert _credit_on(db, receipt, cc.ACCOUNTS_RECEIVABLE) == Decimal(3_360)
     assert _debit_on(db, receipt, cc.CHECKS_RECEIVABLE) == Decimal(145)
+    assert _debit_on(db, receipt, cc.POS_CLEARING) == Decimal(1_800)
+    assert _debit_on(db, receipt, cc.BANK) == Decimal(15)
 
     # صندوق و بانک با تفصیلیِ خودشان، نه با حسابِ عمومی
     rows = svc.components(db, receipt)
@@ -639,3 +641,17 @@ def test_the_printed_sheet_is_built_from_the_receipt_itself(db, user):
         void_reason=receipt.void_reason,
     )
     assert "این رسید باطل شده است" in voided_html
+
+
+def test_card_receipt_settlement_moves_clearing_to_bank_without_second_customer_effect(db,user):
+    from app.services.pos_settlements import create as settle
+    term=_terminal(db)
+    receipt=_receipt(db,user,cards=[ReceiptCardIn(amount=Decimal(1000),pos_terminal_id=term.id,reference_no=f'CLEAR-{next(_SEQ)}')])
+    assert _debit_on(db,receipt,cc.BANK)==0
+    assert _debit_on(db,receipt,cc.POS_CLEARING)==1000
+    settlement=settle(db,user,pos_terminal_id=term.id,settlement_date=TODAY+timedelta(days=1),settle_through=TODAY,fee_amount=Decimal(10))
+    lines=db.query(JournalLine).filter(JournalLine.entry_id.in_([receipt.journal_entry_id,settlement.journal_entry_id])).all()
+    clearing=get_account(db,cc.POS_CLEARING).id;bank=get_account(db,cc.BANK).id;customer=get_account(db,cc.ACCOUNTS_RECEIVABLE).id
+    assert sum(l.debit-l.credit for l in lines if l.account_id==clearing)==0
+    assert sum(l.debit-l.credit for l in lines if l.account_id==bank)==990
+    assert sum(l.debit-l.credit for l in lines if l.account_id==customer)==-1000

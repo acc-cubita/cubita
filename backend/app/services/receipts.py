@@ -242,10 +242,13 @@ def _component_rows(
         amount = _base(row.amount, rate)
         document_total += row.amount
         base_total += amount
+        from app.services.pos_settlements import clearing_account
+        # همان حسابِ مسیر قدیمی خزانه؛ واریز بانک هنگام تسویهٔ واقعی ثبت می‌شود.
+        clearing = clearing_account(db)
         lines.append(
             JournalLine(
-                account_id=bank.gl_account_id,
-                analytic_id=bank.analytic_id,
+                account_id=clearing.id,
+                analytic_id=term.analytic_id,
                 debit=amount,
                 credit=0,
                 description=row.description or f"کارت‌خوان {term.label or term.terminal_no}",

@@ -163,6 +163,7 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     __tablename__ = "contacts"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_contacts_tenant_id"),
         CheckConstraint(f"credit_action IN {CREDIT_ACTIONS}", name="ck_contacts_credit_action"),
         CheckConstraint(
             "discount_rate >= 0 AND discount_rate <= 100 "

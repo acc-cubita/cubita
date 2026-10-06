@@ -38,6 +38,7 @@ import { GuidedDashboard } from './GuidedDashboard'
 import { CommandPalette } from './CommandPalette'
 import { CalendarPage } from '../pages/CalendarPage'
 import { AutomationPage } from '../pages/automation/AutomationPage'
+import { RepairPage } from '../pages/repair/RepairPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
@@ -217,6 +218,7 @@ import {
 } from '../pages/accounting/AccountingListPages'
 
 const PAGE_TITLES: Record<PageKey, string> = {
+  repair: 'تعمیرگاه',
   automation: 'کارتابل من',
   letternew: 'نامه',
   letterlist: 'دبیرخانه و بایگانی',
@@ -845,6 +847,7 @@ export function Dashboard({
           {page === 'moadianhistory' && <MoadianHistoryPage token={token} me={me} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'automation' && <AutomationPage token={token} me={me} mode="inbox" onNavigate={navigate} />}
+          {page === 'repair' && <RepairPage token={token} me={me} />}
           {page === 'letternew' && <AutomationPage token={token} me={me} mode="new" onNavigate={navigate} />}
           {page === 'letterlist' && <AutomationPage token={token} me={me} mode="registry" onNavigate={navigate} />}
           {page === 'team' && <TeamPage token={token} />}

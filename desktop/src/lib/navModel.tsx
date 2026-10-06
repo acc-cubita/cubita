@@ -106,6 +106,7 @@ import { isEnterprise } from '../platform'
 export type PageKey =
   | 'overview'
   | 'automation'
+  | 'repair'
   | 'letternew'
   | 'letterlist'
   | 'pos'
@@ -314,6 +315,7 @@ export type NavGroup = { heading: string; icon?: ReactNode; items: NavItem[] }
 // («فاکتور فروش»، «بسته محصول») و دفترش **جمع** («فاکتورهای فروش»، «بسته‌های محصول»)؛ صفحه‌ای که فرم و
 // دفترش یکی است جمع است («صندوق‌ها»، «حساب‌های بانکی»). پسوندِ «جدید» رفت — کارِ هر ردیفِ عملیات ساختن است.
 export const NAV_GROUPS: NavGroup[] = [
+  { heading: 'تعمیرگاه', icon: <Wrench size={17} />, items: [{ key: 'repair', label: 'تعمیرگاه', icon: <Wrench size={18} /> }] },
   {
     heading: 'میزکار',
     items: [{ key: 'overview', label: 'داشبورد', icon: <LayoutDashboard size={18} /> }],
@@ -604,6 +606,7 @@ PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 
 //: «ورود گروهی اشخاص» داده‌اش طرف‌حساب است؛ پس کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
 PAGE_MODULE_KEY.contactimport = 'contacts'
+PAGE_MODULE_KEY.repair = 'repair'
 for (const key of ['automation', 'letternew', 'letterlist'] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'automation'
 }

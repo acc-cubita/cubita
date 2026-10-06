@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import require_permission
+from app.deps import Principal, get_principal, require_permission
 from app.models.inventory import (
     Contact,
     Item,
@@ -171,7 +171,7 @@ def list_contacts(
         None,
         description="فقط فعال‌ها (true) یا فقط غیرفعال‌ها (false). نیامده یعنی هر دو.",
     ),
-    _=Depends(require_permission("invoices", "view")),
+    _=Depends(require_permission(("invoices", "repair"), "view")),
 ):
     # نام یکتا نیست، پس id تساوی را می‌شکند. طرف‌حساب‌های سیستمی (مثلِ «فروشِ کارتیِ
     # گذری») از فهرستِ کاربر پنهان می‌مانند.
@@ -327,8 +327,11 @@ def _assert_opening_unlocked(
 def create_contact(
     data: ContactIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_permission("invoices", "create")),
+    user: User = Depends(require_permission(("invoices", "repair"), "create")),
+    principal: Principal = Depends(get_principal),
 ):
+    if not principal.has_permission("invoices", "create") and (data.opening_ar_amount or data.opening_ap_amount):
+        raise HTTPException(403, "ثبت ماندهٔ مالی مشتری به مجوز فروش نیاز دارد؛ پذیرشگر می‌تواند مشتری بدون مانده ثبت کند.")
     _assert_company_refs(db, data)
     _assert_opening_unlocked(db, data)
     fields = data.model_dump()

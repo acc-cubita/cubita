@@ -709,6 +709,52 @@ def post_sales_invoice_from_issue(
     return invoice
 
 
+def post_sales_invoice_from_issues(db: Session, data: SalesInvoiceIn, issue_ids: list[UUID], user: User) -> SalesInvoice:
+    """یک فاکتور از چند خروج مستقل؛ اعتبارسنجی و ثبت از همان موتور تک‌خروجی.
+
+    همهٔ خروج‌ها هم‌انبار و برای همین مشتری‌اند. قفل‌ها به ترتیب UUID گرفته
+    می‌شوند و هر مقدار از خالص خروج و نسبت تاریخی خودش می‌آید.
+    """
+    if not issue_ids or len(set(issue_ids)) != len(issue_ids):
+        raise HTTPException(422, "خروج‌های مبنا باید غیرخالی و غیرتکراری باشند.")
+    issues = db.query(WarehouseIssue).filter(WarehouseIssue.id.in_(issue_ids)).order_by(WarehouseIssue.id).with_for_update().all()
+    if len(issues) != len(issue_ids): raise HTTPException(404, "یکی از خروج‌های مبنا یافت نشد.")
+    warehouse_id = issues[0].warehouse_id
+    if any(i.warehouse_id != warehouse_id or i.receiver_id != data.contact_id for i in issues):
+        raise HTTPException(422, "خروج‌ها باید از یک انبار و برای مشتری همین فاکتور باشند.")
+    goods = {l.id: i.id for i in issues for l in i.lines}
+    if any(l.source_issue_line_id and l.source_issue_line_id not in goods for l in data.lines):
+        raise HTTPException(422, "ردیف فاکتور باید از خروج‌های مبنا باشد.")
+    linked, frozen, net_all = {}, {}, {}
+    for issue in issues:
+        indices = [idx for idx, line in enumerate(data.lines) if goods.get(line.source_issue_line_id) == issue.id]
+        subset = data.model_copy(update={'source_warehouse_issue_id':issue.id,'warehouse_id':warehouse_id,'lines':[data.lines[idx] for idx in indices]})
+        _, links, net, conversions = _lock_issue_for_invoice(db, subset)
+        linked.update({indices[idx]: source_id for idx,source_id in links.items()})
+        frozen.update({indices[idx]: value for idx,value in conversions.items()})
+        net_all.update(net)
+    for line in data.lines:
+        if not line.source_issue_line_id:
+            item = db.get(Item,line.item_id)
+            if item is None or not item.is_service: raise HTTPException(422, "کالای فاکتور باید از خروج واقعی و اجرت از خدمت موجود باشد.")
+    invoice = post_sales_invoice(db,data.model_copy(update={'warehouse_id':warehouse_id,'source_warehouse_issue_id':None}),user,move_inventory=False,issue_accounting=True,frozen_conversions=frozen)
+    sources = {l.id:l for i in issues for l in i.lines}
+    pool = list(invoice.lines)
+    total = Decimal(0)
+    for index,source_id in linked.items():
+        source,wanted = sources[source_id],data.lines[index]
+        match = next((line for line in pool if line.item_id == source.item_id and Decimal(line.qty) == Decimal(wanted.qty)
+                      and Decimal(line.unit_price) == Decimal(wanted.unit_price)),None)
+        if match is None: raise HTTPException(409, "تطبیق ردیف فاکتور و خروج ممکن نشد؛ هیچ سندی ثبت نشد.")
+        pool.remove(match);source.sales_invoice_line_id = match.id
+        match.unit_cost = Decimal(source.unit_cost)
+        total += (net_all[source_id]*Decimal(source.unit_cost)).quantize(Decimal(1))
+    for issue in issues: issue.sales_invoice_id = invoice.id
+    invoice.total_cost = Decimal(invoice.total_cost or 0)+total
+    db.flush();db.refresh(invoice)
+    return invoice
+
+
 def invoice_context(db: Session, issue: WarehouseIssue) -> dict:
     if issue.is_voided:
         raise HTTPException(status.HTTP_409_CONFLICT, "از خروجِ باطل‌شده نمی‌توان فاکتور فروش ساخت")
