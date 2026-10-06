@@ -268,7 +268,11 @@ function scpLargeFile(local, remoteName) {
     if (path.dirname(cleanupPath) !== path.resolve(tmpdir()) || !path.basename(cleanupPath).startsWith('cubita-chunks-')) {
       console.error('پوشهٔ موقت انتشار خارج از مسیر مورد انتظار است؛ پاک‌سازی انجام نشد')
     } else {
-      rmSync(cleanupPath, { recursive: true, force: true })
+      try {
+        rmSync(cleanupPath, { recursive: true, force: true })
+      } catch {
+        console.error('پاک‌سازی فایل‌های موقت انتقال انجام نشد؛ پوشهٔ موقت باقی مانده است')
+      }
     }
   }
 }
