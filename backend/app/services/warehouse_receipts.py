@@ -738,8 +738,11 @@ def create_warehouse_receipt(
 
 
 def void_warehouse_receipt(
-    db: Session, receipt_id: UUID, *, reason: str, user: User, void_date: date | None = None
+    db: Session, receipt_id: UUID, *, reason: str, user: User, void_date: date | None = None, allow_repair_harvest: bool = False
 ) -> WarehouseReceipt:
+    from app.models.repair_completion import RepairHarvest
+    if not allow_repair_harvest and db.query(RepairHarvest.id).filter_by(receipt_id=receipt_id,status='posted').first():
+        raise HTTPException(409,'رسید قطعات استخراج‌شده باید همراه خروج دستگاه و ضایعات از گردش استخراج ابطال شود.')
     receipt = db.get(WarehouseReceipt, receipt_id)
     if receipt is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "رسید انبار یافت نشد")

@@ -278,6 +278,11 @@ def main(argv: list[str] | None = None) -> int:
     common(sub.add_parser("uninstall-services"))
     common(sub.add_parser("status"))
     common(sub.add_parser("backup"))
+    jobs=sub.add_parser("repair-jobs")
+    common(jobs)
+    jobs.add_argument('--tenant',required=True)
+    jobs.add_argument('--limit',type=int,default=20)
+    jobs.add_argument('--send',action='store_true')
     diag = sub.add_parser("diagnostics")
     common(diag)
     diag.add_argument("--out", default=None)
@@ -293,6 +298,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--payload", required=True)
 
     args = parser.parse_args(argv)
+    if args.cmd=='repair-jobs':
+        _enter_home(Path(args.home))
+        from app.repair_jobs import main as run_repair_jobs
+        values=['--tenant',args.tenant,'--limit',str(args.limit)]
+        if args.send: values.append('--send')
+        return run_repair_jobs(values)
     if args.cmd == "service-recover":
         import json
         from app.onprem.service_recovery import recover_local_services

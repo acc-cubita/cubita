@@ -18,3 +18,4 @@ fpdf2==2.8.7
 uharfbuzz==0.55.0
 qrcode==8.2
 python-barcode==0.16.1
+openpyxl==3.1.5

@@ -389,3 +389,16 @@ __all__ += ['RepairBranchSettings', 'RepairIntakeBatch', 'RepairCaseDetails', 'R
 
 from app.models.repair_completion import RepairBulkOperation, RepairTimeSession, RepairTimeCorrection
 __all__ += ["RepairBulkOperation", "RepairTimeSession", "RepairTimeCorrection"]
+
+from app.models.repair_completion import RepairServiceProfile, RepairTypeProtocol, RepairDiagnosticRecord, RepairSupervisorReview, RepairWorkPause, RepairDeadlineAgreement, RepairKnowledgeArticle, RepairWorkTimeLink
+__all__ += ["RepairServiceProfile", "RepairTypeProtocol", "RepairDiagnosticRecord", "RepairSupervisorReview", "RepairWorkPause", "RepairDeadlineAgreement", "RepairKnowledgeArticle", "RepairWorkTimeLink"]
+
+from .repair_completion import RepairPartAssessment, RepairSupplierClaim, RepairHarvest
+__all__.extend(['RepairPartAssessment','RepairSupplierClaim','RepairHarvest'])
+from .repair_completion import RepairHistoryImport, RepairHistoricalRecord
+__all__.extend(['RepairHistoryImport','RepairHistoricalRecord'])
+from .repair_completion import RepairOnsiteAction, RepairOnsiteApproval
+__all__.extend(['RepairOnsiteAction','RepairOnsiteApproval'])
+
+from .repair_completion import RepairParticipation, RepairCustomerFollowup, RepairNotificationPolicy
+__all__.extend(['RepairParticipation','RepairCustomerFollowup','RepairNotificationPolicy'])

@@ -42,6 +42,10 @@ def pdf_receipt(db,row):
     fields=[('شماره',meta.display_number if meta else str(row.number)),('نسخهٔ رسید',str(meta.receipt_revision if meta else 1)),('تاریخ',format_jalali(row.admission_date)),('مشتری',row.owner_snapshot['name']),('دستگاه',' / '.join(row.device_snapshot.get(k,'') for k in ('brand','model') if row.device_snapshot.get(k))),('ایراد',row.reported_issue),('ظاهر',row.appearance),('لوازم',row.accessories),('شرایط',row.terms)]
     for label,value in fields:
         pdf.multi_cell(0,8,f'{label}: {value}',new_x='LMARGIN',new_y='NEXT',align='R')
+    due=meta.settings_snapshot.get('initial_due_date') if meta and 'initial_due_date' in meta.settings_snapshot else row.due_date
+    if due:
+        from datetime import date
+        pdf.multi_cell(0,8,'موعد اولیه: '+format_jalali(date.fromisoformat(due) if isinstance(due,str) else due),new_x='LMARGIN',new_y='NEXT',align='R')
     barcode,qr=code_images(row)
     if pdf.get_y()>240: pdf.add_page()
     top=pdf.get_y()+5

@@ -31,19 +31,21 @@ def latest(db,technician_id):
 
 
 def calculation(db,row,rule):
-    works=db.query(RepairWork).filter_by(case_id=row.id,technician_id=rule.technician_id).order_by(RepairWork.id).all()
+    from app.services.repair_business import participation_basis
+    works,labor,weighted,shares,has_shares=participation_basis(db,row,rule.technician_id)
     if not works: raise HTTPException(409,'برای این تکنسین کار واقعی در پرونده ثبت نشده است.')
-    labor=sum((w.charge_amount for w in works),Decimal(0))
     if rule.mode=='fixed_case': expected=rule.value
-    elif rule.mode=='per_operation': expected=rule.value*len(works)
+    elif rule.mode=='per_operation': expected=rule.value*weighted
     else: expected=labor*rule.value/Decimal(100)
     expected=expected.quantize(Decimal(1),rounding=ROUND_HALF_UP)
     invoices=db.query(PurchaseInvoice).join(RepairTechnicianFee,RepairTechnicianFee.purchase_invoice_id==PurchaseInvoice.id).filter(RepairTechnicianFee.case_id==row.id,RepairTechnicianFee.technician_id==rule.technician_id,PurchaseInvoice.voided_at.is_(None)).all()
     posted=sum((i.total_amount for i in invoices),Decimal(0))
     if expected<posted: raise HTTPException(409,'سهم محاسبه‌شده از هزینهٔ ثبت‌شده کمتر است؛ فاکتور قبلی باید در گردش اصلاح فاکتور بررسی شود.')
-    return expected-posted,{'basis':'lead_technician_actual_work_gross_labor_before_invoice_discount','work_ids':[str(w.id) for w in works],
+    snapshot={'basis':'approved_participation_weighted_gross_labor' if has_shares else 'lead_technician_actual_work_gross_labor_before_invoice_discount','work_ids':[str(w.id) for w in works],
         'labor_rial':str(labor),'operations':len(works),'expected_rial':str(expected),'already_posted_rial':str(posted),
         'rule_version':rule.version,'mode':rule.mode,'value':str(rule.value)}
+    if has_shares: snapshot.update(participation=shares,weighted_operations=str(weighted))
+    return expected-posted,snapshot
 
 
 def draft(db,p,row,data):

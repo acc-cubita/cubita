@@ -285,7 +285,7 @@ def receipt(case_id: UUID, db: Session = Depends(get_db), p: Principal = Depends
               "تحویل‌دهنده": row.delivering_name, "دستگاه": " / ".join(str(row.device_snapshot[k]) for k in ("category", "brand", "model")),
               "سریال": row.device_snapshot["serial"], "IMEI": row.device_snapshot["imei"], "ایراد اعلام‌شده": row.reported_issue,
               "وضعیت ظاهری": row.appearance, "لوازم همراه": row.accessories, "شرایط پذیرش": row.terms,
-              "تاریخ پذیرش": format_jalali(row.admission_date), "موعد اولیه": format_jalali(row.due_date)}
+              "تاریخ پذیرش": format_jalali(row.admission_date), "موعد اولیه": format_jalali(date.fromisoformat(meta.settings_snapshot["initial_due_date"]) if meta and meta.settings_snapshot.get("initial_due_date") else None if meta and "initial_due_date" in meta.settings_snapshot else row.due_date)}
     body = "".join(f"<dt>{escape(k)}</dt><dd>{escape(v)}</dd>" for k, v in fields.items())
     from app.services.repair_printing import codes_html
     barcode = codes_html(row)

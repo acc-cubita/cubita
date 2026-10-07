@@ -1023,13 +1023,29 @@ def test_real_concurrent_calendar_and_contract_quota(tenant_id,user):
             db.commit()
 
 
-def test_real_browser_admission_against_isolated_backend(client,db,intake):
+def test_real_browser_admission_against_isolated_backend(client,db,intake,user):
+    from datetime import datetime,timedelta,timezone
     import os
     if os.environ.get('REPAIR_BROWSER_QA')!='1':
         pytest.skip('Opt-in Chromium integration requires local WEB_ONLY Vite on 5187')
     import socket,subprocess,time,threading
     from pathlib import Path
     import uvicorn
+    from tests.factories import make_item,main_warehouse,other_warehouse
+    from app.schemas.invoices import PurchaseInvoiceIn,PurchaseInvoiceLineIn
+    from app.services.inventory import post_purchase_invoice,get_stock_qty
+    device=make_item(db,name='دستگاه انباری مرورگر');part=make_item(db,name='قطعه خروجی مرورگر')
+    source=main_warehouse(db);output=other_warehouse(db)
+    post_purchase_invoice(db,PurchaseInvoiceIn(invoice_date=date.today(),warehouse_id=source.id,lines=[PurchaseInvoiceLineIn(item_id=device.id,qty=1,unit_cost=1000)]),user)
+    assert client.put('/api/repair/technicians/'+str(user.id)+'/skills',json={'type_ids':[intake['device']['type_id']]}).status_code==200
+    for index,width in enumerate([1440,390]):
+        request=client.post('/api/repair/service-requests',json={'branch_id':intake['branch_id'],'contact_id':intake['contact_id'],'type_id':intake['device']['type_id'],'device_description':'اعزام مرورگر '+str(width),'reported_issue':'آزمون در محل','address':'محل آزمایشی','coordinator_name':'نماینده آزمایشی','coordinator_phone':'09123456789'},headers={'Idempotency-Key':str(uuid4())}).json()
+        starts=datetime.now(timezone.utc)+timedelta(hours=2*index+1)
+        slot=client.post('/api/repair/service-requests/'+request['id']+'/appointments',json={'version':request['version'],'technician_id':str(user.id),'starts_at':starts.isoformat(),'ends_at':(starts+timedelta(hours=1)).isoformat()},headers={'Idempotency-Key':str(uuid4())})
+        assert slot.status_code==201,slot.text
+        for version,state in [(2,'dispatched'),(3,'onsite')]:
+            changed=client.post('/api/repair/service-requests/'+request['id']+'/appointments/'+slot.json()['id']+'/status',json={'version':version,'status':state,'result':'حضور آزمایشی'})
+            assert changed.status_code==200,changed.text
     listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen(128)
     port=listener.getsockname()[1]
     server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=port,lifespan='off',log_level='warning'))
@@ -1040,11 +1056,18 @@ def test_real_browser_admission_against_isolated_backend(client,db,intake):
         deadline=time.monotonic()+10
         while not server.started and time.monotonic()<deadline:thread.join(.05)
         assert server.started
-        env={**os.environ,'REPAIR_QA_API_URL':f'http://127.0.0.1:{port}','REPAIR_QA_CONTACT':intake['contact_id'],'REPAIR_QA_BRANCH':intake['branch_id'],'REPAIR_QA_TYPE':intake['device']['type_id']}
+        env={**os.environ,'REPAIR_QA_USER':str(user.id),'REPAIR_QA_DEVICE':str(device.id),'REPAIR_QA_PART':str(part.id),'REPAIR_QA_SOURCE':str(source.id),'REPAIR_QA_OUTPUT':str(output.id),'REPAIR_QA_API_URL':f'http://127.0.0.1:{port}','REPAIR_QA_CONTACT':intake['contact_id'],'REPAIR_QA_BRANCH':intake['branch_id'],'REPAIR_QA_TYPE':intake['device']['type_id']}
         result=subprocess.run(['node','scripts/verify-repair-backend.mjs'],cwd=Path(__file__).resolve().parents[2]/'desktop',env=env,capture_output=True,text=True,timeout=120,encoding='utf-8')
         assert result.returncode==0,result.stdout+'\n'+result.stderr
         assert db.query(RepairCase).count()==before[0]+6
-        assert db.query(StockLedger).count()==before[1] and db.query(JournalEntry).count()==before[2]
+        from app.models.repair_completion import RepairTimeSession,RepairHistoricalRecord
+        sessions=db.query(RepairTimeSession).all()
+        assert len(sessions)==2 and all(s.confirmed_seconds>=1 for s in sessions)
+        assert db.query(RepairHistoricalRecord).count()==2
+        from app.models.repair_completion import RepairOnsiteApproval
+        assert db.query(RepairOnsiteApproval).count()==2
+        assert db.query(StockLedger).count()==before[1]+12 and db.query(JournalEntry).count()==before[2]+8
+        assert get_stock_qty(db,device.id,source.id)==1 and get_stock_qty(db,part.id,output.id)==0
     finally:
         server.should_exit=True;thread.join(10);listener.close()
         assert not thread.is_alive()

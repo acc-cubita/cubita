@@ -59,6 +59,7 @@ def register_admission(db,p,row):
     if config:
         meta.settings_snapshot=jsonable_encoder(core.out(config))
         meta.display_number=config.number_format.format(branch=config.code,year=gregorian_to_jalali(row.admission_date)[0],number=row.number)
+    meta.settings_snapshot={**(meta.settings_snapshot or {}),'initial_due_date':row.due_date.isoformat() if row.due_date else None}
     db.flush()
     return meta
 
@@ -165,7 +166,8 @@ def suggestions(db,p,branch_id,type_id=None):
 def document(db,row,kind):
     meta=metadata(db,row)
     if kind=='intake':
-        return (meta.receipt_revision if meta else 1),jsonable_encoder({'number':meta.display_number if meta else str(row.number),'owner':row.owner_snapshot,'device':row.device_snapshot,'reported_issue':row.reported_issue,'appearance':row.appearance,'accessories':row.accessories,'terms':row.terms,'delivering_name':row.delivering_name,'admission_date':row.admission_date})
+        due=meta.settings_snapshot.get('initial_due_date') if meta and 'initial_due_date' in meta.settings_snapshot else row.due_date
+        return (meta.receipt_revision if meta else 1),jsonable_encoder({'number':meta.display_number if meta else str(row.number),'owner':row.owner_snapshot,'device':row.device_snapshot,'reported_issue':row.reported_issue,'appearance':row.appearance,'accessories':row.accessories,'terms':row.terms,'delivering_name':row.delivering_name,'admission_date':row.admission_date,'initial_due_date':due})
     delivered=db.query(RepairDelivery).filter_by(case_id=row.id).one_or_none()
     if delivered is None: raise HTTPException(409,'ابتدا تحویل واقعی با کنترل مالی ثبت شود؛ امضا جای تحویل نیست.')
     return 1,jsonable_encoder(core.out(delivered))
