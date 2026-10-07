@@ -1,4 +1,5 @@
 from uuid import uuid4
+from datetime import date, timedelta
 import pytest
 from sqlalchemy import text
 from app.deps import Principal, get_principal
@@ -6,6 +7,7 @@ from app.main import app
 from app.models.accounting import JournalEntry
 from app.models.inventory import StockLedger
 from app.models.repair import RepairCase, RepairDevice, RepairBranchAccess
+from app.models.repair_completion import RepairCaseDetails
 from app.models.tenant import Membership
 from app.models.user import Role, User
 from app.models.inventory import Contact
@@ -54,7 +56,7 @@ def test_receipt_snapshot_location_and_visit(client, db, intake):
     row = admit(client, intake).json()
     path = '/api/repair/cases/' + row['id']
     receipt = client.get(path + '/receipt')
-    assert receipt.status_code == 200 and '<svg' in receipt.text
+    assert receipt.status_code == 200 and receipt.text.count('data:image/svg+xml;base64,') == 2
     assert 'مالک دستگاه' in receipt.text and 'قفسه الف' not in receipt.text
     changed = client.put(path + '/location', json={'version': 1, 'storage_location': 'قفسه ب'})
     assert changed.status_code == 200 and changed.json()['version'] == 2
@@ -108,7 +110,7 @@ def test_config_validation_and_rls(client, db, intake):
     assert admit(client, {**intake, 'intake_checklist': {'نامعتبر': True}}).status_code == 422
     assert admit(client, {**intake, 'due_date':'2026-10-05'}).status_code == 422
     assert client.get('/api/repair/cases?limit=201').status_code == 422
-    flags = db.execute(text("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname LIKE 'repair_%' AND relkind='r'")).all()
+    flags = db.execute(text("SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relnamespace = current_schema()::regnamespace AND relname LIKE 'repair_%' AND relkind='r'")).all()
     assert len(flags) == len([t for t in Base.metadata.tables if t.startswith('repair_')]) and all(r[1] and r[2] for r in flags)
 
 
@@ -351,6 +353,7 @@ def test_real_concurrent_numbering_and_identical_retry(tenant_id, user):
         db.query(RepairEvent).filter(RepairEvent.case_id.in_(ids)).delete(synchronize_session=False)
         devices = [r.device_id for r in db.query(RepairCase).filter(RepairCase.id.in_(ids)).all()]
         db.query(IdempotencyKey).filter(IdempotencyKey.resource_id.in_(ids)).delete(synchronize_session=False)
+        db.query(RepairCaseDetails).filter(RepairCaseDetails.case_id.in_(ids)).delete(synchronize_session=False)
         db.query(RepairCase).filter(RepairCase.id.in_(ids)).delete(synchronize_session=False)
         db.query(RepairDevice).filter(RepairDevice.id.in_(devices)).delete(synchronize_session=False)
         db.query(RepairDeviceType).filter_by(id=payload.device.type_id).delete()
@@ -435,6 +438,7 @@ def test_notification_worker_committed_claim_once_and_uncertain_no_auto_retry(te
             db.query(RepairNotification).filter_by(case_id=case_id).delete()
             db.query(RepairMessageTemplate).filter_by(branch_id=ids[0]).delete()
             db.query(RepairEvent).filter_by(case_id=case_id).delete()
+            db.query(RepairCaseDetails).filter_by(case_id=case_id).delete()
             db.query(RepairCase).filter_by(id=case_id).delete()
             db.query(RepairDevice).filter_by(id=device_id).delete()
             db.query(RepairDeviceType).filter_by(id=ids[1]).delete()
@@ -630,7 +634,7 @@ def test_warranty_revisit_expiry_and_charge_guard(client, db, user, intake, appr
         return client.post(path+suffix,json={'version':client.get(path).json()['version'],**data},headers={'Idempotency-Key':str(uuid4())})
     work=post('/work',technician_id=str(user.id),description='تنظیم',work_minutes=10,charge_amount='0')
     assert work.status_code==201,work.text
-    warranty={'scope':'service','source_id':work.json()['id'],'title':'ضمانت تنظیم','valid_from':'2026-10-06','valid_until':'2026-11-06','terms':'همان خرابی'}
+    warranty={'scope':'service','source_id':work.json()['id'],'title':'ضمانت تنظیم','valid_from':date.today().isoformat(),'valid_until':'2026-11-06','terms':'همان خرابی'}
     assert post('/warranties',**warranty).status_code==409
     assert post('/status',status='diagnosing').status_code==200
     assert post('/status',status='repairing').status_code==200
@@ -849,7 +853,7 @@ def test_contract_date_quota_outside_approval_and_periodic_request(client,db,use
     completed=client.post('/api/repair/maintenance-plans/'+plan.json()['id']+'/visits/'+visit.json()['id']+'/complete',json={'result':'سرویس انجام شد'})
     assert completed.status_code==200,completed.text
     updated=next(p for p in client.get('/api/repair/maintenance-plans').json() if p['id']==plan.json()['id'])
-    assert updated['next_due']=='2026-11-05'
+    assert updated['next_due']==(date.today()+timedelta(days=30)).isoformat()
     third=admit(client,admission).json()
     denied=client.post('/api/repair/cases/'+third['id']+'/contract',json={'version':third['version'],'contract_id':cid,'service_date':'2026-10-06','allocated_minutes':0,'covered_value_rial':'0'},headers={'Idempotency-Key':str(uuid4())})
     assert denied.status_code==409,denied.text
@@ -1014,7 +1018,7 @@ def test_real_concurrent_calendar_and_contract_quota(tenant_id,user):
             assert db.query(RepairContractCase).filter_by(contract_id=cid).count()==1
     finally:
         with tenant_session(tenant_id) as db:
-            for model,column,ids in ((RepairFieldEvent,'request_id',requests),(RepairAppointment,'request_id',requests),(RepairServiceRequest,'id',requests),(RepairTechnicianSkill,'type_id',[kind_id]),(RepairContractCase,'contract_id',[cid]),(RepairContractDevice,'contract_id',[cid]),(RepairMaintenanceContract,'id',[cid]),(RepairEvent,'case_id',case_ids),(RepairCase,'id',case_ids),(RepairDevice,'id',[device_id]),(RepairDeviceType,'id',[kind_id]),(RepairBranch,'id',[branch_id]),(Contact,'id',[contact_id])):
+            for model,column,ids in ((RepairFieldEvent,'request_id',requests),(RepairAppointment,'request_id',requests),(RepairServiceRequest,'id',requests),(RepairTechnicianSkill,'type_id',[kind_id]),(RepairContractCase,'contract_id',[cid]),(RepairContractDevice,'contract_id',[cid]),(RepairMaintenanceContract,'id',[cid]),(RepairEvent,'case_id',case_ids),(RepairCaseDetails,'case_id',case_ids),(RepairCase,'id',case_ids),(RepairDevice,'id',[device_id]),(RepairDeviceType,'id',[kind_id]),(RepairBranch,'id',[branch_id]),(Contact,'id',[contact_id])):
                 db.query(model).filter(getattr(model,column).in_(ids)).delete(synchronize_session=False)
             db.commit()
 
@@ -1039,7 +1043,7 @@ def test_real_browser_admission_against_isolated_backend(client,db,intake):
         env={**os.environ,'REPAIR_QA_API_URL':f'http://127.0.0.1:{port}','REPAIR_QA_CONTACT':intake['contact_id'],'REPAIR_QA_BRANCH':intake['branch_id'],'REPAIR_QA_TYPE':intake['device']['type_id']}
         result=subprocess.run(['node','scripts/verify-repair-backend.mjs'],cwd=Path(__file__).resolve().parents[2]/'desktop',env=env,capture_output=True,text=True,timeout=120,encoding='utf-8')
         assert result.returncode==0,result.stdout+'\n'+result.stderr
-        assert db.query(RepairCase).count()==before[0]+2
+        assert db.query(RepairCase).count()==before[0]+6
         assert db.query(StockLedger).count()==before[1] and db.query(JournalEntry).count()==before[2]
     finally:
         server.should_exit=True;thread.join(10);listener.close()

@@ -9,6 +9,9 @@ import { Wrench } from 'lucide-react'
 import { PageHeader } from '../../components/PageHeader'
 import { EmptyState } from '../../components/EmptyState'
 import { RepairWorkflow } from './RepairWorkflow'
+import { RepairDailyTools } from './RepairDailyTools'
+import { RepairQuickIntake } from './RepairQuickIntake'
+import { RepairBatchActions } from './RepairBatchActions'
 import { RepairEstimates } from './RepairEstimates'
 import { RepairOperations } from './RepairOperations'
 import { RepairDeviceAccess } from './RepairDeviceAccess'
@@ -52,6 +55,8 @@ export function RepairPage({ token, me }: { token: string; me: MeResponse }) {
   return <div className="page panels"><section className="repair-page" dir="rtl">
     <header className="repair-toolbar"><PageHeader icon={Wrench} title="تعمیرگاه" description="پذیرش دستگاه مشتری و سوابق مراجعه" />{create && <button className="btn btn-primary" disabled={busy} onClick={() => { setServiceRequest(null); setInput(fresh()); setShowForm(true); setSelected(null); key.current = crypto.randomUUID() }}>پذیرش دستگاه</button>}</header>
     <p className="field-hint">دستگاه مشتری امانت است؛ پذیرش آن موجودی یا سند مالی ایجاد نمی‌کند.</p>
+    {create&&<RepairQuickIntake token={token} me={me} branches={branches} contacts={contacts} types={types} busy={busy} run={run} created={async rows=>{await list();if(rows[0])await select(rows[0].id)}}/>}
+    <RepairBatchActions token={token} me={me} rows={rows} busy={busy} run={run} refresh={list} open={select}/>
     <RepairFieldServices token={token} me={me} branches={branches} types={types} contacts={contacts} busy={busy} run={run} open={select} admit={request=>{setServiceRequest(request);setInput({...fresh(),contact_id:request.contact_id,branch_id:request.branch_id,device:request.maintenance_device_id?undefined:{type_id:request.type_id,model:request.device_description,brand:'',serial:'',imei:'',attributes:{}},device_id:request.maintenance_device_id??undefined,reported_issue:request.reported_issue,delivering_name:request.coordinator_name,delivering_phone:request.coordinator_phone});setShowForm(true);setSelected(null);key.current=crypto.randomUUID()}} />
     <RepairContracts token={token} me={me} contacts={contacts} branches={branches} cases={rows} busy={busy} run={run} open={select} />
     <RepairReports token={token} me={me} busy={busy} run={run} open={select} />
@@ -82,6 +87,7 @@ export function RepairPage({ token, me }: { token: string; me: MeResponse }) {
       <h3>پیوست‌های پذیرش</h3>{update && <label>تصویر JPEG/PNG یا PDF؛ حداکثر پنج مگابایت<button type="button" disabled={busy} onClick={()=>fileInput.current?.click()}>انتخاب فایل پیوست</button><input ref={fileInput} hidden type="file" accept="image/jpeg,image/png,application/pdf" disabled={busy} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void run(async () => { await uploadRepairFile(token, selected.id, file); setFiles(await fetchRepairFiles(token, selected.id)) }) }} /></label>}{files.map(file => <button key={file.id} disabled={busy} onClick={() => run(async () => downloadRepairFile(token, selected.id, file))}>{file.filename}</button>)}
       <h3>سوابق مراجعهٔ دستگاه</h3>{selected.visits?.map(v => <button key={v.id} disabled={busy} onClick={() => run(async () => select(v.id))}>پذیرش {v.number.toLocaleString('fa-IR')} — {formatJalali(v.admission_date)}</button>)}
       <RepairWorkflow key={selected.id} token={token} me={me} row={selected} busy={busy} run={run} refresh={async () => { await select(selected.id); await list() }} />
+      <RepairDailyTools key={'daily-'+selected.id} token={token} me={me} row={selected} busy={busy} run={run} refresh={async()=>{await select(selected.id);await list()}} />
       <RepairEstimates key={'estimate-' + selected.id} token={token} me={me} row={selected} types={types} branches={branches} busy={busy} run={run} refresh={async () => { await select(selected.id); await list() }} refreshTypes={async () => setTypes(await fetchRepairTypes(token))} />
       <RepairOperations key={'operations-' + selected.id} token={token} me={me} row={selected} types={types} busy={busy} run={run} refresh={async () => { await select(selected.id); await list() }} refreshTypes={async () => setTypes(await fetchRepairTypes(token))} />
       <RepairDeviceAccess key={'access-' + selected.id} token={token} me={me} row={selected} busy={busy} run={run} refresh={async () => select(selected.id)} />

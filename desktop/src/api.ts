@@ -11127,3 +11127,28 @@ export interface RepairContractCoverage {released_at:string|null;release_reason:
 
 // Public warranty projection contains terms only; internal responsibility/cost is private.
 export interface RepairPortalView {warranties?:{scope:string;title:string;terms:string;exclusions:string;valid_from:string;valid_until:string}[]}
+
+export interface RepairTimeSession {id:string;case_id:string;version:number;started_at:string;stopped_at:string|null;confirmed_at:string|null;confirmed_seconds:number|null;elapsed_seconds:number}
+export const fetchRepairTimeSessions=(token:string,caseId:string)=>authedGet<RepairTimeSession[]>(token,`/api/repair/time-sessions?case_id=${caseId}`)
+export const startRepairTime=(token:string,row:RepairCase,key:string)=>authedSend<RepairTimeSession>(token,'POST',`/api/repair/cases/${row.id}/time-sessions`,{version:row.version},key)
+export const changeRepairTime=(token:string,row:RepairTimeSession,action:'stop'|'confirm'|'correct',seconds:number|null,reason:string,key:string)=>authedSend<RepairTimeSession>(token,'POST',`/api/repair/time-sessions/${row.id}/actions`,{version:row.version,action,seconds,reason},key)
+export const acknowledgeRepair=(token:string,row:RepairCase,data:{kind:'intake'|'delivery';signer_name:string;signer_relation:string;strokes:number[][][]},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/acknowledgments`,{version:row.version,...data},key)
+export const printRepairLabel=(token:string,id:string)=>openInvoicePrintView(token,`/api/repair/cases/${id}/label`)
+export interface RepairIntakeSettings {version:number;code:string;default_location:string;terms:string;number_format:string}
+export type RepairQuickAdmission=Pick<RepairAdmissionInput,'contact_id'|'branch_id'|'reported_issue'|'admission_date'> & Partial<Omit<RepairAdmissionInput,'storage_location'|'terms'>> & {storage_location?:string|null;terms?:string|null;organization_unit?:string;representative?:string;organization_order?:string;representative_contact_id?:string|null;organization_unit_contact_id?:string|null}
+export const fetchRepairIntakeSettings=(token:string,id:string)=>authedGet<RepairIntakeSettings|null>(token,`/api/repair/branches/${id}/intake-settings`)
+export const saveRepairIntakeSettings=(token:string,id:string,data:RepairIntakeSettings)=>authedSend<RepairIntakeSettings>(token,'PUT',`/api/repair/branches/${id}/intake-settings`,{version:data.version,code:data.code,default_location:data.default_location,terms:data.terms,number_format:data.number_format})
+export const createRepairIntakeBatch=(token:string,contact_id:string,admissions:RepairQuickAdmission[],key:string)=>authedSend<{id:string;items:RepairCase[]}>(token,'POST','/api/repair/intake-batches',{contact_id,admissions},key)
+export interface RepairTechnicianSuggestion {id:string;name:string;active_cases:number;max_active_cases:number|null;capacity_version:number;has_skill:boolean;available:boolean}
+export const fetchRepairSuggestions=(token:string,branch:string,type?:string)=>authedGet<RepairTechnicianSuggestion[]>(token,`/api/repair/technician-suggestions?branch_id=${branch}${type?'&type_id='+type:''}`)
+export const saveRepairCapacity=(token:string,tech:RepairTechnicianSuggestion,limit:number|null)=>authedSend(token,'PUT',`/api/repair/technicians/${tech.id}/capacity`,{version:tech.capacity_version,max_active_cases:limit})
+export const assignRepairWithCapacity=(token:string,row:RepairCase,user_id:string|null,reason:string,capacity_override:boolean)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/assignment`,{version:row.version,user_id,reason,capacity_override})
+export interface RepairBulkResult {id:string;results:{case_id:string;ok:boolean;error?:string;status?:string;version?:number}[]}
+export const runRepairBulk=(token:string,data:{action:'assign'|'notify';cases:{case_id:string;version:number}[];technician_id:string|null;reason:string;capacity_override:boolean;notification_event:'admission'|'ready'|'approval'},key:string)=>authedSend<RepairBulkResult>(token,'POST','/api/repair/bulk-operations',data,key)
+export async function downloadRepairPdf(token:string,row:RepairCase){
+  const response=await fetch(`${API_BASE_URL}/api/repair/cases/${row.id}/receipt.pdf`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
+  if(!response.ok)throw apiError(await response.json().catch(()=>({})),'دریافت PDF رسید انجام نشد.',response.status)
+  const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=`repair-${row.number}.pdf`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+export interface RepairCase {intake_details?:{display_number:string;receipt_revision:number;organization_unit:string;representative:string;organization_order:string}|null}
+export const amendRepairIntake=(token:string,row:RepairCase,data:{appearance:string;accessories:string;delivering_name:string;delivering_phone:string;organization_unit:string;representative:string;organization_order:string},key:string)=>authedSend<RepairCase>(token,'PATCH',`/api/repair/cases/${row.id}/intake-details`,{version:row.version,...data},key)

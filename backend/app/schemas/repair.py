@@ -86,6 +86,7 @@ class AssignmentIn(RepairInput):
     version: int = Field(ge=1)
     user_id: UUID | None
     reason: str = Field(min_length=1, max_length=3000)
+    capacity_override: bool = False
 
 
 class TaskIn(RepairInput):

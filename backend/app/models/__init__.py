@@ -383,3 +383,9 @@ __all__ += ["RepairLoan"]
 
 from app.models.repair import RepairMaintenanceContract, RepairContractDevice, RepairContractCase, RepairMaintenancePlan, RepairMaintenanceVisit, RepairConsolidatedBill, RepairConsolidatedBillMember
 __all__ += ["RepairMaintenanceContract", "RepairContractDevice", "RepairContractCase", "RepairMaintenancePlan", "RepairMaintenanceVisit", "RepairConsolidatedBill", "RepairConsolidatedBillMember"]
+
+from app.models.repair_completion import RepairBranchSettings, RepairIntakeBatch, RepairCaseDetails, RepairTechnicianCapacity, RepairAcknowledgment
+__all__ += ['RepairBranchSettings', 'RepairIntakeBatch', 'RepairCaseDetails', 'RepairTechnicianCapacity', 'RepairAcknowledgment']
+
+from app.models.repair_completion import RepairBulkOperation, RepairTimeSession, RepairTimeCorrection
+__all__ += ["RepairBulkOperation", "RepairTimeSession", "RepairTimeCorrection"]

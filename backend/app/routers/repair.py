@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -95,11 +95,20 @@ def cases(q: str = Query("", max_length=200), branch_id: UUID | None = None, dat
     if date_from and date_to and date_from > date_to:
         raise HTTPException(422, "بازهٔ تاریخ را اصلاح کنید.")
     if q.strip():
-        needle = "%" + q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        tests = [RepairCase.owner_snapshot["name"].astext.ilike(needle), RepairCase.owner_snapshot["phone"].astext.ilike(needle)]
-        tests += [RepairCase.device_snapshot[k].astext.ilike(needle) for k in ("category", "brand", "model", "serial", "imei")]
-        if q.isdecimal() and len(q) < 10:
-            tests.append(RepairCase.number == int(q))
+        from app.models.repair_completion import RepairCaseDetails
+        source, target = 'يك۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', 'یک01234567890123456789'
+        normalized=q.strip().translate(str.maketrans(source,target))
+        needle = "%" + normalized.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        def match(column): return func.translate(column,source,target).ilike(needle,escape='\\')
+        tests = [match(RepairCase.owner_snapshot[k].astext) for k in ('name','phone')]
+        tests += [match(RepairCase.device_snapshot[k].astext) for k in ("category", "brand", "model", "serial", "imei")]
+        tests.append(RepairCase.id.in_(db.query(RepairCaseDetails.case_id).filter(match(RepairCaseDetails.display_number))))
+        numeric=normalized[1:] if normalized.startswith('R') else normalized
+        if numeric.isdecimal() and len(numeric) < 10:
+            tests.append(RepairCase.number == int(numeric))
+        if normalized.startswith('cubita:repair:'):
+            try: tests.append(RepairCase.id == UUID(normalized.removeprefix('cubita:repair:')))
+            except ValueError: pass
         query = query.filter(or_(*tests))
     if branch_id:
         svc.branch(db, p, branch_id)
@@ -269,21 +278,15 @@ def download(case_id: UUID, attachment_id: UUID, db: Session = Depends(get_db), 
 def receipt(case_id: UUID, db: Session = Depends(get_db), p: Principal = Depends(get_principal)):
     row = svc.case(db, p, case_id)
     from app.services.printing import format_jalali
-    fields = {"شماره پذیرش": str(row.number), "مالک": row.owner_snapshot["name"], "تماس": row.owner_snapshot["phone"],
+    from app.services.repair_completion import metadata
+    meta=metadata(db,row)
+    display_number=meta.display_number if meta else str(row.number)
+    fields = {"شماره پذیرش": display_number, "نسخهٔ رسید": str(meta.receipt_revision if meta else 1), "مالک": row.owner_snapshot["name"], "تماس": row.owner_snapshot["phone"],
               "تحویل‌دهنده": row.delivering_name, "دستگاه": " / ".join(str(row.device_snapshot[k]) for k in ("category", "brand", "model")),
               "سریال": row.device_snapshot["serial"], "IMEI": row.device_snapshot["imei"], "ایراد اعلام‌شده": row.reported_issue,
               "وضعیت ظاهری": row.appearance, "لوازم همراه": row.accessories, "شرایط پذیرش": row.terms,
               "تاریخ پذیرش": format_jalali(row.admission_date), "موعد اولیه": format_jalali(row.due_date)}
     body = "".join(f"<dt>{escape(k)}</dt><dd>{escape(v)}</dd>" for k, v in fields.items())
-    # Code39 فقط شمارهٔ داخلی است؛ شناسهٔ چاپ‌شده مجوز دسترسی به پرونده نیست.
-    patterns = {"*": "nwnnwnwnn", "0": "nnnwwnwnn", "1": "wnnwnnnnw", "2": "nnwwnnnnw", "3": "wnwwnnnnn", "4": "nnnwwnnnw", "5": "wnnwwnnnn", "6": "nnwwwnnnn", "7": "nnnwnnwnw", "8": "wnnwnnwnn", "9": "nnwwnnwnn"}
-    x, bars = 10, []
-    for char in "*" + str(row.number) + "*":
-        for i, width in enumerate(patterns[char]):
-            w = 3 if width == "w" else 1
-            if i % 2 == 0:
-                bars.append(f'<rect x="{x}" y="0" width="{w}" height="48"/>')
-            x += w
-        x += 1
-    barcode = f'<svg role="img" aria-label="برچسب پذیرش" viewBox="0 0 {x+10} 60" width="240" height="70">{"".join(bars)}</svg>'
-    return HTMLResponse(f'<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><title>رسید پذیرش {row.number}</title><style>body{{font-family:Tahoma;margin:30px}}dt{{font-weight:bold;margin-top:12px}}dd{{white-space:pre-wrap}}svg{{display:block}}</style><h1>تعمیرگاه — رسید پذیرش</h1>{barcode}<p>شماره پذیرش: {row.number}</p><dl>{body}</dl><p>دستگاه، امانت مشتری است. این رسید فاکتور یا رسید دریافت وجه نیست.</p></html>', headers={"Cache-Control": "no-store"})
+    from app.services.repair_printing import codes_html
+    barcode = codes_html(row)
+    return HTMLResponse(f'<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><title>رسید پذیرش {escape(display_number)}</title><style>body{{font-family:Tahoma;margin:30px}}dt{{font-weight:bold;margin-top:12px}}dd{{white-space:pre-wrap}}svg{{display:block}}</style><h1>تعمیرگاه — رسید پذیرش</h1>{barcode}<p>شماره پذیرش: {escape(display_number)}</p><dl>{body}</dl><p>دستگاه، امانت مشتری است. این رسید فاکتور یا رسید دریافت وجه نیست.</p></html>', headers={"Cache-Control": "no-store"})

@@ -30,6 +30,7 @@ PERMISSION_MODULES: list[dict] = [
     {"key":"repair_access","label":"رمز دستگاه در تعمیرگاه","hint":"مشاهدهٔ ثبت‌شونده و نگهداری محدود رمز؛ فقط برای کارکنان مورد اعتماد تعمیرگاه","actions":["view","update"]},
     {"key": "repair", "label": "تعمیرگاه", "hint": "پذیرش دستگاه مشتری؛ تأیید یعنی مدیریت شعبه و دسترسی به همه شعبه‌های تعمیرگاه", "actions": ["view", "create", "update", "approve", "deliver"]},
     {"key":"repair_credit","label":"تحویل اعتباری تعمیرگاه","hint":"تحویل دستگاه با بدهی باز، با دلیل و ثبت ماندهٔ واقعی","actions":["approve"]},
+    {"key":"repair_signatures","label":"امضای پذیرش و تحویل تعمیرگاه","hint":"ثبت و مشاهدهٔ مستقل امضای گیرنده روی نسخهٔ مشخص سند","actions":["view","create"]},
     {
         "key": "automation",
         "label": "اتوماسیون اداری",
