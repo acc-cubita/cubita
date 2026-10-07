@@ -2,3 +2,17 @@
 
 .repair-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.repair-board>section{padding:12px;border:1px solid var(--border,#dce2ed);border-radius:9px;min-width:0}.repair-board button{display:block;width:100%;text-align:right;box-sizing:border-box;white-space:normal}.repair-task{border-inline-start:3px solid var(--border,#dce2ed);padding:10px;margin:10px 0}.repair-page label.repair-inline{flex-direction:row;align-items:center}
 .repair-page p,.repair-page h2,.repair-page h3,.repair-page h4{overflow-wrap:anywhere}.repair-page>article{margin-block:20px}
+
+.repair-workspace-tabs { display:flex; gap:.4rem; overflow-x:auto; padding:.75rem 0; position:sticky; top:0; z-index:2; background:var(--surface, #fff); }
+.repair-workspace-tabs [role=tab] { flex-shrink:0; padding:.65rem .85rem; border-radius:.65rem; }
+.repair-workspace-tabs [aria-selected=true] { background:#fff3c4; color:#17243d; border-color:#e9be35; font-weight:700; }
+.repair-case-heading { padding:.75rem; border-radius:.75rem; background:var(--surface,#f4f7fb);border:1px solid var(--border,#dce2ed); }
+.repair-case-workspace [hidden] { display:none !important; }
+@media(max-width:600px) { .repair-workspace-tabs { max-width:calc(100vw - 40px); } }
+
+.repair-page dialog { position:fixed; top:20vh; width:min(420px,calc(100vw - 40px)); z-index:20; border:1px solid var(--border,#dce2ed); border-radius:12px; background:var(--surface,#fff); color:var(--text,#17243d); padding:20px; box-shadow:0 12px 60px #0006; }
+.repair-page dialog label { margin-block:12px; }
+.repair-case-heading { position:sticky; top:0; z-index:3; }
+.repair-case-workspace .repair-workspace-tabs { position:static; }
+
+.repair-page dialog::backdrop { background:#0006; }

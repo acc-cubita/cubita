@@ -128,6 +128,7 @@ export function cardHint(t: LaunchTarget): string {
 export function buildLaunchers(me: MeResponse): LaunchGroup[] {
   const { groups } = buildNav({
     tenantKind: me.tenant_kind,
+    permissions: me.permissions,
     enabledModules: me.enabled_modules,
     allowedModules: me.allowed_modules,
     isOwner: me.role_key === 'owner',

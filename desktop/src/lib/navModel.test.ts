@@ -445,3 +445,13 @@ describe('منوی یک‌فهرستیِ ماژول — دفتر زیرِ دست
     expect(where('مشتریان و فروش', 'سرنخ‌ها')).toBe('باشگاه مشتریان')
   })
 })
+
+describe('repair workspace navigation', () => {
+ const repairKeys=(permissions:Record<string,string[]>,enabled=['repair']) => buildNav({tenantKind:'standard',permissions,enabledModules:enabled,allowedModules:['repair','accounting']}).groups.find(g=>g.heading==='تعمیرگاه')?.items.map(i=>i.key)??[]
+ it('shows only reception routes to a front-desk user',()=>{expect(repairKeys({repair:['view','create']})).toEqual(['repair','repairintake','repairservices','repairreports','repairexchange'])})
+ it('does not grant harvesting through repair approval',()=>{expect(repairKeys({repair:['view','approve']})).not.toContain('repairharvest')})
+ it('requires the existing repair-view grant before exposing settings or financial selectors',()=>{expect(repairKeys({repair:['approve'],repair_harvest:['approve']})).toEqual([])})
+ it('gates all added routes with the repair module',()=>{expect(repairKeys({repair:['view','create','update','approve'],repair_harvest:['approve']},['accounting'])).toEqual([])})
+ it('keeps all eight repair routes for the existing global owner grant',()=>{expect(repairKeys({'*':['*']})).toHaveLength(8)})
+ it('preserves repair as the case-list landing',()=>{expect(resolveLegacyPage('repair').page).toBe('repair');expect(NAV_GROUPS.find(g=>g.heading==='تعمیرگاه')?.items[0].label).toBe('پرونده‌ها')})
+})

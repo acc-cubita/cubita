@@ -107,6 +107,13 @@ export type PageKey =
   | 'overview'
   | 'automation'
   | 'repair'
+  | 'repairintake'
+  | 'repairmine'
+  | 'repairservices'
+  | 'repairharvest'
+  | 'repairreports'
+  | 'repairexchange'
+  | 'repairsettings'
   | 'letternew'
   | 'letterlist'
   | 'pos'
@@ -502,7 +509,20 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'assurancehealth', label: 'کارنامه سلامت دفتر', icon: <Gauge size={18} /> },
     ],
   },
-  { heading: 'تعمیرگاه', icon: <Wrench size={17} />, items: [{ key: 'repair', label: 'تعمیرگاه', icon: <Wrench size={18} /> }] },
+  {
+    heading: 'تعمیرگاه',
+    icon: <Wrench size={17} />,
+    items: [
+      { key: 'repair', label: 'پرونده‌ها', icon: <ClipboardList size={18} /> },
+      { key: 'repairintake', label: 'پذیرش جدید', icon: <PackagePlus size={18} /> },
+      { key: 'repairmine', label: 'کارتابل من', icon: <UserCog size={18} /> },
+      { key: 'repairservices', label: 'خدمات سازمانی', icon: <Route size={18} /> },
+      { key: 'repairharvest', label: 'استخراج قطعات شرکت', icon: <Combine size={18} /> },
+      { key: 'repairreports', label: 'گزارش‌ها', icon: <BarChart3 size={18} /> },
+      { key: 'repairexchange', label: 'تبادل سوابق', icon: <FileSpreadsheet size={18} /> },
+      { key: 'repairsettings', label: 'تنظیمات تعمیرگاه', icon: <Settings2 size={18} /> },
+    ],
+  },
   {
     heading: 'اتوماسیون اداری',
     icon: <ClipboardList size={17} />,
@@ -607,6 +627,13 @@ PAGE_MODULE_KEY.notelist = ['sales', 'purchases']
 //: «ورود گروهی اشخاص» داده‌اش طرف‌حساب است؛ پس کسب‌وکاری که ماژولِ اشخاص را ندارد نباید ببیندش.
 PAGE_MODULE_KEY.contactimport = 'contacts'
 PAGE_MODULE_KEY.repair = 'repair'
+PAGE_MODULE_KEY.repairintake = 'repair'
+PAGE_MODULE_KEY.repairmine = 'repair'
+PAGE_MODULE_KEY.repairservices = 'repair'
+PAGE_MODULE_KEY.repairharvest = 'repair'
+PAGE_MODULE_KEY.repairreports = 'repair'
+PAGE_MODULE_KEY.repairexchange = 'repair'
+PAGE_MODULE_KEY.repairsettings = 'repair'
 for (const key of ['automation', 'letternew', 'letterlist'] as PageKey[]) {
   PAGE_MODULE_KEY[key] = 'automation'
 }
@@ -698,12 +725,14 @@ export function uniqueNavItems(groups: NavGroup[], extra: NavItem[] = []): NavIt
  *  Sidebar و TopNav هر دو همین را صدا می‌زنند تا ناوبری یکسان بماند. */
 export function buildNav({
   tenantKind,
+  permissions,
   marketplaceRoles,
   enabledModules = [],
   allowedModules = [],
   isOwner = false,
 }: {
   tenantKind: string
+  permissions?: Record<string, string[]>
   marketplaceRoles?: string[]
   //: کلیدِ ماژول‌های روشن/مجازِ کسب‌وکار (از MeResponse). خالی = فیلتر نکن (fail-open).
   enabledModules?: string[]
@@ -716,6 +745,7 @@ export function buildNav({
   const allowed = new Set(allowedModules)
   const visible = new Set(enabledModules.filter((k) => allowed.has(k)))
   const isVisible = (key: PageKey) => {
+    if (permissions && !repairPagePermitted(key, permissions)) return false
     if (!filterModules) return true
     const moduleKey = PAGE_MODULE_KEY[key]
     if (Array.isArray(moduleKey)) return moduleKey.some((k) => visible.has(k))
@@ -924,4 +954,18 @@ export const LEGACY_PAGES: Readonly<Record<string, { page: PageKey; section?: st
 export function resolveLegacyPage(page: string, section: string | null = null): { page: PageKey; section: string | null } {
   const to = LEGACY_PAGES[page]
   return to ? { page: to.page, section: to.section ?? null } : { page: page as PageKey, section }
+}
+
+/** Repair routes use the same independent grants as their existing tools. */
+export function repairPagePermitted(key: string, permissions: Record<string, string[]>): boolean {
+ const has = (module: string, action: string) => [module,'*'].some(key => (permissions[key]??[]).some(grant => grant===action || grant==='*'))
+ if (!key.startsWith('repair')) return true
+ // All section selectors use the existing repair-view endpoints.
+ if (!has('repair','view')) return false
+ if (key === 'repairharvest') return has('repair_harvest', 'approve')
+ if (key === 'repairsettings') return has('repair', 'approve')
+ if (key === 'repairintake') return has('repair', 'create')
+ if (key === 'repairmine') return has('repair', 'view') && has('repair', 'update')
+ if (key === 'repairexchange') return has('repair', 'view')
+ return has('repair', 'view')
 }
