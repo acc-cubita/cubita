@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from string import Formatter
 from fastapi import HTTPException
 from app.config import get_settings
-from app.models.repair import RepairCase, RepairMessageTemplate, RepairNotification, RepairNotificationAttempt
+from app.models.repair import RepairCase, RepairMessageTemplate, RepairNotification, RepairNotificationAttempt, RepairEvent
 from app.models.tenant import Tenant
 from app.services import repair as core, sms
 from app.services.modules import is_module_visible
@@ -45,7 +45,12 @@ def template(db,row,kind):
     return chosen if chosen and chosen.enabled else None
 
 
-def enqueue(db,row,kind,marker,*,strict=False):
+def enqueue(db,row,kind,marker,*,strict=False,event_name=None):
+    from app.models.repair_completion import RepairNotificationPolicy
+    policy=db.query(RepairNotificationPolicy).filter_by(branch_id=row.branch_id).order_by(RepairNotificationPolicy.revision.desc()).first()
+    if policy and (event_name or kind) not in policy.events:
+        if strict: raise HTTPException(409,'این رویداد اعلان در تنظیمات شعبه غیرفعال است.')
+        return None
     chosen=template(db,row,kind)
     if chosen is None:
         if strict: raise HTTPException(409,'الگوی فعال این اعلان تنظیم نشده؛ ابتدا الگوی شرکت یا شعبه را ثبت کنید.')
@@ -135,6 +140,24 @@ def process_one(session_factory,tenant_id,*,sender=None):
 
 
 def enqueue_due(db,tenant_id):
-    rows=db.query(RepairCase).filter(RepairCase.due_date<=date.today(),RepairCase.status.notin_(['cancelled','delivered','closed','ready'])).order_by(RepairCase.id).with_for_update().all()
-    for row in rows: enqueue(db,row,'due',date.today().isoformat())
-    return len(rows)
+    from app.models.repair_completion import RepairNotificationPolicy
+    from sqlalchemy import func
+    policies={}
+    today=date.today();count=0
+    rows=db.query(RepairCase).filter(RepairCase.status.notin_(['cancelled','delivered','closed'])).order_by(RepairCase.id).with_for_update().all()
+    for row in rows:
+        if row.branch_id not in policies:
+            policies[row.branch_id]=db.query(RepairNotificationPolicy).filter_by(branch_id=row.branch_id).order_by(RepairNotificationPolicy.revision.desc()).first()
+        policy=policies[row.branch_id]
+        if row.status=='ready':
+            if not policy or 'uncollected' not in policy.events: continue
+            since=db.query(func.max(RepairEvent.created_at)).filter(RepairEvent.case_id==row.id,RepairEvent.action=='status_changed',RepairEvent.detail['to'].astext=='ready').scalar() or row.updated_at
+            days=(today-since.date()).days-policy.uncollected_days
+            if days>=0:
+                enqueue(db,row,'ready',f'uncollected:{policy.revision}:{since.date()}:{days//policy.repeat_days}',event_name='uncollected');count+=1
+        elif row.due_date:
+            days=(today-row.due_date).days-(policy.overdue_days if policy else 0)
+            if days>=0:
+                marker=f'due:{policy.revision}:{row.due_date}:{days//policy.repeat_days}' if policy else today.isoformat()
+                enqueue(db,row,'due',marker);count+=1
+    return count

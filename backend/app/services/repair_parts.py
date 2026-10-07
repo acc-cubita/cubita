@@ -131,6 +131,10 @@ def move(db,p,row,part,data):
         if not p.has_permission('inventory','create'):
             raise HTTPException(403,"گردش قطعهٔ شرکت به مجوز ثبت انبار نیاز دارد.")
         item = db.get(Item,part.item_id)
+        if data.action == 'consume':
+            from app.models.repair_completion import RepairPartAssessment
+            assessment=db.query(RepairPartAssessment).filter_by(part_id=part.id).order_by(RepairPartAssessment.revision.desc()).first()
+            if assessment and assessment.quality=='rejected': raise HTTPException(409,'قطعه در ارزیابی کیفیت رد شده و قابل مصرف نیست.')
         if data.action == 'reserve':
             if part.status != 'requested': raise HTTPException(409,"فقط درخواستِ رزرو‌نشده قابل رزرو است.")
             reservations.reserve(db,item=item,warehouse_id=part.source_warehouse_id,qty=part.qty,on=data.on,source_type='repair_part',source_id=part.id,batch_id=part.batch_id,user=p.user)
@@ -227,9 +231,19 @@ def work(db,p,row,data):
         if service is None or not service.is_service or not service.is_active: raise HTTPException(422,"خدمت فعال از فهرست کالا و خدمات انتخاب کنید.")
     elif data.charge_amount: raise HTTPException(422,"کار دارای اجرت باید به خدمت موجود کوبیتا وصل شود.")
     authorized_total(db,row,extra=data.charge_amount)
-    values = data.model_dump(exclude={'version','collaborators','started_at','completed_at'})
+    values = data.model_dump(exclude={'version','collaborators','started_at','completed_at','time_session_id'})
+    time_session=None
     start,end = None,None
-    if data.started_at or data.completed_at:
+    if data.time_session_id:
+        from app.models.repair_completion import RepairTimeSession,RepairWorkTimeLink
+        time_session=db.query(RepairTimeSession).filter_by(id=data.time_session_id,case_id=row.id,technician_id=data.technician_id).with_for_update().one_or_none()
+        if time_session is None or time_session.confirmed_at is None or time_session.stopped_at is None:
+            raise HTTPException(409,'بازهٔ کار همین تکنسین و پرونده باید ابتدا متوقف و تأیید شود.')
+        if db.query(RepairWorkTimeLink.id).filter_by(session_id=time_session.id).first(): raise HTTPException(409,'این بازه قبلاً به کار واقعی وصل شده؛ زمان دوباره ثبت نمی‌شود.')
+        if data.started_at or data.completed_at: raise HTTPException(422,'بازهٔ سروری با زمان‌سنج کلاینت ترکیب نمی‌شود.')
+        start,end=time_session.started_at,time_session.stopped_at
+        values['work_minutes']=(time_session.confirmed_seconds+59)//60
+    elif data.started_at or data.completed_at:
         try:
             start,end = datetime.fromisoformat(data.started_at),datetime.fromisoformat(data.completed_at)
         except (TypeError,ValueError): raise HTTPException(422,"شروع و پایان را با تاریخ و زمان معتبر ثبت کنید.")
@@ -238,7 +252,10 @@ def work(db,p,row,data):
     from app.services.repair_contracts import assert_work
     assert_work(db,row,data.charge_amount,values['work_minutes'],end.date() if end else datetime.now(timezone.utc).date())
     entry = RepairWork(case_id=row.id,started_at=start,completed_at=end,collaborators=[str(u) for u in data.collaborators],created_by_id=p.user.id,**values)
-    db.add(entry);db.flush();dirty(row);core.event(db,p,row,'work_recorded',{'work_id':str(entry.id),'technician_id':str(entry.technician_id),'minutes':entry.work_minutes})
+    db.add(entry);db.flush()
+    if time_session:
+        db.add(RepairWorkTimeLink(case_id=row.id,work_id=entry.id,session_id=time_session.id,session_version=time_session.version,confirmed_seconds=time_session.confirmed_seconds))
+    dirty(row);core.event(db,p,row,'work_recorded',{'work_id':str(entry.id),'technician_id':str(entry.technician_id),'minutes':entry.work_minutes})
     return entry
 
 
@@ -265,6 +282,8 @@ def quality(db,p,row,data):
 
 
 def ready(db,row):
+    from app.services.repair_tools import assert_reviewed
+    assert_reviewed(db,row)
     check = db.query(RepairQualityCheck).filter_by(case_id=row.id).order_by(RepairQualityCheck.created_at.desc()).first()
     if check is None or not check.passed or check.work_version != row.work_version: raise HTTPException(409,"آماده‌تحویل شدن به کنترل کیفیت موفقِ آخرین کار تعمیر نیاز دارد.")
     authorized_total(db,row)

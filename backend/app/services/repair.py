@@ -102,6 +102,8 @@ def create(db: Session, p: Principal, data):
         created_by_id=p.user.id)
     db.add(row)
     db.flush()
+    from app.services.repair_completion import register_admission
+    register_admission(db,p,row)
     db.add(RepairEvent(case_id=row.id, actor_id=p.user.id, action="admitted", detail={"location": row.storage_location}))
     db.flush()
     from app.services.repair_notifications import from_event
@@ -126,6 +128,9 @@ def detail(db, p, row):
     from app.services.repair_access import expire
     secret = expire(db,p,row)
     data = out(row)
+    from app.services.repair_completion import metadata
+    meta=metadata(db,row)
+    data['intake_details']=out(meta) if meta else None
     data["has_device_secret"] = secret is not None
     data["open_case_warnings"] = [{"id": c.id, "number": c.number} for c in open_cases(db, p, row)]
     data["visits"] = [{"id": c.id, "number": c.number, "admission_date": c.admission_date, "status": c.status} for c in visible(db, p).filter(RepairCase.device_id == row.device_id).order_by(RepairCase.number.desc()).all()]
@@ -228,6 +233,8 @@ def assign(db, p, row, data):
         raise HTTPException(409, "پروندهٔ پایان‌یافته قابل ارجاع نیست.")
     if data.user_id and data.user_id not in {t["id"] for t in technicians(db, p, row.branch_id)}:
         raise HTTPException(422, "تکنسین باید عضو فعال با دسترسی تعمیرگاه و همین شعبه باشد.")
+    from app.services.repair_completion import check_capacity
+    check_capacity(db,p,row,data)
     before = row.assigned_to_id
     row.assigned_to_id = data.user_id
     event(db, p, row, "assigned", {"from": str(before) if before else None, "to": str(data.user_id) if data.user_id else None, "reason": data.reason})

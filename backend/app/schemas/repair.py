@@ -86,6 +86,7 @@ class AssignmentIn(RepairInput):
     version: int = Field(ge=1)
     user_id: UUID | None
     reason: str = Field(min_length=1, max_length=3000)
+    capacity_override: bool = False
 
 
 class TaskIn(RepairInput):
@@ -184,6 +185,7 @@ class PartActionIn(RepairInput):
 class WorkIn(RepairInput):
     version: int = Field(ge=1)
     technician_id: UUID
+    time_session_id: UUID | None = None
     collaborators: list[UUID] = Field(default_factory=list, max_length=30)
     service_id: UUID | None = None
     description: str = Field(min_length=1, max_length=6000)

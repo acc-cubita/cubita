@@ -490,7 +490,11 @@ def void_warehouse_issue(
     user: User,
     void_date: date | None = None,
     guard_returns: bool = True,
+    allow_repair_harvest: bool = False,
 ) -> WarehouseIssue:
+    from app.models.repair_completion import RepairHarvest
+    if not allow_repair_harvest and db.query(RepairHarvest.id).filter_by(issue_id=issue_id,status='posted').first():
+        raise HTTPException(409,'خروج دستگاه استخراج‌شده باید همراه رسید قطعات و ضایعات از گردش استخراج ابطال شود.')
     issue = db.query(WarehouseIssue).filter(WarehouseIssue.id == issue_id).with_for_update().one_or_none()
     if issue is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "خروج انبار یافت نشد")
