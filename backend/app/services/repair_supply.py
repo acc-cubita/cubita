@@ -189,7 +189,7 @@ def void_harvest(db,p,row,data):
     with db.begin_nested():
         lock_items(db,[row.item_id]+[UUID(o['item_id']) for o in row.outputs])
         batch_ids=[UUID(b) for output in row.outputs for b in output['batch_ids']]
-        downstream=db.query(StockLedger.id).filter(StockLedger.batch_id.in_(batch_ids),StockLedger.source_id!=row.receipt_id).first()
+        downstream=db.query(StockLedger.id).filter(StockLedger.batch_id.in_(batch_ids),StockLedger.source_id.is_distinct_from(row.receipt_id)).first()
         if downstream:
             raise HTTPException(409,'قطعات استخراج‌شده گردش بعدی دارند؛ ابتدا اسناد وابسته را اصلاح کنید. ابطال با موجودی بچ دیگری مجاز نیست.')
         warehouse_receipts.void_warehouse_receipt(db,row.receipt_id,reason=data.reason,user=p.user,void_date=data.on,allow_repair_harvest=True)

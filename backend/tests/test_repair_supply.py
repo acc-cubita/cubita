@@ -94,6 +94,12 @@ def test_harvest_void_blocks_downstream_even_with_other_available_stock(client,d
     assert denied.status_code==409,denied.text
     assert (db.query(StockLedger).count(),db.query(JournalEntry).count())==before
     assert get_stock_qty(db,device.id,source.id)==0
+    # Legacy/manual movements may have no document ID; they still block reversal.
+    db.query(StockLedger).filter(StockLedger.item_id==part.id,StockLedger.source_type=='warehouse_issue').update({'source_id':None},synchronize_session=False)
+    db.flush()
+    denied=post(client,'harvests/'+result['id']+'/void',{'version':2,'on':date.today().isoformat(),'reason':'گردش قدیمی بدون شناسه سند'})
+    assert denied.status_code==409,denied.text
+    assert (db.query(StockLedger).count(),db.query(JournalEntry).count())==before
 
 
 def test_supplier_quality_purchase_warranty_and_claim_no_second_debt(client,db,user,intake,approved_case):
