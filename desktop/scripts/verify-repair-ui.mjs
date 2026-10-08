@@ -17,12 +17,14 @@ try {
     const branches = [{ id:'11111111-1111-4111-8111-111111111111',name:'مرکزی',is_active:true }]
     const types = [{ id:'22222222-2222-4222-8222-222222222222',name:'رایانه',is_active:true,fields:['رنگ'],checklist:['شارژر'] }]
     const contacts = [{ id:'33333333-3333-4333-8333-333333333333',name:'مشتری آزمون رابط',phone:'09123456789',is_active:true }]
-    await page.route(base + '/@vite/client', route => route.fulfill({ contentType:'application/javascript', body:`export const createHotContext=()=>({accept(){},prune(){},dispose(){},data:{},invalidate(){},on(){},off(){},send(){}});export const injectQuery=(url,q)=>url+(url.includes('?')?'&':'?')+q;export function updateStyle(id,css){let el=document.querySelector('style[data-vite-id="'+id+'"]');if(!el){el=document.createElement('style');el.dataset.viteId=id;document.head.append(el)}el.textContent=css}export const removeStyle=()=>{};` }))
+    await page.route(base + '/@vite/client', route => route.fulfill({ contentType:'application/javascript', body:`export const createHotContext=()=>({accept(){},prune(){},dispose(){},data:{},invalidate(){},on(){},off(){},send(){}});export const injectQuery=(url,q)=>{if(url[0]!=='.'&&url[0]!=='/')return url;const u=new URL(url,'http://vite.dev');return url.split(/[?#]/)[0]+'?'+q+(u.search?'&'+u.search.slice(1):'')+u.hash};export function updateStyle(id,css){let el=document.querySelector('style[data-vite-id="'+id+'"]');if(!el){el=document.createElement('style');el.dataset.viteId=id;document.head.append(el)}el.textContent=css}export const removeStyle=()=>{};` }))
     await page.route('**/api/**', async route => {
       const req = route.request(), url = new URL(req.url())
       let data
       if(req.method() === 'OPTIONS') data = {}
       else if(url.pathname === '/api/contacts') data = { items:contacts,next_cursor:null }
+      else if(url.pathname.endsWith('/intake-settings')) data = null
+      else if(url.pathname.endsWith('/onsite-actions')) data=[]
       else if(url.pathname === '/api/repair/branches') data = branches
       else if(url.pathname === '/api/repair/device-types') data = types
       else if(url.pathname === '/api/repair/members') data = []
@@ -43,9 +45,9 @@ try {
       else if(url.pathname === '/api/repair/faults') data = []
       else if(url.pathname === '/api/repair/catalog') data = { items:[],next_cursor:null }
       else if(url.pathname.endsWith('/attachments')) data = []
-      else if(url.pathname === '/api/repair/cases' && req.method() === 'POST') {
-        const body = req.postDataJSON(); requests.push({ body,key:req.headers()['idempotency-key'] })
-        data = { ...body,id:'44444444-4444-4444-8444-444444444444',device_id:'55555555-5555-4555-8555-555555555555',number:1,version:1,status:'accepted',owner_snapshot:{ name:contacts[0].name,phone:contacts[0].phone },device_snapshot:{ ...body.device,category:types[0].name },open_case_warnings:[],visits:[],events:[] }; rows.push(data)
+      else if(url.pathname === '/api/repair/intake-batches' && req.method() === 'POST') {
+        const body = req.postDataJSON().admissions[0]; requests.push({ body,key:req.headers()['idempotency-key'] })
+        data = { ...body,id:'44444444-4444-4444-8444-444444444444',device_id:'55555555-5555-4555-8555-555555555555',number:1,version:1,status:'accepted',owner_snapshot:{ name:contacts[0].name,phone:contacts[0].phone },device_snapshot:{ ...body.device,category:types[0].name },open_case_warnings:[],visits:[],events:[] }; rows.push(data);data={items:[data]}
       } else if(url.pathname === '/api/repair/cases') data = { items:rows,next_cursor:null }
       else if(url.pathname.startsWith('/api/repair/cases/')) data = rows[0]
       else throw new Error('Unexpected fixture request: ' + req.url())
@@ -55,11 +57,11 @@ try {
       import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{}; window.$RefreshSig$=()=>type=>type; window.__vite_plugin_react_preamble_installed__=true;
       import React from '/node_modules/.vite/deps/react.js'; import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
       const {RepairPage}=await import('/src/pages/repair/RepairPage.tsx'); import '/src/index.css'; import '/src/App.css';
-      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(RepairPage,{token:'fixture',me:{permissions:{repair:['view','create','update','approve']}}}));
+      function App(){const [view,setView]=React.useState('repair');window.repairQaSetView=setView;return React.createElement(RepairPage,{view,token:'fixture',me:{permissions:{repair:['view','create','update','approve']}}})};ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
       </script></html>` }))
     await page.goto(base + '/repair-qa')
-    await page.getByRole('button',{name:'پذیرش دستگاه',exact:true}).click()
-    await page.getByLabel('مشتری',{exact:true}).selectOption(contacts[0].id)
+    await page.getByRole('button',{name:'پذیرش جدید',exact:true}).click()
+    await page.getByLabel('مشتری یا سازمان',{exact:true}).selectOption(contacts[0].id)
     await page.getByLabel('شعبه',{exact:true}).selectOption(branches[0].id)
     await page.getByLabel('نوع دستگاه',{exact:true}).last().selectOption(types[0].id)
     await page.getByLabel('مدل',{exact:true}).fill('رایانه آزمایشی')
@@ -72,12 +74,14 @@ try {
     await page.getByRole('heading',{name:/پذیرش ۱ —/}).waitFor()
     assert.equal(requests.length,1)
     assert.ok(requests[0].key)
+    await page.evaluate(()=>window.repairQaSetView('repairservices'))
+    await page.waitForLoadState('networkidle')
     await page.locator('details').evaluateAll(elements=>elements.forEach(element=>{element.open=true}))
     const field=page.locator('article.repair-task').filter({hasText:'درخواست شبانه آزمون'})
     await field.getByText(/۱۴۰۵\/۰۷\/۱۴.*۱۹:۰۰/).waitFor()
     assert.equal(await field.getByText(/۱۴۰۵\/۰۷\/۱۵/).count(),0,'Appointment must use the local day, not the UTC day')
     await page.screenshot({ path:`../_deploy/repair-qa/case-${width}.png`,fullPage:true })
-    await page.getByRole('heading',{name:/پذیرش ۱ —/}).scrollIntoViewIfNeeded()
+    await page.getByRole('heading',{name:'خدمات سازمانی',exact:true}).scrollIntoViewIfNeeded()
     await page.screenshot({path:`../_deploy/repair-qa/case-viewport-${width}.png`})
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false,'Case overflows')
     assert.deepEqual(errors,[])
@@ -90,7 +94,7 @@ try {
     page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())})
     const row={number:12,version:2,status:'awaiting_customer',status_label:'منتظر مشتری',admission_date:'2026-10-06',due_date:'2026-10-09',device:{brand:'نمونه',model:'دستگاه آزمون'},customer:'مشتری آزمون صفحه عمومی',reported_issue:'خاموش شدن',accessories:'شارژر',terms:'هزینه پس از تأیید',results:[],attachments:[],messages:[],online_payment_available:false,estimate:{id:'77777777-7777-4777-8777-777777777777',version:1,valid_until:'2026-10-09',duration_days:2,currency:'IRR',options:[{title:'تعویض قطعه',total:'12345',lines:[{kind:'part',title:'قطعه آزمون',qty:'1',unit_price:'12345',amount:'12345'}]}],decision:null}}
     const credential='11111111-1111-4111-8111-111111111111.'+'A'.repeat(43)
-    await page.route(base+'/@vite/client',route=>route.fulfill({contentType:'application/javascript',body:`export const createHotContext=()=>({accept(){},prune(){},dispose(){},data:{},invalidate(){},on(){},off(){},send(){}});export const injectQuery=(url,q)=>url+(url.includes('?')?'&':'?')+q;export function updateStyle(id,css){let el=document.querySelector('style[data-vite-id="'+id+'"]');if(!el){el=document.createElement('style');el.dataset.viteId=id;document.head.append(el)}el.textContent=css}export const removeStyle=()=>{};`}))
+    await page.route(base+'/@vite/client',route=>route.fulfill({contentType:'application/javascript',body:`export const createHotContext=()=>({accept(){},prune(){},dispose(){},data:{},invalidate(){},on(){},off(){},send(){}});export const injectQuery=(url,q)=>{if(url[0]!=='.'&&url[0]!=='/')return url;const u=new URL(url,'http://vite.dev');return url.split(/[?#]/)[0]+'?'+q+(u.search?'&'+u.search.slice(1):'')+u.hash};export function updateStyle(id,css){let el=document.querySelector('style[data-vite-id="'+id+'"]');if(!el){el=document.createElement('style');el.dataset.viteId=id;document.head.append(el)}el.textContent=css}export const removeStyle=()=>{};`}))
     await page.route('**/api/**',async route=>{
       const req=route.request(),path=new URL(req.url()).pathname
       let data={}

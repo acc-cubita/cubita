@@ -218,7 +218,14 @@ import {
 } from '../pages/accounting/AccountingListPages'
 
 const PAGE_TITLES: Record<PageKey, string> = {
-  repair: 'تعمیرگاه',
+  repair: 'پرونده‌ها',
+  repairintake: 'پذیرش جدید',
+  repairmine: 'کارتابل من',
+  repairservices: 'خدمات سازمانی',
+  repairharvest: 'استخراج قطعات شرکت',
+  repairreports: 'گزارش‌ها',
+  repairexchange: 'تبادل سوابق',
+  repairsettings: 'تنظیمات تعمیرگاه',
   automation: 'کارتابل من',
   letternew: 'نامه',
   letterlist: 'دبیرخانه و بایگانی',
@@ -405,9 +412,14 @@ export function Dashboard({
   // تبِ فعالِ صفحه (زیرمنوی سطح‌سوم). null یعنی تبِ پیش‌فرض (اولین). با NavSectionContext
   // بین سایدبار و نوارِ تبِ داخلِ صفحه دوطرفه هم‌گام می‌شود.
   const [section, setSection] = useState<string | null>(null)
+  const [repairNavigationRevision,setRepairNavigationRevision]=useState(0)
+  const repairExitGuard = useRef<(()=>boolean)|null>(null)
+  const registerRepairExitGuard = useMemo(() => (guard: (()=>boolean)|null) => { repairExitGuard.current=guard }, [])
   const navigate = (p: PageKey, s: string | null = null) => {
     //: منویی که در بازچینی ادغام شد (میان‌برِ ذخیره‌شده‌ی قدیمی) به جای تازه‌اش می‌رود.
     const to = resolveLegacyPage(p, s)
+    if (repairExitGuard.current && !repairExitGuard.current()) return
+    if (to.page.startsWith('repair')) setRepairNavigationRevision(value=>value+1)
     setPage(to.page)
     setSection(to.section)
     setEditContactId(null)
@@ -847,7 +859,7 @@ export function Dashboard({
           {page === 'moadianhistory' && <MoadianHistoryPage token={token} me={me} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'automation' && <AutomationPage token={token} me={me} mode="inbox" onNavigate={navigate} />}
-          {page === 'repair' && <RepairPage token={token} me={me} />}
+          {(['repair','repairintake','repairmine','repairservices','repairharvest','repairreports','repairexchange','repairsettings'] as const).some(key => key === page) && <RepairPage token={token} me={me} registerExitGuard={registerRepairExitGuard} navigationRevision={repairNavigationRevision} view={page as import('../pages/repair/RepairPage').RepairView} />}
           {page === 'letternew' && <AutomationPage token={token} me={me} mode="new" onNavigate={navigate} />}
           {page === 'letterlist' && <AutomationPage token={token} me={me} mode="registry" onNavigate={navigate} />}
           {page === 'team' && <TeamPage token={token} />}
@@ -903,12 +915,13 @@ export function Dashboard({
     () =>
       buildNav({
         tenantKind: me.tenant_kind,
+        permissions: me.permissions,
         marketplaceRoles: me.marketplace_roles,
         enabledModules: me.enabled_modules,
         allowedModules: me.allowed_modules,
         isOwner: me.role_key === 'owner',
       }).groups,
-    [me.tenant_kind, me.marketplace_roles, me.enabled_modules, me.allowed_modules, me.role_key],
+    [me.permissions, me.tenant_kind, me.marketplace_roles, me.enabled_modules, me.allowed_modules, me.role_key],
   )
 
   // نوارِ تبِ داخلِ صفحه فقط وقتی پنهان می‌شود که کارتِ «عملیات» جایش را گرفته باشد.
@@ -935,14 +948,14 @@ export function Dashboard({
             businessName={me.tenant_name}
             token={token}
             currentTenantId={me.tenant_id}
-            tenantKind={me.tenant_kind}
+            permissions={me.permissions} tenantKind={me.tenant_kind}
             marketplaceRoles={me.marketplace_roles}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
             isOwner={me.role_key === 'owner'}
             mpUnread={mpUnread}
             onOpenSearch={() => setSearchOpen(true)}
-            onLogout={onLogout}
+            onLogout={()=>{if(repairExitGuard.current && !repairExitGuard.current())return;onLogout()}}
             onSync={isElectron ? () => handleSync() : undefined}
             syncing={syncing}
             syncStatus={syncStatus}
@@ -980,12 +993,12 @@ export function Dashboard({
             onNavigate={navigate}
             userName={me.name}
             roleName={me.role_name}
-            tenantKind={me.tenant_kind}
+            permissions={me.permissions} tenantKind={me.tenant_kind}
             marketplaceRoles={me.marketplace_roles}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
             isOwner={me.role_key === 'owner'}
-            onLogout={onLogout}
+            onLogout={()=>{if(repairExitGuard.current && !repairExitGuard.current())return;onLogout()}}
             open={navOpen}
             onClose={() => setNavOpen(false)}
           />

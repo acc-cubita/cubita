@@ -1,10 +1,13 @@
+import { useRepairPanelActive } from './repairPanelActivity'
 import { useEffect, useState } from 'react'
 import { can, clearRepairDeviceSecret, fetchRepairAccessCapabilities, revealRepairDeviceSecret, setRepairDeviceSecret, type MeResponse, type RepairCase } from '../../api'
 
 export function RepairDeviceAccess({token,me,row,busy,run,refresh}:{token:string;me:MeResponse;row:RepairCase;busy:boolean;run:(action:()=>Promise<void>)=>Promise<void>;refresh:()=>Promise<void>}) {
+ const panelActive = useRepairPanelActive()
+
   const [available,setAvailable] = useState(false), [loadError,setLoadError] = useState(''), [secret,setSecret] = useState(''), [days,setDays] = useState('1'), [reason,setReason] = useState(''), [revealed,setRevealed] = useState('')
-  useEffect(() => { let active = true;fetchRepairAccessCapabilities(token).then(c => { if(active) setAvailable(c.encrypted_storage_available) }).catch(e => { if(active) setLoadError(e instanceof Error ? e.message : 'وضعیت حفاظت رمز دریافت نشد.') });return () => { active = false } },[token])
-  useEffect(() => { if(!revealed) return;const timer=setTimeout(()=>setRevealed(''),20000);return()=>clearTimeout(timer) },[revealed])
+  useEffect(() => {if (!panelActive) return; let active = true;fetchRepairAccessCapabilities(token).then(c => { if(active) setAvailable(c.encrypted_storage_available) }).catch(e => { if(active) setLoadError(e instanceof Error ? e.message : 'وضعیت حفاظت رمز دریافت نشد.') });return () => { active = false } },[token, panelActive])
+  useEffect(() => {; if(!revealed) return;const timer=setTimeout(()=>setRevealed(''),20000);return()=>clearTimeout(timer) },[revealed])
   const update = can(me,'repair_access','update'), view = can(me,'repair_access','view')
   if(!update && !view) return null
   return <details><summary>دسترسی محدود به رمز دستگاه</summary>{loadError && <p role="alert">{loadError}</p>}<p>ثبت رمز اختیاری است. مشاهده در تاریخچه ثبت می‌شود و پس از کنترل کیفیت موفق پاک می‌شود.</p>{!available && <p>کلید حفاظت روی سرور آماده نیست؛ ذخیرهٔ رمز فعال نیست.</p>}

@@ -1035,6 +1035,9 @@ def test_real_browser_admission_against_isolated_backend(client,db,intake,user):
     from app.schemas.invoices import PurchaseInvoiceIn,PurchaseInvoiceLineIn
     from app.services.inventory import post_purchase_invoice,get_stock_qty
     device=make_item(db,name='دستگاه انباری مرورگر');part=make_item(db,name='قطعه خروجی مرورگر')
+    service=make_item(db,name='خدمت مرورگر',is_service=True)
+    cashbox=client.post('/api/cashboxes',json={'name':'صندوق مرورگر'})
+    assert cashbox.status_code==201,cashbox.text
     source=main_warehouse(db);output=other_warehouse(db)
     post_purchase_invoice(db,PurchaseInvoiceIn(invoice_date=date.today(),warehouse_id=source.id,lines=[PurchaseInvoiceLineIn(item_id=device.id,qty=1,unit_cost=1000)]),user)
     assert client.put('/api/repair/technicians/'+str(user.id)+'/skills',json={'type_ids':[intake['device']['type_id']]}).status_code==200
@@ -1056,7 +1059,7 @@ def test_real_browser_admission_against_isolated_backend(client,db,intake,user):
         deadline=time.monotonic()+10
         while not server.started and time.monotonic()<deadline:thread.join(.05)
         assert server.started
-        env={**os.environ,'REPAIR_QA_USER':str(user.id),'REPAIR_QA_DEVICE':str(device.id),'REPAIR_QA_PART':str(part.id),'REPAIR_QA_SOURCE':str(source.id),'REPAIR_QA_OUTPUT':str(output.id),'REPAIR_QA_API_URL':f'http://127.0.0.1:{port}','REPAIR_QA_CONTACT':intake['contact_id'],'REPAIR_QA_BRANCH':intake['branch_id'],'REPAIR_QA_TYPE':intake['device']['type_id']}
+        env={**os.environ,'REPAIR_QA_USER':str(user.id),'REPAIR_QA_SERVICE':str(service.id),'REPAIR_QA_CASHBOX':cashbox.json()['id'],'REPAIR_QA_DEVICE':str(device.id),'REPAIR_QA_PART':str(part.id),'REPAIR_QA_SOURCE':str(source.id),'REPAIR_QA_OUTPUT':str(output.id),'REPAIR_QA_API_URL':f'http://127.0.0.1:{port}','REPAIR_QA_CONTACT':intake['contact_id'],'REPAIR_QA_BRANCH':intake['branch_id'],'REPAIR_QA_TYPE':intake['device']['type_id']}
         result=subprocess.run(['node','scripts/verify-repair-backend.mjs'],cwd=Path(__file__).resolve().parents[2]/'desktop',env=env,capture_output=True,text=True,timeout=120,encoding='utf-8')
         assert result.returncode==0,result.stdout+'\n'+result.stderr
         assert db.query(RepairCase).count()==before[0]+6
@@ -1066,7 +1069,7 @@ def test_real_browser_admission_against_isolated_backend(client,db,intake,user):
         assert db.query(RepairHistoricalRecord).count()==2
         from app.models.repair_completion import RepairOnsiteApproval
         assert db.query(RepairOnsiteApproval).count()==2
-        assert db.query(StockLedger).count()==before[1]+12 and db.query(JournalEntry).count()==before[2]+8
+        assert db.query(StockLedger).count()==before[1]+12 and db.query(JournalEntry).count()==before[2]+12
         assert get_stock_qty(db,device.id,source.id)==1 and get_stock_qty(db,part.id,output.id)==0
     finally:
         server.should_exit=True;thread.join(10);listener.close()

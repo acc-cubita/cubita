@@ -86,7 +86,6 @@ export const listSections = (sections: SectionDef[]) => sections.filter((s) => s
  * ناهم‌خوان بماند، صفحه به تبِ اول برمی‌گردد — نه خطا، ولی زیرمنو ناقص می‌شود.)
  */
 export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
-  repair: [{ key: 'admissions', label: 'پذیرش‌ها', icon: ClipboardList, kind: 'list' }],
   //: «سامانه مؤدیان» — ترتیب همان مسیرِ کار است: اول ببین آماده‌ای یا نه، بعد بفرست،
   //: بعد پیگیری کن؛ تنظیمات آخر است چون یک‌بار انجام می‌شود.
   moadian: [

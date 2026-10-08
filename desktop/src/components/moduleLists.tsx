@@ -190,7 +190,6 @@ export function menuEntryActive(e: ListMenuItem, page: PageKey, section: string 
  * هر دسته، و «تعریف‌ها» پیش‌فرض بسته. ردیف‌های هم‌دسته پشتِ هم می‌آیند.
  */
 export const LIST_MENUS: Record<string, ListMenuItem[]> = {
-  'تعمیرگاه': [{ key: 'repair', section: 'admissions', label: 'پذیرش‌ها و سوابق دستگاه', icon: ClipboardList }],
   'اتوماسیون اداری': [
     { key: 'letterlist', label: 'دبیرخانه و بایگانی', icon: FileText },
   ],
@@ -403,6 +402,14 @@ export type OpsListTarget = PageKey | readonly PageKey[] | 'state' | 'view' | 'n
 
 export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   repair: 'repair',
+  repairintake: 'repairintake',
+  repairmine: 'repairmine',
+  repairservices: 'repairservices',
+  repairharvest: 'repairharvest',
+  repairreports: 'repairreports',
+  repairexchange: 'repairexchange',
+  repairsettings: 'repairsettings',
+
   automation: 'view',
   letternew: 'letterlist',
   ownertxn: 'ownertxnlist', //: ثبت ↔ دفتر — الگوی «فروش اقساطی»
