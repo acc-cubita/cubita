@@ -627,14 +627,31 @@ def test_online_payment_server_verified_only_once_and_accounting_recovery(client
     assert client.get('/api/repair-portal/documents/'+str(uuid4()),headers=auth).status_code==404
 
 
-def test_warranty_revisit_expiry_and_charge_guard(client, db, user, intake, approved_case):
+@pytest.mark.parametrize('delivery_time', [
+    '2026-10-07T23:59:59+00:00',
+    '2026-10-08T00:00:01+00:00',
+    '2028-02-29T12:00:00+00:00',
+])
+def test_warranty_revisit_expiry_and_charge_guard(client, db, user, intake, approved_case, monkeypatch, delivery_time):
+    from datetime import datetime
     from app.models.repair import RepairEvent, RepairWarrantyClaim
+    from app.services import repair_finance
+    delivered_at = datetime.fromisoformat(delivery_time)
+    class DeliveryClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return delivered_at.astimezone(tz) if tz else delivered_at.replace(tzinfo=None)
+    monkeypatch.setattr(repair_finance, 'datetime', DeliveryClock)
+    # All dates share the delivery clock: mixing today with fixed dates failed
+    # when the CI runner crossed UTC midnight, despite unchanged product code.
+    valid_from = delivered_at.date()
+    valid_until = valid_from + timedelta(days=30)
     path='/api/repair/cases/'+approved_case['id']
     def post(suffix, **data):
         return client.post(path+suffix,json={'version':client.get(path).json()['version'],**data},headers={'Idempotency-Key':str(uuid4())})
     work=post('/work',technician_id=str(user.id),description='تنظیم',work_minutes=10,charge_amount='0')
     assert work.status_code==201,work.text
-    warranty={'scope':'service','source_id':work.json()['id'],'title':'ضمانت تنظیم','valid_from':date.today().isoformat(),'valid_until':'2026-11-06','terms':'همان خرابی'}
+    warranty={'scope':'service','source_id':work.json()['id'],'title':'ضمانت تنظیم','valid_from':valid_from.isoformat(),'valid_until':valid_until.isoformat(),'terms':'همان خرابی'}
     assert post('/warranties',**warranty).status_code==409
     assert post('/status',status='diagnosing').status_code==200
     assert post('/status',status='repairing').status_code==200
@@ -643,12 +660,15 @@ def test_warranty_revisit_expiry_and_charge_guard(client, db, user, intake, appr
     assert post('/status',status='ready').status_code==200
     delivered=post('/delivery',receiver_name='مالک',receiver_phone='09123456789',authorization='مالک با رسید',accessories='شارژر',care_instructions='پرهیز از ضربه',checklist={'device':True,'accessories':True,'receiver_authorized':True})
     assert delivered.status_code==201,delivered.text
+    assert datetime.fromisoformat(delivered.json()['delivered_at']).date()==valid_from
     issued=post('/warranties',**warranty)
     assert issued.status_code==201,issued.text
     old=client.get(path).json(); count=db.query(RepairEvent).filter_by(case_id=old['id']).count()
-    admission={**intake,'device':None,'device_id':old['device_id'],'admission_date':'2026-10-07'}
+    admission={**intake,'device':None,'device_id':old['device_id'],'admission_date':(valid_from+timedelta(days=1)).isoformat()}
     data={'warranty_id':issued.json()['id'],'admission':admission,'classification':'repeat_fault','responsibility':'company','cost_policy':'covered','reason':'ایراد دوباره'}
-    assert client.post(path+'/revisits',json={**data,'admission':{**admission,'admission_date':'2027-01-01'}},headers={'Idempotency-Key':str(uuid4())}).status_code==422
+    for outside_date in (valid_from-timedelta(days=1), valid_until+timedelta(days=1)):
+        rejected=client.post(path+'/revisits',json={**data,'admission':{**admission,'admission_date':outside_date.isoformat()}},headers={'Idempotency-Key':str(uuid4())})
+        assert rejected.status_code==422,rejected.text
     key=str(uuid4());visit=client.post(path+'/revisits',json=data,headers={'Idempotency-Key':key})
     assert visit.status_code==201,visit.text
     assert client.post(path+'/revisits',json=data,headers={'Idempotency-Key':key}).json()['id']==visit.json()['id']
