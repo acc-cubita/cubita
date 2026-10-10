@@ -11217,3 +11217,11 @@ export const approveRepairOnsiteAction=(token:string,row:RepairServiceRequest,ac
 
 // Additive client helper for the existing repair branch filter.
 export const fetchRepairWorkspaceCases = (token:string,q='',cursor?:string,from='',to='',filters:{branch_id?:string;mine?:boolean;overdue?:boolean;inactive_days?:number;status?:string}={}) => authedGet<Page<RepairCase>>(token, `/api/repair/cases?${new URLSearchParams({q,...(cursor?{cursor}:{}),...(from?{date_from:from}:{}),...(to?{date_to:to}:{}),...Object.fromEntries(Object.entries(filters).filter(([,value])=>!!value).map(([key,value])=>[key,String(value)]))})}`)
+
+/** ویرایشِ قاعده‌ی پورسانت (برگه‌ی «پورسانت»، ۱۴۰۵/۰۷/۱۸) — نرخ، مبنا، وضعیت و شرح. فروشنده ثابت است؛
+ *  محاسبه‌های ذخیره‌شده نرخِ زمانِ خودشان را نگه داشته‌اند و عوض نمی‌شوند. */
+export const updateCommissionRule = (
+  token: string,
+  id: string,
+  data: Partial<{ rate: number; basis: 'net' | 'profit'; is_active: boolean; description: string }>,
+) => authedSend<CommissionRule>(token, 'PATCH', `/api/sales-ops/commission-rules/${id}`, data)

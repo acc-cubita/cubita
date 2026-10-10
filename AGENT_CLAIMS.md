@@ -139,6 +139,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
 | Claude Code (آرش) | `desktop/build/{installer-os.nsh,installer.nsh,installer-enterprise.nsh,installer-service-guard.ps1}`، `desktop/scripts/dist-enterprise.mjs`، `desktop/package.json` (`nsis.include`)، `desktop/src/pages/HelpPage.tsx`، `PROJECT_OVERVIEW.md`، `DEPLOY_NOTES.md` | نصاب: شرطِ ویندوز ۱۰ (خطای نصبِ سازمانی روی ویندوز ۸) | ۱۴۰۵/۰۷/۱۸ |
+| Claude Code (آرش) | `backend/app/{routers,schemas}/sales_ops.py`، `backend/tests/test_salesperson_wiring.py`، `desktop/src/{pages/sales/{CommissionsPage,SalesOpsPages,SalesListPages}.tsx,components/{DefSheet,Dashboard,moduleLists,moduleSections}.tsx,lib/navModel.tsx,pages/HelpPage.tsx,api.ts,App.css}`، `.claude/skills/cubita-excel-theme/SKILL.md`، `PROJECT_OVERVIEW.md` | «پورسانت»: قاعده و محاسبه یک صفحه با تمِ اکسلی | ۱۴۰۵/۰۷/۱۸ |
 | Codex | desktop/scripts/publish-update.mjs، MARKET_DEFAULT_RELEASE.md | ۱.۹.۱۱ روی کانال امضاشده منتشر شد؛ لینک نصب تازه نیز به همان نصاب وصل شد و انتشار بعدی آن را همگام و سنجش می‌کند | ۱۴۰۵/۰۷/۱۰ |
 
 | Codex | `enterprise_market_local.py`، تست کش/پیوند؛ `pytest` آزاد | اصلاح نهایی #261: پیوند جدید کش گفتگو/بازار و تأیید انتشار قبلی را به ارث نمی‌برد؛ ۱۱ تست پیوند/کش پاس، انتشار همچنان OFF | ۱۴۰۵/۰۷/۰۹ |

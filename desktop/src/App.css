@@ -13780,6 +13780,22 @@ tr.is-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent, curren
   .fx-sheet.is-loading tbody { transition: none; }
 }
 
+/* ── «پورسانت ← محاسبه»: پیش‌نمایشِ سرور، همان قالبِ تسعیر ──
+ * «فروشنده» باقی را می‌گیرد؛ مبلغ‌ها هم‌عرض. ستون‌های «فاکتور» و «مبلغِ مبنا» و «پورسانت» زیرِ سه خانه‌ی عددیِ نوارند. */
+@media (min-width: 761px) {
+  .page .ef-table-wrap > table.cm-sheet { table-layout: fixed; inline-size: 100%; min-inline-size: 720px; }
+  .cm-sheet col.cm-c-rowhead { width: 44px; }
+  .cm-sheet col.cm-c-basis { width: 14%; }
+  .cm-sheet col.cm-c-rate { width: 9%; }
+  .cm-sheet col.cm-c-count { width: 10%; }
+  .cm-sheet col.cm-c-money { width: 16%; }
+  .page .ef-table-wrap > table.cm-sheet td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+.cm-sheet.is-loading tbody { opacity: 0.55; transition: opacity 120ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .cm-sheet.is-loading tbody { transition: none; }
+}
+
 /* مانده اول دوره: دو گرید در یک کارت، هر کدام با عنوانِ خودش. */
 .ob-note { margin-block: var(--sp-2); }
 
