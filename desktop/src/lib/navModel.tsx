@@ -80,7 +80,6 @@ import {
   Wallet,
   Warehouse,
   FileText,
-  Calculator,
   Ship,
   BadgePercent,
   TrendingUp,
@@ -227,8 +226,9 @@ export type PageKey =
   | 'salesinvoice'
   | 'quotations'
   | 'salesreturn'
-  | 'commission'
-  | 'commissioncalc'
+  //: «پورسانت» — قاعده‌ها و محاسبه، دو برگه در یک صفحه؛ جانشینِ `commission`/`commissioncalc` و دفترِ
+  //: `commissionrulelist` (`LEGACY_PAGES`).
+  | 'commissions'
   | 'customs'
   | 'contactstatement'
   | 'creditnote'
@@ -249,7 +249,6 @@ export type PageKey =
   | 'discountgrouplist'
   | 'priceannouncelist'
   | 'bundlelist'
-  | 'commissionrulelist'
   | 'commissionrunlist'
   | 'customslist'
   | 'notelist'
@@ -345,8 +344,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'crm', label: 'باشگاه مشتریان', icon: <HeartHandshake size={18} />, section: 'باشگاه مشتریان' },
       { key: 'invoiceclose', label: 'بستن فاکتور', icon: <Lock size={18} />, section: 'اصلاح و بستن' },
       { key: 'creditnote', label: 'اعلامیه بدهکار بستانکار', icon: <FileSpreadsheet size={18} />, section: 'اصلاح و بستن' },
-      { key: 'commission', label: 'قاعده پورسانت', icon: <Wallet size={18} />, section: 'پورسانت و گمرک' },
-      { key: 'commissioncalc', label: 'محاسبه پورسانت', icon: <Calculator size={18} />, section: 'پورسانت و گمرک' },
+      //: قاعده و محاسبه یک صفحه با دو برگه (مرحله‌ی ۲، ۱۴۰۵/۰۷/۱۸) — برگه‌ها زیرِ همین ردیف باز می‌شوند.
+      { key: 'commissions', label: 'پورسانت', icon: <Wallet size={18} />, section: 'پورسانت و گمرک' },
       { key: 'customs', label: 'اظهارنامه گمرکی', icon: <Ship size={18} />, section: 'پورسانت و گمرک' },
       { key: 'salesbrowse', label: 'مرور فروش', icon: <TrendingUp size={18} />, section: 'مرور و گزارش' },
       { key: 'contactoverview', label: 'مرور جامع طرف حساب', icon: <Contact size={18} />, section: 'مرور و گزارش' },
@@ -610,9 +609,9 @@ for (const key of [
 //: کسب‌وکاری که ماژولِ فروش را ندارد همه‌ی این منوها را می‌دید.
 for (const key of [
   'salesflow', 'salesinvoice', 'quotations', 'salesreturn', 'invoiceclose', 'creditnote',
-  'contactstatement', 'commission', 'commissioncalc', 'customs', 'saletype', 'returnreason', 'priceannounce',
+  'contactstatement', 'commissions', 'customs', 'saletype', 'returnreason', 'priceannounce',
   'bundle', 'discount', 'discountgroup', 'markup', 'salesbrowse', 'contactoverview',
-  'saleslist', 'quotationlist', 'returnlist', 'notelist', 'commissionrulelist',
+  'saleslist', 'quotationlist', 'returnlist', 'notelist',
   'commissionrunlist', 'customslist', 'saletypelist', 'priceannouncelist', 'bundlelist',
   'pricingfactorlist', 'discountgrouplist',
 ] as PageKey[]) {
@@ -948,6 +947,10 @@ export const LEGACY_PAGES: Readonly<Record<string, { page: PageKey; section?: st
   checksearch: { page: 'checks', section: 'search' },
   //: ورودِ صورت‌حساب دکمه‌ای در «مغایرت‌گیری بانکی» شد.
   bankstatement: { page: 'bankreconcile' },
+  //: قاعده و محاسبه‌ی پورسانت دو برگه‌ی «پورسانت» شدند؛ دفترِ قاعده‌ها همان برگه است (۱۴۰۵/۰۷/۱۸).
+  commission: { page: 'commissions', section: 'rules' },
+  commissioncalc: { page: 'commissions', section: 'calc' },
+  commissionrulelist: { page: 'commissions', section: 'rules' },
 }
 
 /** مقصدِ واقعیِ یک ناوبری — کلیدِ قدیمی به جای تازه‌اش، بقیه همان که بود. */

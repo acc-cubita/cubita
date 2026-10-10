@@ -61,6 +61,8 @@ export interface DefCol<R> {
   w?: string | number
   ltr?: boolean
   numeric?: boolean
+  /** خانه‌ی عددی اعشار می‌پذیرد (نرخِ پورسانت ۷٫۵٪). پیش‌فرض: فقط عددِ صحیح. */
+  decimal?: boolean
   /** گزینه‌های انتخاب‌گر (مقدارِ خالی با `emptyOption`). */
   options?: (values: DefValues) => { value: string; label: string }[]
   emptyOption?: string
@@ -658,6 +660,7 @@ function SheetRow<R extends { id: string }>({
           onChange={(v) => onEdit(r, field, v)}
           aria-label={label}
           disabled={Boolean(lock)}
+          allowDecimal={c.decimal}
         />
       )
     } else {

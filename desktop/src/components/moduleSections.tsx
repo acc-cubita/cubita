@@ -212,6 +212,11 @@ export const MODULE_SECTIONS: Partial<Record<PageKey, SectionDef[]>> = {
     { key: 'return', label: 'استرداد چک', icon: Undo2 },
     { key: 'search', label: 'جست‌وجوی چک', icon: Search },
   ],
+  //: «پورسانت» — دو برگه (`CommissionsPage`): قاعده‌ها برگه‌ی تعریف، محاسبه پیش‌نمایش و ذخیره.
+  commissions: [
+    { key: 'rules', label: 'قاعده‌های پورسانت', icon: Wallet },
+    { key: 'calc', label: 'محاسبه پورسانت', icon: Calculator },
+  ],
   calendar: [
     { key: 'reminders', label: 'کارهای امروز', icon: BellRing },
     { key: 'calendar', label: 'تقویم ماهانه', icon: CalendarDays },

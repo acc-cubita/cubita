@@ -81,8 +81,6 @@ import { UserListPage } from '../pages/UserListPage'
 import { FiscalYearListPage } from '../pages/FiscalYearListPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
 import {
-  CommissionCalcPage,
-  CommissionPage,
   ContactOverviewPage,
   ContactStatementPage,
   CreditDebitNotePage,
@@ -98,9 +96,9 @@ import {
   SalesBrowsePage,
   SalesFlowPage,
 } from '../pages/sales/SalesOpsPages'
+import { CommissionsPage } from '../pages/sales/CommissionsPage'
 import {
   BundleListPage,
-  CommissionRuleListPage,
   CommissionRunListPage,
   CustomsListPage,
   DiscountGroupListPage,
@@ -237,8 +235,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   invoiceclose: 'بستن فاکتور',
   creditnote: 'اعلامیه بدهکار بستانکار',
   contactstatement: 'صورت حساب طرف مقابل',
-  commission: 'قاعده پورسانت',
-  commissioncalc: 'محاسبه پورسانت',
+  commissions: 'پورسانت',
   customs: 'اظهارنامه گمرکی',
   saletype: 'نوع فروش',
   returnreason: 'علت برگشت کالا',
@@ -253,7 +250,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
   quotationlist: 'پیش‌فاکتورها',
   returnlist: 'فاکتورهای برگشتی',
   notelist: 'اعلامیه‌های بدهکار و بستانکار',
-  commissionrulelist: 'قواعد پورسانت',
   commissionrunlist: 'محاسبه‌های پورسانت',
   customslist: 'اظهارنامه‌های گمرکی',
   saletypelist: 'انواع فروش',
@@ -620,8 +616,7 @@ export function Dashboard({
           {page === 'invoiceclose' && <InvoiceClosePage token={token} />}
           {page === 'creditnote' && <CreditDebitNotePage token={token} onNavigate={navigate} />}
           {page === 'contactstatement' && <ContactStatementPage token={token} />}
-          {page === 'commission' && <CommissionPage token={token} />}
-          {page === 'commissioncalc' && <CommissionCalcPage token={token} />}
+          {page === 'commissions' && <CommissionsPage token={token} />}
           {page === 'customs' && <CustomsPage token={token} />}
           {page === 'saletype' && <SaleTypePage token={token} />}
           {page === 'returnreason' && <ReturnReasonPage token={token} />}
@@ -638,7 +633,6 @@ export function Dashboard({
           )}
           {page === 'returnlist' && <SalesReturnListPage token={token} onNavigate={navigate} />}
           {page === 'notelist' && <NoteListPage token={token} onNavigate={navigate} />}
-          {page === 'commissionrulelist' && <CommissionRuleListPage token={token} />}
           {page === 'commissionrunlist' && <CommissionRunListPage token={token} />}
           {page === 'customslist' && <CustomsListPage token={token} />}
           {page === 'saletypelist' && <SaleTypeListPage token={token} />}

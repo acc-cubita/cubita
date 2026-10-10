@@ -3,7 +3,6 @@ import { salesQuantityText } from '../../lib/salesQuantityDisplay'
 import {
   BadgePercent,
   Boxes,
-  Calculator,
   ClipboardList,
   FileSpreadsheet,
   Layers,
@@ -30,8 +29,6 @@ import {
   type ChartAccount,
   type SaleTypeAccounts,
   createBundle,
-  createCommissionRule,
-  createCommissionRun,
   createCustoms,
   createDiscountGroup,
   createNote,
@@ -45,15 +42,12 @@ import {
   createPricingFactor,
   createSaleType,
   createSalesReturnReason,
-  fetchCommissionPreview,
-  fetchCommissionRules,
   fetchContactGroups,
   fetchContacts,
   fetchCurrencies,
   fetchDiscountGroups,
   fetchItemsLive,
   fetchJournalEntriesFiltered,
-  fetchMembers,
   fetchPricingSuggestion,
   fetchSalesInvoices,
   fetchSalesReturnReasons,
@@ -1944,237 +1938,6 @@ export function ProductBundlePage({ token }: { token: string }) {
             </table>
           </div>
         )}
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
-// ═════════════════ ۵) پورسانت — قاعده‌ها ═════════════════
-
-export function CommissionPage({ token }: { token: string }) {
-  const { msg, submitting, reloadKey, run } = useSubmit()
-  const rules = useAsync(() => fetchCommissionRules(token), [token, reloadKey])
-  const [people, setPeople] = useState<{ id: string; name: string }[]>([])
-  const [salespersonId, setSalespersonId] = useState('')
-  const [rate, setRate] = useState('')
-  const [basis, setBasis] = useState<'net' | 'profit'>('net')
-
-  useEffect(() => {
-    fetchMembers(token)
-      .then((r) => setPeople(r.members.map((m) => ({ id: m.user_id, name: m.name || m.email }))))
-      .catch(() => setPeople([]))
-  }, [token])
-
-  const rows = rules.data ?? []
-  return (
-    <OpsPage
-      icon={Wallet}
-      title="پورسانت"
-      description="نرخِ پورسانتِ هر فروشنده. هر فروشنده یک قاعده دارد؛ محاسبه در منوی «محاسبه پورسانت» انجام می‌شود."
-    >
-      <FormCard
-        icon={Wallet}
-        title="قاعده‌ی تازه"
-        description="مبنا یا خالصِ فاکتور است یا سودِ ناخالص — انتخابش اثرِ بزرگی روی عدد دارد."
-        msg={msg}
-        submitting={submitting}
-        disabled={!salespersonId || !Number(rate)}
-        onSubmit={() =>
-          void run(async () => {
-            await createCommissionRule(token, {
-              salesperson_id: salespersonId,
-              rate: Number(rate),
-              basis,
-              is_active: true,
-              description: '',
-            })
-            setSalespersonId('')
-            setRate('')
-          }, 'قاعده‌ی پورسانت ثبت شد.')
-        }
-      >
-        <label>
-          فروشنده
-          <SearchSelect value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)}>
-            <option value="">— انتخاب کنید —</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </SearchSelect>
-        </label>
-        <label>
-          نرخ (درصد)
-          <NumberInput value={rate} onChange={setRate} allowDecimal />
-        </label>
-        <label>
-          مبنا
-          <SearchSelect value={basis} onChange={(e) => setBasis(e.target.value as 'net' | 'profit')}>
-            <option value="net">خالصِ فاکتور</option>
-            <option value="profit">سودِ ناخالص</option>
-          </SearchSelect>
-        </label>
-      </FormCard>
-
-      <SectionCard icon={Users} title="قاعده‌های ثبت‌شده" description={`${faInt(rows.length)} فروشنده`}>
-        <AsyncBlock
-          loading={rules.loading}
-          error={rules.error}
-          empty={rows.length === 0}
-          emptyText="هنوز قاعده‌ای ثبت نشده. بالا یک فروشنده و نرخش را اضافه کنید."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>فروشنده</th>
-                  <th>نرخ</th>
-                  <th>مبنا</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td className="card-title" data-label="فروشنده">
-                      {r.salesperson_name}
-                    </td>
-                    <td className="num" data-label="نرخ">
-                      {fa(r.rate)}٪
-                    </td>
-                    <td data-label="مبنا">{r.basis === 'profit' ? 'سودِ ناخالص' : 'خالصِ فاکتور'}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${r.is_active ? 'tone-success' : 'tone-default'}`}>
-                        {r.is_active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
-// ═════════════════ ۶) محاسبه پورسانت ═════════════════
-
-export function CommissionCalcPage({ token }: { token: string }) {
-  const range = useRange('month')
-  const { msg, submitting, reloadKey, run } = useSubmit()
-  const [note, setNote] = useState('')
-
-  const preview = useAsync(
-    () =>
-      range.from && range.to
-        ? fetchCommissionPreview(token, range.from, range.to)
-        : Promise.resolve({ date_from: '', date_to: '', total_amount: '0', rows: [] }),
-    [token, range.from, range.to, reloadKey],
-  )
-  const rows = preview.data?.rows ?? []
-
-  return (
-    <OpsPage
-      icon={Calculator}
-      title="محاسبه پورسانت"
-      description="پورسانتِ بازه را حساب و ذخیره می‌کند. ذخیره‌شده دیگر عوض نمی‌شود — حتی اگر فاکتوری بعداً باطل شود."
-      head={
-        <div className="cc-head">
-          <RangeBar range={range} />
-          <div className="cc-summary">
-            <Metric icon={<Users size={14} />} label="فروشنده" value={faInt(rows.length)} />
-            <Metric
-              icon={<Wallet size={14} />}
-              label="جمعِ پورسانت"
-              value={faAmount(preview.data?.total_amount ?? 0)}
-              tone="out"
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Calculator}
-        title="پیش‌نمایشِ محاسبه"
-        description="تا وقتی ذخیره نکنید، چیزی ثبت نمی‌شود."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={submitting || rows.length === 0 || !range.from || !range.to}
-            onClick={() =>
-              void run(async () => {
-                await createCommissionRun(token, {
-                  date_from: range.from as string,
-                  date_to: range.to as string,
-                  note,
-                })
-                setNote('')
-              }, 'محاسبه ذخیره شد.')
-            }
-          >
-            <Calculator size={14} /> ذخیره‌ی محاسبه
-          </button>
-        }
-      >
-        <Note msg={msg} />
-        <div className="acc-filters">
-          <label className="acc-inline-field">
-            توضیحِ این محاسبه
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="مثلاً «تیرِ ۱۴۰۵»"
-            />
-          </label>
-        </div>
-        <AsyncBlock
-          loading={preview.loading}
-          error={preview.error}
-          empty={rows.length === 0}
-          emptyText="در این بازه پورسانتی نیست — یا فاکتوری با فروشنده ثبت نشده، یا قاعده‌ای تعریف نشده."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>فروشنده</th>
-                  <th>تعداد فاکتور</th>
-                  <th>مبنا</th>
-                  <th>مبلغِ مبنا</th>
-                  <th>نرخ</th>
-                  <th>پورسانت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.salesperson_id}>
-                    <td className="card-title" data-label="فروشنده">
-                      {r.salesperson_name}
-                    </td>
-                    <td className="num" data-label="تعداد فاکتور">
-                      {faInt(r.invoice_count)}
-                    </td>
-                    <td data-label="مبنا">{r.basis === 'profit' ? 'سودِ ناخالص' : 'خالص'}</td>
-                    <td className="num" data-label="مبلغِ مبنا">
-                      {faAmount(r.base_amount)}
-                    </td>
-                    <td className="num" data-label="نرخ">
-                      {fa(r.rate)}٪
-                    </td>
-                    <td className="num" data-label="پورسانت">
-                      {faAmount(r.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
       </SectionCard>
     </OpsPage>
   )

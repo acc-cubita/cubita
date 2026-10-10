@@ -40,6 +40,7 @@ from app.schemas.sales_ops import (
     CommissionPreviewOut,
     CommissionRuleIn,
     CommissionRuleOut,
+    CommissionRulePatch,
     CommissionRunIn,
     CommissionRunOut,
     CustomsIn,
@@ -446,6 +447,33 @@ def create_commission_rule(data: CommissionRuleIn, db: Session = Depends(get_db)
         raise HTTPException(status.HTTP_409_CONFLICT, "برای این فروشنده قاعده‌ی پورسانت ثبت شده است")
     row = CommissionRule(**data.model_dump())
     db.add(row)
+    db.flush()
+    db.refresh(row)
+    return CommissionRuleOut(
+        id=row.id,
+        salesperson_id=row.salesperson_id,
+        salesperson_name=_person_names(db).get(row.salesperson_id, "—"),
+        rate=row.rate,
+        basis=row.basis,
+        is_active=row.is_active,
+        description=row.description,
+    )
+
+
+@router.patch("/commission-rules/{rule_id}", response_model=CommissionRuleOut)
+def update_commission_rule(
+    rule_id: UUID, data: CommissionRulePatch, db: Session = Depends(get_db), _=Depends(_update)
+):
+    """نرخ، مبنا، وضعیت یا شرحِ یک قاعده — برگه‌ی «پورسانت» ویرایشِ درجا دارد و تا امروز سرور فقط ساختن داشت.
+
+    **محاسبه‌های ذخیره‌شده عوض نمی‌شوند:** هر ردیفِ `CommissionRunLine` نرخ و مبنای زمانِ خودش را نگه داشته،
+    پس تغییرِ نرخ فقط روی محاسبه‌های بعدی می‌نشیند. فقط آنچه فرستاده شده نوشته می‌شود (`exclude_unset`)، و
+    `null`ِ صریح نادیده گرفته می‌شود — ستون‌ها `NOT NULL`اند.
+    """
+    row = _get_or_404(db, CommissionRule, rule_id, "قاعده‌ی پورسانت")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        if v is not None:
+            setattr(row, k, v)
     db.flush()
     db.refresh(row)
     return CommissionRuleOut(
