@@ -12,6 +12,8 @@
 
 !include nsDialogs.nsh
 !include LogicLib.nsh
+; شرطِ ویندوز ۱۰ — مشترک با نصابِ ابری؛ `dist-enterprise.mjs` کنارِ همین فایل کپی‌اش می‌کند.
+!include "${__FILEDIR__}\installer-os.nsh"
 
 !define /ifndef CUBITA_REG_KEY "Software\Cubita Enterprise"
 !define CUBITA_DEFAULT_URL "http://localhost:8420"
@@ -108,6 +110,8 @@ Var CubitaRecoveryWasBlocked
 !macroend
 
 !macro customInit
+  ; پیش از هر چیز: روی ویندوز ۷/۸/۸٫۱ برنامه اجرا نمی‌شود، پس نه نقش پرسیده می‌شود نه سرویسی لمس.
+  !insertmacro cubitaRequireWindows10
   !insertmacro cubitaReadRole
   StrCpy $CubitaExistingRole $CubitaRole
   ReadRegStr $CubitaExistingDirectory HKLM "${INSTALL_REGISTRY_KEY}" "InstallLocation"

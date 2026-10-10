@@ -45,6 +45,8 @@ fs.copyFileSync(
   path.join(root, 'build', 'installer-service-guard.ps1'),
   path.join(root, OUT_DIR, 'installer-service-guard.ps1'),
 )
+//: شرطِ ویندوز ۱۰ (مشترک با نصابِ ابری) — همان‌جا که `installer-enterprise.nsh`ِ ساخته‌شده `!include`اش می‌کند.
+fs.copyFileSync(path.join(root, 'build', 'installer-os.nsh'), path.join(root, OUT_DIR, 'installer-os.nsh'))
 
 const config = {
   ...pkg.build,
