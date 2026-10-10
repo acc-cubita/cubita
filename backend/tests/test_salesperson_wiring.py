@@ -186,3 +186,70 @@ def test_a_voided_invoice_leaves_the_commission_base(db, user, client):
 
     assert not result["rows"], "فاکتورِ باطل نباید در مبنای پورسانت بماند"
     assert db.get(SalesInvoice, invoice_id).voided_at is not None
+
+
+# ── ویرایشِ قاعده (برگه‌ی «پورسانت»، ۱۴۰۵/۰۷/۱۸) ─────────────────────────────────
+
+
+def test_rule_rate_basis_and_status_are_editable(db, user, client):
+    """برگه‌ی پورسانت ویرایشِ درجا دارد؛ تا امروز سرور فقط ساختن داشت و نرخِ اشتباه راهِ اصلاح نداشت."""
+    rule = CommissionRule(salesperson_id=user.id, rate=Decimal(5), basis="net", is_active=True)
+    db.add(rule)
+    db.flush()
+
+    res = client.patch(
+        f"/api/sales-ops/commission-rules/{rule.id}",
+        json={"rate": "7.5", "basis": "profit", "is_active": False},
+    )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert Decimal(body["rate"]) == Decimal("7.5")
+    assert body["basis"] == "profit"
+    assert body["is_active"] is False
+    assert body["salesperson_id"] == str(user.id)
+
+
+def test_rule_patch_writes_only_what_was_sent(db, user, client):
+    """`null`ِ صریح و فیلدِ نفرستاده دست نمی‌خورند — ستون‌ها `NOT NULL`اند."""
+    rule = CommissionRule(salesperson_id=user.id, rate=Decimal(5), basis="net", is_active=True, description="فصلی")
+    db.add(rule)
+    db.flush()
+
+    res = client.patch(f"/api/sales-ops/commission-rules/{rule.id}", json={"rate": None, "is_active": False})
+
+    assert res.status_code == 200, res.text
+    db.refresh(rule)
+    assert Decimal(rule.rate) == Decimal(5)
+    assert rule.basis == "net"
+    assert rule.description == "فصلی"
+    assert rule.is_active is False
+
+
+def test_rule_patch_rejects_bad_basis_and_rate(db, user, client):
+    rule = CommissionRule(salesperson_id=user.id, rate=Decimal(5), basis="net", is_active=True)
+    db.add(rule)
+    db.flush()
+
+    assert client.patch(f"/api/sales-ops/commission-rules/{rule.id}", json={"basis": "gross"}).status_code == 422
+    assert client.patch(f"/api/sales-ops/commission-rules/{rule.id}", json={"rate": 120}).status_code == 422
+
+
+def test_a_rate_change_leaves_a_saved_run_alone(db, user, client):
+    """محاسبه‌ی ذخیره‌شده مبنای پرداخت است؛ ویرایشِ نرخ فقط محاسبه‌های بعدی را عوض می‌کند."""
+    _hybrid(db)
+    rule = CommissionRule(salesperson_id=user.id, rate=Decimal(5), basis="net", is_active=True)
+    db.add(rule)
+    db.flush()
+    assert _sell(db, user, client, price=10_000_000, salesperson_id=user.id).status_code == 201
+    run = client.post(
+        "/api/sales-ops/commission/runs", json={"date_from": "2026-01-01", "date_to": "2026-12-31", "note": ""}
+    )
+    assert run.status_code == 201, run.text
+
+    assert client.patch(f"/api/sales-ops/commission-rules/{rule.id}", json={"rate": 10}).status_code == 200
+
+    runs = client.get("/api/sales-ops/commission/runs").json()
+    assert Decimal(runs[0]["rows"][0]["amount"]) == Decimal(500_000)
+    preview = client.get("/api/sales-ops/commission/preview?date_from=2026-01-01&date_to=2026-12-31").json()
+    assert Decimal(preview["rows"][0]["amount"]) == Decimal(1_000_000)

@@ -288,6 +288,23 @@ class CommissionRuleIn(BaseModel):
         return v
 
 
+class CommissionRulePatch(BaseModel):
+    """ویرایشِ قاعده — نرخ، مبنا، وضعیت و شرح. **فروشنده عوض نمی‌شود:** قاعده هویتِ همان فروشنده است و هر
+    فروشنده یک قاعده دارد؛ برای فروشنده‌ی دیگر قاعده‌ی تازه بساز."""
+
+    rate: Decimal | None = Field(default=None, ge=0, le=100)
+    basis: str | None = None
+    is_active: bool | None = None
+    description: str | None = None
+
+    @field_validator("basis")
+    @classmethod
+    def _basis(cls, v: str | None) -> str | None:
+        if v is not None and v not in COMMISSION_BASES:
+            raise ValueError("مبنای پورسانت نامعتبر است")
+        return v
+
+
 class CommissionRuleOut(_Named):
     id: UUID
     salesperson_id: UUID
