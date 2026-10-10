@@ -55,6 +55,9 @@ GLOBAL_TABLES = frozenset(
         # دفترِ مجوزهای فروخته‌شده در ابر (ستاد) — مثلِ subscriptions، دفترِ کنترل‌پنل است.
         "enterprise_licenses",
         "enterprise_license_events",
+        # کدِ پیامکیِ ثبت‌نامِ رایگانِ سازمانی: مثلِ email_verification_codes پیش از هر حساب و
+        # مستأجری مصرف می‌شود؛ محافظت خودِ کدِ نمک‌خورده و سقفِ تلاش است، نه RLS.
+        "enterprise_free_codes",
         # Cloud broker records are shared by two counterparties. Access to them
         # must be explicitly scoped by link/tenant in the bridge router.
         "enterprise_market_links",

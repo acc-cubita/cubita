@@ -105,7 +105,7 @@ from app.models.payroll import (
 )
 from app.models.refresh_token import RefreshToken
 from app.models.enterprise_license import EnterpriseLicense
-from app.models.enterprise_license_registry import EnterpriseLicenseEvent, EnterpriseLicenseRecord
+from app.models.enterprise_license_registry import EnterpriseFreeCode, EnterpriseLicenseEvent, EnterpriseLicenseRecord
 from app.models.enterprise_market_bridge import (
     EnterpriseMarketCatalog,
     EnterpriseMarketCommand,
@@ -310,6 +310,7 @@ __all__ = [
     "TreasuryTransaction",
     "AuthToken",
     "EnterpriseLicense",
+    "EnterpriseFreeCode",
     "EnterpriseLicenseEvent",
     "EnterpriseLicenseRecord",
     "EnterpriseMarketCatalog",

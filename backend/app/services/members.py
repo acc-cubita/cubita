@@ -209,11 +209,18 @@ def invite_member(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "کسب‌وکار یافت نشد")
 
     if tenant.max_users is not None and seats_used(db, tenant_id) >= tenant.max_users:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"سقف کاربران این پلن ({tenant.max_users} کاربر) تکمیل است. "
-            "برای افزودن کاربر بیشتر پلن را ارتقا دهید یا کاربری را غیرفعال کنید.",
-        )
+        if get_settings().is_enterprise:
+            #: سازمانی پلن ندارد؛ سقف از مجوز می‌آید و راهِ کاربرِ بیشتر مجوزِ تجاری است.
+            detail = (
+                f"سقفِ کاربرانِ این نصب ({tenant.max_users} کاربر) تکمیل است. "
+                "برای کاربرِ بیشتر مجوزِ تجاریِ کوبیتا سازمانی بگیرید یا کاربری را غیرفعال کنید."
+            )
+        else:
+            detail = (
+                f"سقف کاربران این پلن ({tenant.max_users} کاربر) تکمیل است. "
+                "برای افزودن کاربر بیشتر پلن را ارتقا دهید یا کاربری را غیرفعال کنید."
+            )
+        raise HTTPException(status.HTTP_409_CONFLICT, detail)
 
     role = _role_by_key(db, tenant_id, role_key)
 

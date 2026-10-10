@@ -67,6 +67,8 @@ class LicenseStatus:
     mods: frozenset[str] | None = None
     feat: frozenset[str] | None = None
     license_id: str | None = None
+    #: paid | free — از توکن؛ None پیش از هر مجوزی (آزمایشی). توکنِ بی‌`tier` پولی است.
+    tier: str | None = None
 
 
 _cache: tuple[float, LicenseStatus] | None = None
@@ -215,8 +217,8 @@ def evaluate(
             expires_at=end,
             days_left=0,
             message=(
-                f"دوره‌ی آزمایشیِ {_fa(trial_days)}روزه تمام شده است. دفترها و گزارش‌ها در دسترس‌اند، "
-                "ولی برای ثبتِ سندِ تازه باید نرم‌افزار را فعال کنید."
+                f"دوره‌ی آزمایشیِ {_fa(trial_days)}روزه تمام شده است. دفترها و گزارش‌ها در دسترس‌اند؛ "
+                "برای ادامه‌ی ثبتِ سند، ثبت‌نامِ رایگان (نام و شماره‌ی همراه) را در «سرور و مجوز» انجام دهید."
             ),
         )
 
@@ -235,6 +237,7 @@ def evaluate(
         mods=frozenset(payload["mods"]) if isinstance(payload.get("mods"), list) else None,
         feat=frozenset(payload["feat"]) if isinstance(payload.get("feat"), list) else None,
         license_id=payload.get("lic"),
+        tier=payload.get("tier") or "paid",
     )
 
     expected_fp = payload.get("fp")

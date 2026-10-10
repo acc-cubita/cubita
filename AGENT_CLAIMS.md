@@ -138,6 +138,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `backend/{alembic/versions/0192_enterprise_free_tier.py,app/services/enterprise_free.py,app/services/enterprise_licenses.py,app/routers/{enterprise_activation,enterprise_license,admin_licenses}.py,app/licensing/state.py,app/schemas/{enterprise,enterprise_admin}.py,app/models/{__init__,enterprise_license_registry}.py,app/{deps,tenancy,rate_limit}.py,app/services/members.py,tests/test_enterprise_free.py}`، `desktop/src/{components/{FreeLicenseForm,LicenseBanner,FeatureUpsell}.tsx,pages/{LicensePage,HelpPage}.tsx,lib/license.ts,api.ts,App.css}`، `admin/src/{api.ts,pages/LicensesPage.tsx}`، `ENTERPRISE_PLAN.md`، `PROJECT_OVERVIEW.md`، `DEPLOY_NOTES.md` | «کوبیتا سازمانی» رایگان: ثبت‌نامِ پیامکی، مجوزِ دائمیِ سه‌کاربره | ۱۴۰۵/۰۷/۱۸ |
 | Claude Code (آرش) | `backend/app/{routers,schemas}/sales_ops.py`، `backend/tests/test_salesperson_wiring.py`، `desktop/src/{pages/sales/{CommissionsPage,SalesOpsPages,SalesListPages}.tsx,components/{DefSheet,Dashboard,moduleLists,moduleSections}.tsx,lib/navModel.tsx,pages/HelpPage.tsx,api.ts,App.css}`، `.claude/skills/cubita-excel-theme/SKILL.md`، `PROJECT_OVERVIEW.md` | «پورسانت»: قاعده و محاسبه یک صفحه با تمِ اکسلی | ۱۴۰۵/۰۷/۱۸ |
 | Codex | desktop/scripts/publish-update.mjs، MARKET_DEFAULT_RELEASE.md | ۱.۹.۱۱ روی کانال امضاشده منتشر شد؛ لینک نصب تازه نیز به همان نصاب وصل شد و انتشار بعدی آن را همگام و سنجش می‌کند | ۱۴۰۵/۰۷/۱۰ |
 
