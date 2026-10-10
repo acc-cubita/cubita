@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 import { SiteFooter, SiteHeader } from '../concept/SiteChrome'
+import { applyMeta } from '../seo/meta'
+import { PRIVACY_META } from '../seo/pages'
 import '../concept/concept.css'
 
 export function PrivacyPage() {
-  useEffect(() => {
-    document.title = 'حریم خصوصی | کوبیتا'
-  }, [])
+  useEffect(() => applyMeta(PRIVACY_META), [])
 
   return (
     <div className="cc-root" dir="rtl">

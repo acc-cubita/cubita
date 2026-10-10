@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 import { SiteFooter, SiteHeader } from '../concept/SiteChrome'
+import { applyMeta } from '../seo/meta'
+import { TERMS_META } from '../seo/pages'
 import '../concept/concept.css'
 
 export function TermsPage() {
-  useEffect(() => {
-    document.title = 'شرایط استفاده از خدمات | کوبیتا'
-  }, [])
+  useEffect(() => applyMeta(TERMS_META), [])
 
   return (
     <div className="cc-root" dir="rtl">

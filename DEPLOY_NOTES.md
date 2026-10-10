@@ -6,6 +6,23 @@
 
 قالب و دلیلش در [AGENT_PLAYBOOK.md](AGENT_PLAYBOOK.md) §۸ است.
 
+## سایتِ cubita.ir — پیش‌رندر و صفحه‌های تازه؛ منتظرِ «سازمانیِ رایگان» و تغییرِ nginx
+
+- **ترتیب:** سایت از «کوبیتا سازمانیِ رایگان» و ثبت‌نامِ داخلِ برنامه حرف می‌زند؛ پس بعد از استقرارِ ابرِ PRِ
+  «سازمانیِ رایگان» و **انتشارِ نصابِ سازمانیِ ۱.۹.۱۶+** منتشر شود، نه پیش از آن.
+- **build:** `cd website && npm run build` (حالا خودش پیش‌رندر می‌کند). خروجی زیرپوشه دارد (`dist/enterprise/index.html`،
+  `dist/features/…`، `dist/404.html`، `dist/sitemap.xml`) — همان `tar czf dist.tgz -C dist .` و جابه‌جاییِ `dist`/`dist.old`.
+- **nginx** (`/etc/nginx/sites-enabled/cubita-marketing`، اول پشتیبان، بعد `nginx -t` و `systemctl reload nginx`):
+  - `location / { try_files $uri $uri/ /index.html; }` ← `location = / { try_files /index.html =404; }` و
+    `location / { try_files $uri $uri/index.html =404; }`، به‌اضافه‌ی `error_page 404 /404.html;` در بلوکِ ۴۴۳.
+    بی این، نشانیِ ناموجود همچنان ۲۰۰ و صفحه‌ی اصلی می‌دهد و صفحه‌های تازه هم با `index.html`ِ ریشه سرو می‌شوند.
+  - در همان بلوکِ ۴۴۳: `if ($host = www.cubita.ir) { return 301 https://cubita.ir$request_uri; }` — امروز `www`
+    با ۲۰۰ نسخه‌ی تکراری می‌دهد.
+  - مسیرهای `/shop-demo` و `/assets`، `/fonts`، `/screenshots` دست نمی‌خورند.
+- **پس از انتشار:** `curl -I https://cubita.ir/no-such-page` ← ۴۰۴؛ `curl -I https://www.cubita.ir/enterprise` ← ۳۰۱؛
+  متنِ `curl -s https://cubita.ir/enterprise` باید «نرم‌افزار حسابداری تحت شبکه» را داشته باشد؛ بعد نقشهٔ سایت را در
+  Google Search Console و Bing Webmaster بفرستید.
+
 ## INV-02 — ابر و کانال۱.۹.۱۲ منتشر؛ QA نصب واقعی باقی است
 
 - مهاجرت مستقرشدهٔ `0189` پشت `0188` برای رجیستری واحد، دقت ۲۴/۸ و snapshot اسناد رزرو شده؛ اولین شمارهٔ آزاد `0190` است. بازده BOM و مقدار برنامه/اجرای تولید نیز snapshot دارند و فرمول سفارش تولید مستقل از ویرایش بعدی BOM ثبت می‌شود.

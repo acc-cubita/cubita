@@ -138,6 +138,7 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `website/{index.html,package.json,package-lock.json,scripts/prerender.mjs,public/robots.txt,public/sitemap.xml (حذف)}`، `website/src/{main.tsx,routes.tsx,entry-server.tsx,seo/*,content/*,concept/{SiteChrome,ContactSection,PageLayout,FaqList,FinalCta}.tsx,concept/concept.css,pages/*}`، `PROJECT_OVERVIEW.md`، `DEPLOY_NOTES.md` | سایت: پیش‌رندر، ۴۰۴ِ واقعی، صفحه‌های سازمانی/دانلود/امکانات | ۱۴۰۵/۰۷/۱۸ |
 | Claude Code (آرش) | `backend/app/{routers,schemas}/sales_ops.py`، `backend/tests/test_salesperson_wiring.py`، `desktop/src/{pages/sales/{CommissionsPage,SalesOpsPages,SalesListPages}.tsx,components/{DefSheet,Dashboard,moduleLists,moduleSections}.tsx,lib/navModel.tsx,pages/HelpPage.tsx,api.ts,App.css}`، `.claude/skills/cubita-excel-theme/SKILL.md`، `PROJECT_OVERVIEW.md` | «پورسانت»: قاعده و محاسبه یک صفحه با تمِ اکسلی | ۱۴۰۵/۰۷/۱۸ |
 | Codex | desktop/scripts/publish-update.mjs، MARKET_DEFAULT_RELEASE.md | ۱.۹.۱۱ روی کانال امضاشده منتشر شد؛ لینک نصب تازه نیز به همان نصاب وصل شد و انتشار بعدی آن را همگام و سنجش می‌کند | ۱۴۰۵/۰۷/۱۰ |
 
