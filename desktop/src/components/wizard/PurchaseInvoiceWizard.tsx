@@ -4,12 +4,14 @@ import type { ItemCache, WarehouseCache } from '../../electron.d'
 import type { PurchaseInvoiceDuplicateDraft } from '../../api'
 import { usePurchaseInvoiceDraft, type PurchaseInvoiceDraft } from '../../lib/purchaseInvoiceDraft'
 import { NumberInput } from '../NumberInput'
+import { TransactionUnitPicker } from '../TransactionUnitPicker'
 import { JalaliDatePicker } from '../JalaliDatePicker'
 import { ItemPicker } from '../ItemPicker'
 import { QuickItemForm } from '../QuickItemForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { BlacklistBanner } from '../BlacklistBanner'
 import { SearchSelect } from '../../components/SearchSelect'
+import { toFaDigits } from '../../lib/jalali'
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
 
@@ -163,14 +165,17 @@ function LinesStep({ d }: { d: PurchaseInvoiceDraft }) {
                 <td data-label="تعداد">
                   <div className="qty-with-unit">
                     <NumberInput allowDecimal value={line.qty} onChange={(v) => d.updateLine(i, { qty: v })} />
-                    {(() => { const u = d.unitOf(line.itemId); return u ? <span className="unit-suffix">{u}</span> : null })()}
+                    {(() => { const u = line.unitName || d.unitOf(line.itemId); return u ? <span className="unit-suffix">{u}</span> : null })()}
                   </div>
+                  <TransactionUnitPicker token={d.token} itemId={line.itemId} qty={line.qty}
+                    unitId={line.unitId} observations={line.observations} context="purchase"
+                    onChange={(patch) => d.updateLine(i, patch)} />
                 </td>
                 <td data-label="بهای واحد">
                   <NumberInput
                     value={line.unitCost}
                     onChange={(v) => d.updateLine(i, { unitCost: v })}
-                    title={(() => { const u = d.unitOf(line.itemId); return u ? `بهای هر ${u}` : 'بهای واحد' })()}
+                    title={(() => { const u = line.unitName || d.unitOf(line.itemId); return u ? `بهای هر ${u}` : 'بهای واحد' })()}
                   />
                 </td>
                 <td data-label="تخفیف">
@@ -255,7 +260,7 @@ function ReviewStep({ d, items }: { d: PurchaseInvoiceDraft; items: ItemCache[];
               return (
                 <tr key={i}>
                   <td data-label="کالا">{nameOf(line.itemId)}</td>
-                  <td data-label="تعداد">{Number(line.qty).toLocaleString('fa-IR')} {d.unitOf(line.itemId)}</td>
+                  <td data-label="تعداد">{toFaDigits(line.qty)} {line.unitName ?? d.unitOf(line.itemId)}</td>
                   <td data-label="بهای واحد">{Number(line.unitCost || 0).toLocaleString('fa-IR')}</td>
                   <td data-label="تخفیف">{Number(line.discount || 0).toLocaleString('fa-IR')}</td>
                   <td data-label="مبلغ">{amount.toLocaleString('fa-IR')}</td>

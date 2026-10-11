@@ -38,6 +38,7 @@ import { GuidedDashboard } from './GuidedDashboard'
 import { CommandPalette } from './CommandPalette'
 import { CalendarPage } from '../pages/CalendarPage'
 import { AutomationPage } from '../pages/automation/AutomationPage'
+import { RepairPage } from '../pages/repair/RepairPage'
 import { ContactsPage } from '../pages/ContactsPage'
 import { CrmPage } from '../pages/CrmPage'
 import { ManufacturingPage } from '../pages/ManufacturingPage'
@@ -80,8 +81,6 @@ import { UserListPage } from '../pages/UserListPage'
 import { FiscalYearListPage } from '../pages/FiscalYearListPage'
 import { ModulePanels, hasModulePanels } from './ModulePanels'
 import {
-  CommissionCalcPage,
-  CommissionPage,
   ContactOverviewPage,
   ContactStatementPage,
   CreditDebitNotePage,
@@ -97,9 +96,9 @@ import {
   SalesBrowsePage,
   SalesFlowPage,
 } from '../pages/sales/SalesOpsPages'
+import { CommissionsPage } from '../pages/sales/CommissionsPage'
 import {
   BundleListPage,
-  CommissionRuleListPage,
   CommissionRunListPage,
   CustomsListPage,
   DiscountGroupListPage,
@@ -217,6 +216,14 @@ import {
 } from '../pages/accounting/AccountingListPages'
 
 const PAGE_TITLES: Record<PageKey, string> = {
+  repair: 'پرونده‌ها',
+  repairintake: 'پذیرش جدید',
+  repairmine: 'کارتابل من',
+  repairservices: 'خدمات سازمانی',
+  repairharvest: 'استخراج قطعات شرکت',
+  repairreports: 'گزارش‌ها',
+  repairexchange: 'تبادل سوابق',
+  repairsettings: 'تنظیمات تعمیرگاه',
   automation: 'کارتابل من',
   letternew: 'نامه',
   letterlist: 'دبیرخانه و بایگانی',
@@ -228,8 +235,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
   invoiceclose: 'بستن فاکتور',
   creditnote: 'اعلامیه بدهکار بستانکار',
   contactstatement: 'صورت حساب طرف مقابل',
-  commission: 'قاعده پورسانت',
-  commissioncalc: 'محاسبه پورسانت',
+  commissions: 'پورسانت',
   customs: 'اظهارنامه گمرکی',
   saletype: 'نوع فروش',
   returnreason: 'علت برگشت کالا',
@@ -244,7 +250,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
   quotationlist: 'پیش‌فاکتورها',
   returnlist: 'فاکتورهای برگشتی',
   notelist: 'اعلامیه‌های بدهکار و بستانکار',
-  commissionrulelist: 'قواعد پورسانت',
   commissionrunlist: 'محاسبه‌های پورسانت',
   customslist: 'اظهارنامه‌های گمرکی',
   saletypelist: 'انواع فروش',
@@ -403,9 +408,14 @@ export function Dashboard({
   // تبِ فعالِ صفحه (زیرمنوی سطح‌سوم). null یعنی تبِ پیش‌فرض (اولین). با NavSectionContext
   // بین سایدبار و نوارِ تبِ داخلِ صفحه دوطرفه هم‌گام می‌شود.
   const [section, setSection] = useState<string | null>(null)
+  const [repairNavigationRevision,setRepairNavigationRevision]=useState(0)
+  const repairExitGuard = useRef<(()=>boolean)|null>(null)
+  const registerRepairExitGuard = useMemo(() => (guard: (()=>boolean)|null) => { repairExitGuard.current=guard }, [])
   const navigate = (p: PageKey, s: string | null = null) => {
     //: منویی که در بازچینی ادغام شد (میان‌برِ ذخیره‌شده‌ی قدیمی) به جای تازه‌اش می‌رود.
     const to = resolveLegacyPage(p, s)
+    if (repairExitGuard.current && !repairExitGuard.current()) return
+    if (to.page.startsWith('repair')) setRepairNavigationRevision(value=>value+1)
     setPage(to.page)
     setSection(to.section)
     setEditContactId(null)
@@ -466,7 +476,7 @@ export function Dashboard({
   // نشانِ خوانده‌نشده‌ی گفتگوی بازار: فقط برای حسابِ پخش‌کننده/فروشگاه پول می‌شود.
   // `page` در وابستگی‌ها هست تا با هر جابه‌جایی (مثلاً بعد از خواندنِ پیام‌ها) فوراً به‌روز شود.
   useEffect(() => {
-    if (me.tenant_kind !== 'distributor' && me.tenant_kind !== 'retailer') return
+    if (!me.marketplace_roles?.length) return
     let cancelled = false
     const load = () => {
       fetchMpUnread(token)
@@ -476,7 +486,7 @@ export function Dashboard({
     load()
     const id = window.setInterval(load, 25000)
     return () => { cancelled = true; window.clearInterval(id) }
-  }, [token, me.tenant_kind, page])
+  }, [token, me.tenant_kind, me.marketplace_roles?.length, page])
 
   async function refreshFromLocalCache() {
     if (isElectron) {
@@ -606,8 +616,7 @@ export function Dashboard({
           {page === 'invoiceclose' && <InvoiceClosePage token={token} />}
           {page === 'creditnote' && <CreditDebitNotePage token={token} onNavigate={navigate} />}
           {page === 'contactstatement' && <ContactStatementPage token={token} />}
-          {page === 'commission' && <CommissionPage token={token} />}
-          {page === 'commissioncalc' && <CommissionCalcPage token={token} />}
+          {page === 'commissions' && <CommissionsPage token={token} />}
           {page === 'customs' && <CustomsPage token={token} />}
           {page === 'saletype' && <SaleTypePage token={token} />}
           {page === 'returnreason' && <ReturnReasonPage token={token} />}
@@ -624,7 +633,6 @@ export function Dashboard({
           )}
           {page === 'returnlist' && <SalesReturnListPage token={token} onNavigate={navigate} />}
           {page === 'notelist' && <NoteListPage token={token} onNavigate={navigate} />}
-          {page === 'commissionrulelist' && <CommissionRuleListPage token={token} />}
           {page === 'commissionrunlist' && <CommissionRunListPage token={token} />}
           {page === 'customslist' && <CustomsListPage token={token} />}
           {page === 'saletypelist' && <SaleTypeListPage token={token} />}
@@ -684,8 +692,8 @@ export function Dashboard({
             />
           )}
           {page === 'manufacturing' && <ManufacturingPage token={token} />}
-          {page === 'distributor' && me.tenant_kind === 'distributor' && <DistributorPage token={token} items={items} />}
-          {page === 'marketplace' && me.tenant_kind === 'retailer' && <MarketplacePage token={token} trade={me.trade} />}
+          {page === 'distributor' && me.marketplace_roles?.includes('distributor') && <DistributorPage token={token} items={items} enterprise={me.edition === 'enterprise'} isOwner={me.role_key === 'owner'} />}
+          {page === 'marketplace' && me.marketplace_roles?.includes('retailer') && <MarketplacePage token={token} trade={me.trade} enterprise={me.edition === 'enterprise'} />}
           {page === 'fixedassets' && (
             <div className="page panels">
               <PageHeader
@@ -845,6 +853,7 @@ export function Dashboard({
           {page === 'moadianhistory' && <MoadianHistoryPage token={token} me={me} />}
           {page === 'calendar' && <CalendarPage token={token} />}
           {page === 'automation' && <AutomationPage token={token} me={me} mode="inbox" onNavigate={navigate} />}
+          {(['repair','repairintake','repairmine','repairservices','repairharvest','repairreports','repairexchange','repairsettings'] as const).some(key => key === page) && <RepairPage token={token} me={me} registerExitGuard={registerRepairExitGuard} navigationRevision={repairNavigationRevision} view={page as import('../pages/repair/RepairPage').RepairView} />}
           {page === 'letternew' && <AutomationPage token={token} me={me} mode="new" onNavigate={navigate} />}
           {page === 'letterlist' && <AutomationPage token={token} me={me} mode="registry" onNavigate={navigate} />}
           {page === 'team' && <TeamPage token={token} />}
@@ -900,11 +909,13 @@ export function Dashboard({
     () =>
       buildNav({
         tenantKind: me.tenant_kind,
+        permissions: me.permissions,
+        marketplaceRoles: me.marketplace_roles,
         enabledModules: me.enabled_modules,
         allowedModules: me.allowed_modules,
         isOwner: me.role_key === 'owner',
       }).groups,
-    [me.tenant_kind, me.enabled_modules, me.allowed_modules, me.role_key],
+    [me.permissions, me.tenant_kind, me.marketplace_roles, me.enabled_modules, me.allowed_modules, me.role_key],
   )
 
   // نوارِ تبِ داخلِ صفحه فقط وقتی پنهان می‌شود که کارتِ «عملیات» جایش را گرفته باشد.
@@ -931,13 +942,14 @@ export function Dashboard({
             businessName={me.tenant_name}
             token={token}
             currentTenantId={me.tenant_id}
-            tenantKind={me.tenant_kind}
+            permissions={me.permissions} tenantKind={me.tenant_kind}
+            marketplaceRoles={me.marketplace_roles}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
             isOwner={me.role_key === 'owner'}
             mpUnread={mpUnread}
             onOpenSearch={() => setSearchOpen(true)}
-            onLogout={onLogout}
+            onLogout={()=>{if(repairExitGuard.current && !repairExitGuard.current())return;onLogout()}}
             onSync={isElectron ? () => handleSync() : undefined}
             syncing={syncing}
             syncStatus={syncStatus}
@@ -975,11 +987,12 @@ export function Dashboard({
             onNavigate={navigate}
             userName={me.name}
             roleName={me.role_name}
-            tenantKind={me.tenant_kind}
+            permissions={me.permissions} tenantKind={me.tenant_kind}
+            marketplaceRoles={me.marketplace_roles}
             enabledModules={me.enabled_modules}
             allowedModules={me.allowed_modules}
             isOwner={me.role_key === 'owner'}
-            onLogout={onLogout}
+            onLogout={()=>{if(repairExitGuard.current && !repairExitGuard.current())return;onLogout()}}
             open={navOpen}
             onClose={() => setNavOpen(false)}
           />

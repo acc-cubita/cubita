@@ -702,6 +702,12 @@ def kardex_lines(
     rows = _rows(db, item_ids=[item_id], until=date_to)
     origin = _origin_types(rows)
     valued = replay(rows, voided, active, sources)
+    quantity_snapshots = {row.id: {
+        "entered_qty":row.entered_qty, "entered_unit_id":row.entered_unit_id,
+        "base_unit_id":row.base_unit_id, "unit_conversion_snapshot":row.unit_conversion_snapshot}
+        for row in db.execute(select(StockLedger.id, StockLedger.entered_qty,
+            StockLedger.entered_unit_id, StockLedger.base_unit_id, StockLedger.unit_conversion_snapshot)
+            .where(StockLedger.id.in_([row.id for row in rows]))).all()}
     numbers = document_numbers(
         db,
         {
@@ -751,6 +757,7 @@ def kardex_lines(
                 "voided": move.voided,
                 "qty_in": line_in,
                 "qty_out": line_out,
+                **quantity_snapshots.get(row.id, {}),
                 "unit_cost": move.cost,
                 "recorded_unit_cost": move.recorded_cost,
                 "adjusted": move.adjusted,

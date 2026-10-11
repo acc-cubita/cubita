@@ -2,10 +2,11 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchJournalEntry, type JournalEntryRecord } from '../api'
+import { fetchJournalEntry, fetchJournalEditHistory, type JournalEntryRecord } from '../api'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
-vi.mock('../api', () => ({ fetchJournalEntry: vi.fn() }))
+vi.mock('../api', () => ({ fetchJournalEntry: vi.fn(), fetchJournalEditHistory: vi.fn() }))
 const fetchEntry = vi.mocked(fetchJournalEntry)
+const fetchHistory = vi.mocked(fetchJournalEditHistory)
 const sample = (id: string): JournalEntryRecord => ({ id, number: id === 'a' ? 1 : 2,
   entry_date: '2026-09-29', atf_number: 9, sub_number: null, description: `شرح ${id}`,
   source_type: 'manual', source: null, status: 'temporary', voided_at: null, reverses_entry_id: null, lines: [] })
@@ -13,6 +14,7 @@ let host: HTMLDivElement, opener: HTMLButtonElement, root: Root
 beforeEach(() => {
   ;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
   fetchEntry.mockReset()
+  fetchHistory.mockReset().mockResolvedValue([])
   host = document.createElement('div'); opener = document.createElement('button')
   document.body.append(opener, host); opener.focus(); root = createRoot(host)
 })

@@ -2,8 +2,9 @@ import { useRef, useState } from 'react'
 import type { ItemCache, WarehouseCache } from '../electron.d'
 import { createStockTransfer, newIdempotencyKey } from '../api'
 import { todayIso } from './jalali'
+import type { TransactionUnitPatch } from '../components/TransactionUnitPicker'
 
-export interface TransferDraftLine {
+export interface TransferDraftLine extends TransactionUnitPatch {
   itemId: string
   qty: string
 }
@@ -42,7 +43,11 @@ export function useTransferDraft({
   const itemById = new Map(items.map((i) => [i.id, i]))
 
   function updateLine(index: number, patch: Partial<TransferDraftLine>) {
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+    setLines((prev) => prev.map((line, i) => (i === index ? {
+      ...line, ...(patch.itemId !== undefined && patch.itemId !== line.itemId ? {
+        unitId: undefined, unitName: undefined, observations: [], baseQtyPreview: undefined,
+      } : {}), ...(patch.qty !== undefined && patch.qty !== line.qty ? { baseQtyPreview: undefined } : {}), ...patch,
+    } : line)))
   }
   function addLine() {
     setLines((prev) => [...prev, { itemId: '', qty: '' }])
@@ -78,7 +83,8 @@ export function useTransferDraft({
           from_warehouse_id: fromWarehouseId,
           to_warehouse_id: toWarehouseId,
           description,
-          lines: validLines.map((l) => ({ item_id: l.itemId, qty: Number(l.qty) })),
+          lines: validLines.map((l) => ({ item_id: l.itemId, qty: l.qty,
+            unit_id: l.unitId || null, observations: l.observations || [] })),
         },
         idempotencyKey.current,
       )
@@ -101,6 +107,7 @@ export function useTransferDraft({
   }
 
   return {
+    token,
     fromWarehouseId,
     setFromWarehouseId,
     toWarehouseId,

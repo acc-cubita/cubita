@@ -31,18 +31,25 @@ import {
 import type { WarehouseCache } from '../electron.d'
 import { JalaliDatePicker } from './JalaliDatePicker'
 import { NumberInput } from './NumberInput'
-import { todayIso } from '../lib/jalali'
+import { todayIso, toFaDigits } from '../lib/jalali'
 import { SectionCard } from './SectionCard'
 import { EmptyState } from './EmptyState'
 import { Pager, usePagination } from './Pager'
 import { formatJalali } from '../lib/jalali'
 import { JournalEntryDrawer } from './JournalEntryDrawer'
 import { SearchSelect } from '../components/SearchSelect'
+import { quantityTotals } from '../lib/quantityDisplay'
 
 export type AnyInvoice = SalesInvoiceRecord | PurchaseInvoiceRecord
 type NamedItem = { id: string; name: string }
 
 const fa = (n: number) => Math.round(n).toLocaleString('fa-IR')
+
+function QuantitySummary({ lines }: { lines: { item_id: string; qty: string; unit_snapshot?: string }[] }) {
+  const totals = quantityTotals(lines.map(line => ({ qty: line.qty,
+    unitKey: line.unit_snapshot || `unknown-${line.item_id}`, unitName: line.unit_snapshot || 'واحد نامشخص' })))
+  return <>{totals.map(total => <div key={total.unitKey}>{toFaDigits(total.qty)} {total.unitName}</div>)}</>
+}
 
 /** فهرست فاکتورها با جزئیاتِ بازشونده، سودِ ناخالص (فروش)، چاپ، PDF، ابطال و رونوشت.
  *
@@ -469,12 +476,12 @@ export function InvoiceDetail({
               const lineDiscount = Number(line.discount)
               const lineNet = qty * price - lineDiscount
               const unitCost = isSales ? Number((line as SalesInvoiceRecord['lines'][number]).unit_cost) : 0
-              const lineCost = qty * unitCost
+              const lineCost = Number(line.base_qty ?? line.qty) * unitCost
               const lineProfit = lineNet - lineCost
               const purchaseLine = line as PurchaseInvoiceRecord['lines'][number]
               return (
                 <tr key={line.id}>
-                  <td className="entity-name" data-label="کالا">{itemName(line.item_id)}</td>
+                  <td className="entity-name" data-label="کالا">{line.item_name_snapshot || itemName(line.item_id)}</td>
                   {!isSales && (
                     <td data-label="معین هزینه">
                       {/* Snapshotِ لحظه‌ی ثبت؛ برای کالا خالی است چون بهایش به موجودی نشسته. */}
@@ -483,8 +490,12 @@ export function InvoiceDetail({
                         : '—'}
                     </td>
                   )}
-                  <td data-label="تعداد">{qty.toLocaleString('fa-IR')}</td>
-                  <td data-label={isSales ? 'قیمت واحد' : 'بهای واحد'}>{fa(price)}</td>
+                  <td data-label="تعداد">{toFaDigits(line.qty)} {line.unit_conversion_snapshot?.source_unit_name || line.unit_snapshot}</td>
+                  <td data-label={isSales ? 'قیمت واحد' : 'بهای واحد'}>{fa(price)}
+                    {!isSales && line.unit_conversion_snapshot?.market_suggested_price && <p className="hint">
+                      قیمت پیشنهادی بازار: {toFaDigits(line.unit_conversion_snapshot.market_suggested_price.amount)} ریال / {line.unit_conversion_snapshot.market_suggested_price.unit_name}
+                    </p>}
+                  </td>
                   <td data-label="تخفیف">{lineDiscount ? fa(lineDiscount) : '—'}</td>
                   {isSales && <td data-label="اضافات/عوارض">{fa(Number(line.addition) + Number(line.duty_amount))}</td>}
                   <td data-label="خالص">{fa(lineNet)}</td>
@@ -597,8 +608,8 @@ function WarehouseIssueEditor({
 
   async function submit() {
     const lines = pending
-      .map((line) => ({ sales_invoice_line_id: line.id, qty: Number(qty[line.id] ?? line.remaining_issueable_qty) }))
-      .filter((line) => line.qty > 0)
+      .map((line) => ({ sales_invoice_line_id: line.id, qty: qty[line.id] ?? line.remaining_issueable_qty }))
+      .filter((line) => Number(line.qty) > 0)
     if (!warehouseId || lines.length === 0) {
       setMessage('انبار و حداقل یک مقدار خروج لازم است.')
       return
@@ -658,8 +669,8 @@ function WarehouseIssueEditor({
           <label>تاریخ خروج<JalaliDatePicker value={issueDate} onChange={setIssueDate} /></label>
           {pending.map((line) => (
             <label key={line.id}>
-              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {Number(line.remaining_issueable_qty).toLocaleString('fa-IR')} {line.unit_snapshot}
-              <NumberInput allowDecimal value={qty[line.id] ?? String(Number(line.remaining_issueable_qty))} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
+              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {toFaDigits(line.remaining_issueable_qty)} {line.unit_snapshot}
+              <NumberInput allowDecimal value={qty[line.id] ?? line.remaining_issueable_qty} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
             </label>
           ))}
           <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>ثبت خروج</button>
@@ -674,7 +685,7 @@ function WarehouseIssueEditor({
                 <td data-label="شماره خروج">{issue.number.toLocaleString('fa-IR')}</td>
                 <td data-label="تاریخ">{formatJalali(issue.issue_date)}</td>
                 <td data-label="انبار">{warehouses.find((warehouse) => warehouse.id === issue.warehouse_id)?.name ?? '—'}</td>
-                <td data-label="مقدار">{issue.lines.reduce((sum, line) => sum + Number(line.qty), 0).toLocaleString('fa-IR')}</td>
+                <td data-label="مقدار"><QuantitySummary lines={issue.lines} /></td>
                 <td data-label="وضعیت">{issue.voided_at ? 'باطل‌شده' : 'معتبر'}</td>
                 <td className="card-actions" data-label="عملیات">
                   {canVoid && !issue.voided_at ? <button type="button" className="icon-btn-danger" disabled={busy} onClick={() => void handleVoid(issue)}><Ban size={13} /> ابطال خروج</button> : '—'}
@@ -726,8 +737,8 @@ function WarehouseReceiptEditor({
 
   async function submit() {
     const lines = pending
-      .map((line) => ({ purchase_invoice_line_id: line.id, qty: Number(qty[line.id] ?? line.remaining_qty) }))
-      .filter((line) => line.qty > 0)
+      .map((line) => ({ purchase_invoice_line_id: line.id, qty: qty[line.id] ?? line.remaining_qty }))
+      .filter((line) => Number(line.qty) > 0)
     if (!warehouseId || lines.length === 0) {
       setMessage('انبار و حداقل یک مقدار تحویل لازم است.')
       return
@@ -789,8 +800,8 @@ function WarehouseReceiptEditor({
           <label>تاریخ رسید<JalaliDatePicker value={receiptDate} onChange={setReceiptDate} /></label>
           {pending.map((line) => (
             <label key={line.id}>
-              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {Number(line.remaining_qty).toLocaleString('fa-IR')} {line.unit_snapshot}
-              <NumberInput allowDecimal value={qty[line.id] ?? String(Number(line.remaining_qty))} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
+              {line.item_name_snapshot || itemNameFallback(line.item_id)} — مانده {toFaDigits(line.remaining_qty)} {line.unit_snapshot}
+              <NumberInput allowDecimal value={qty[line.id] ?? line.remaining_qty} onChange={(value) => setQty((old) => ({ ...old, [line.id]: value }))} />
             </label>
           ))}
           <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>ثبت رسید</button>
@@ -806,7 +817,7 @@ function WarehouseReceiptEditor({
                   <td data-label="شماره رسید">{receipt.number.toLocaleString('fa-IR')}</td>
                   <td data-label="تاریخ">{formatJalali(receipt.receipt_date)}</td>
                   <td data-label="انبار">{warehouses.find((warehouse) => warehouse.id === receipt.warehouse_id)?.name ?? '—'}</td>
-                  <td data-label="مقدار">{receipt.lines.reduce((sum, line) => sum + Number(line.qty), 0).toLocaleString('fa-IR')}</td>
+                  <td data-label="مقدار"><QuantitySummary lines={receipt.lines} /></td>
                   <td data-label="وضعیت">{receipt.voided_at ? 'باطل‌شده' : 'معتبر'}</td>
                   <td className="card-actions" data-label="عملیات">
                     {canVoid && !receipt.voided_at ? (

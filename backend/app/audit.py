@@ -118,6 +118,7 @@ def audited_models() -> dict[type, str]:
     )
     from app.models.period_close import FiscalPeriodClose
     from app.models.inventory import StockAdjustment
+    from app.models.item_units import ItemUnit, ItemUnitConversion, BatchUnitConversion
     from app.models.owner_transactions import OwnerTransaction
     from app.models.stock_count import StockCountSession
     from app.models.payment import Payment
@@ -160,6 +161,9 @@ def audited_models() -> dict[type, str]:
         #: حسابرسی شود (`test_every_voidable_document_is_audited`). دلیلش هم روشن
         #: است: این سند موجودی را بی هیچ فاکتوری کم و زیاد می‌کند.
         StockAdjustment: "تعدیل انبار",
+        ItemUnit: "واحد مجاز کالا",
+        ItemUnitConversion: "قاعدهٔ تبدیل واحد کالا",
+        BatchUnitConversion: "نسبت واقعی واحد بار",
         #: آورده و برداشتِ مالک مستقیم روی حقوق صاحبان سهام می‌نشیند و مبنای
         #: «صورت تغییرات در حقوق صاحبان سهام» است — تغییرش باید ردی بگذارد.
         OwnerTransaction: "تراکنش شریک",
@@ -406,7 +410,9 @@ def suppressed(session: Session):
         session.info[SUPPRESS_KEY] = previous
 
 
-def record_change(session: Session, obj, changes: dict, summary: str) -> None:
+def record_change(
+    session: Session, obj, changes: dict, summary: str, *, occurred_at: datetime | None = None,
+) -> None:
     """یک رکوردِ حسابرسیِ صریح با خلاصه‌ی دلخواه.
 
     `changes` همان شکلِ `{"field": {"from": ..., "to": ...}}`ِ ثبتِ خودکار را دارد
@@ -431,6 +437,7 @@ def record_change(session: Session, obj, changes: dict, summary: str) -> None:
             entity_id=obj.id,
             summary=summary,
             changes=changes or None,
+            **({"at": occurred_at} if occurred_at is not None else {}),
             request_id=request_id_var.get(),
         )
     )

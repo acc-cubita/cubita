@@ -29,8 +29,9 @@ import { isElectron } from '../platform'
 import { todayIso } from './jalali'
 import { pickAutoDiscount } from './autoDiscount'
 import { usePersistentState } from './usePersistentState'
+import type { TransactionUnitPatch } from '../components/TransactionUnitPicker'
 
-export interface DraftLine {
+export interface DraftLine extends TransactionUnitPatch {
   itemId: string
   qty: string
   unitPrice: string
@@ -146,7 +147,9 @@ export function useSalesInvoiceDraft({
     setLines(
       prefill.lines.map((l) => ({
         itemId: l.item_id,
-        qty: String(Number(l.qty)),
+        qty: String(l.qty),
+        unitId: l.entered_unit_id || undefined,
+        unitName: l.unit_snapshot || undefined,
         unitPrice: String(Number(l.unit_price)),
         discount: Number(l.discount) ? String(Number(l.discount)) : '',
         addition: Number(l.addition) ? String(Number(l.addition)) : '',
@@ -361,15 +364,16 @@ export function useSalesInvoiceDraft({
   }, [contextKey])
 
   const resolveFor = useCallback(
-    async (itemId: string): Promise<ResolvedPrice | null> => {
-      if (itemId in priceInfoRef.current) return priceInfoRef.current[itemId]
+    async (itemId: string, unitId?: string): Promise<ResolvedPrice | null> => {
+      const key = unitId ? `${itemId}:${unitId}` : itemId
+      if (key in priceInfoRef.current) return priceInfoRef.current[key]
       let got: ResolvedPrice | null = null
       try {
-        got = await resolvePrice(token, itemId, priceContext)
+        got = await resolvePrice(token, itemId, { ...priceContext, ...(unitId ? { unitId } : {}) })
       } catch {
         got = null // آفلاین یا خطا: به قیمتِ پایه برمی‌گردیم، مثلِ همیشه
       }
-      priceInfoRef.current = { ...priceInfoRef.current, [itemId]: got }
+      priceInfoRef.current = { ...priceInfoRef.current, [key]: got }
       setPriceInfo(priceInfoRef.current)
       return got
     },
@@ -391,7 +395,23 @@ export function useSalesInvoiceDraft({
   }
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+    setLines((prev) => prev.map((line, i) => (i === index ? {
+      ...line, ...(patch.itemId !== undefined && patch.itemId !== line.itemId ? {
+        unitId: undefined, unitName: undefined, observations: [], baseQtyPreview: undefined,
+      } : {}), ...(patch.qty !== undefined && patch.qty !== line.qty ? { baseQtyPreview: undefined } : {}), ...patch,
+    } : line)))
+  }
+
+  function changeLineUnit(index: number, patch: TransactionUnitPatch) {
+    updateLine(index, patch)
+    if (patch.unitId === undefined) return
+    const itemId = lines[index].itemId
+    void resolveFor(itemId, patch.unitId)
+      .then((rule) => {
+        setLines((prev) => prev.map((line, i) => i === index && line.itemId === itemId && line.unitId === patch.unitId
+          ? { ...line, unitPrice: rule ? String(rule.unit_price) : '' } : line))
+      }).catch(() => setLines((prev) => prev.map((line, i) => i === index && line.itemId === itemId && line.unitId === patch.unitId
+        ? { ...line, unitPrice: '' } : line)))
   }
 
   /** قیمتِ پایه‌ی کالا — وقتی هیچ قاعده‌ای با این زمینه نمی‌خواند (§۵۸). */
@@ -409,7 +429,8 @@ export function useSalesInvoiceDraft({
     updateLine(index, { itemId, unitPrice: '' })
     void resolveFor(itemId).then((rule) => {
       const price = rule ? Number(rule.unit_price) : basePrice(itemId)
-      updateLine(index, { itemId, unitPrice: price ? String(price) : '' })
+      setLines((prev) => prev.map((line, i) => i === index && line.itemId === itemId && !line.unitId
+        ? { ...line, unitPrice: price ? String(price) : '' } : line))
     })
   }
 
@@ -435,14 +456,15 @@ export function useSalesInvoiceDraft({
 
   /** هر ردیفِ قیمت‌خورده را با زمینه‌ی تازه دوباره حل می‌کند. */
   async function repriceAll(ctx: typeof priceContext) {
-    const targets = [...new Set(lines.filter((l) => l.itemId).map((l) => l.itemId))]
+    const targets = [...new Map(lines.filter((l) => l.itemId).map((l) =>
+      [l.unitId ? `${l.itemId}:${l.unitId}` : l.itemId, { itemId: l.itemId, unitId: l.unitId }] as const))]
     const resolved = new Map<string, ResolvedPrice | null>()
     await Promise.all(
-      targets.map(async (id) => {
+      targets.map(async ([key, target]) => {
         try {
-          resolved.set(id, await resolvePrice(token, id, ctx))
+          resolved.set(key, await resolvePrice(token, target.itemId, { ...ctx, ...(target.unitId ? { unitId: target.unitId } : {}) }))
         } catch {
-          resolved.set(id, null)
+          resolved.set(key, null)
         }
       }),
     )
@@ -451,7 +473,7 @@ export function useSalesInvoiceDraft({
     setLines((prev) =>
       prev.map((line) => {
         if (!line.itemId) return line
-        const rule = resolved.get(line.itemId)
+        const rule = resolved.get(line.unitId ? `${line.itemId}:${line.unitId}` : line.itemId)
         // قاعده‌ای نبود یعنی سیاستی نیست که اعمال شود — قیمتِ ردیف دست‌نخورده می‌ماند.
         if (!rule) return line
         return { ...line, unitPrice: String(Number(rule.unit_price)) }
@@ -574,7 +596,9 @@ export function useSalesInvoiceDraft({
       rounding: Math.round(roundAdjust * rate),
       lines: validLines.map((l) => ({
         item_id: l.itemId,
-        qty: Number(l.qty),
+        qty: l.qty,
+        unit_id: l.unitId || null,
+        observations: l.observations || [],
         unit_price: Math.round((Number(l.unitPrice) || 0) * rate),
         discount: Math.round((Number(l.discount) || 0) * rate),
         addition: Math.round((Number(l.addition) || 0) * rate),
@@ -625,6 +649,7 @@ export function useSalesInvoiceDraft({
   }
 
   return {
+    token,
     // state + setters
     warehouseId,
     setWarehouseId,
@@ -644,6 +669,7 @@ export function useSalesInvoiceDraft({
     roundAdjust,
     lines,
     updateLine,
+    changeLineUnit,
     chooseLineItem,
     addLine,
     removeLine,

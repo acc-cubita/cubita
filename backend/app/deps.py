@@ -185,11 +185,13 @@ def require_feature(feature: str):
             #: سازمانی: قابلیت‌های پولی را مجوز تعیین می‌کند (`feat`)؛ آزمایشی همه را دارد.
             from app.licensing import state as license_state
 
-            feat = license_state.current(db).feat
-            if feat is not None and feature not in feat:
+            lic = license_state.current(db)
+            if lic.feat is not None and feature not in lic.feat:
                 raise HTTPException(
                     status.HTTP_402_PAYMENT_REQUIRED,
-                    "این قابلیت در مجوزِ کوبیتا سازمانیِ شما نیست؛ برای افزودنش با پشتیبانی تماس بگیرید.",
+                    "این قابلیت در نسخه‌ی رایگانِ کوبیتا سازمانی نیست؛ برای افزودنش مجوزِ تجاری بگیرید."
+                    if lic.tier == "free"
+                    else "این قابلیت در مجوزِ کوبیتا سازمانیِ شما نیست؛ برای افزودنش با پشتیبانی تماس بگیرید.",
                 )
             return principal.user
         if principal.membership.tenant.is_trial:

@@ -25,7 +25,6 @@ import {
 import {
   bulkChangePrices,
   fetchBundles,
-  fetchCommissionRules,
   fetchCommissionRuns,
   fetchContacts,
   fetchCustoms,
@@ -993,74 +992,6 @@ export function BundleListPage({ token }: { token: string }) {
   )
 }
 
-// ═════════════════ قواعدِ پورسانت ═════════════════
-
-export function CommissionRuleListPage({ token }: { token: string }) {
-  const list = useAsync(() => fetchCommissionRules(token), [token])
-  const rows = list.data ?? []
-  const pg = usePagination(rows, 20)
-
-  return (
-    <OpsPage
-      icon={Wallet}
-      title="قواعد پورسانت"
-      description="نرخ و مبنای پورسانتِ هر فروشنده. هر فروشنده یک قاعده دارد."
-      head={
-        <div className="cc-head">
-          <div className="cc-summary">
-            <Metric icon={<Users size={14} />} label="فروشنده" value={faInt(rows.length)} />
-            <Metric
-              icon={<Wallet size={14} />}
-              label="فعال"
-              value={faInt(rows.filter((r) => r.is_active).length)}
-              tone="in"
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard icon={Wallet} title="قاعده‌ها" description={`${faInt(rows.length)} ردیف`}>
-        <AsyncBlock
-          loading={list.loading}
-          error={list.error}
-          empty={rows.length === 0}
-          emptyText="قاعده‌ای ثبت نشده. از «پورسانت» در کارتِ عملیات بسازید."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>فروشنده</th>
-                  <th>نرخ</th>
-                  <th>مبنا</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pg.pageItems.map((r) => (
-                  <tr key={r.id}>
-                    <td className="card-title" data-label="فروشنده">
-                      {r.salesperson_name}
-                    </td>
-                    <td className="num" data-label="نرخ">
-                      {fa(r.rate)}٪
-                    </td>
-                    <td data-label="مبنا">{r.basis === 'profit' ? 'سودِ ناخالص' : 'خالصِ فاکتور'}</td>
-                    <td data-label="وضعیت">
-                      <ActiveChip active={r.is_active} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pager page={pg.page} pageCount={pg.pageCount} onChange={pg.setPage} />
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
 // ═════════════════ محاسبه‌های پورسانت ═════════════════
 
 export function CommissionRunListPage({ token }: { token: string }) {
@@ -1093,7 +1024,7 @@ export function CommissionRunListPage({ token }: { token: string }) {
           loading={list.loading}
           error={list.error}
           empty={rows.length === 0}
-          emptyText="محاسبه‌ای ذخیره نشده. از «محاسبه پورسانت» انجامش دهید."
+          emptyText="محاسبه‌ای ذخیره نشده. از «پورسانت ← محاسبه پورسانت» انجامش دهید."
         >
           <div className="table-scroll">
             <table className="cards-on-mobile acc-table">

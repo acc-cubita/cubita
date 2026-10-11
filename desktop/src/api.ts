@@ -60,6 +60,9 @@ export interface MeResponse {
   //: نوعِ حساب در بازارِ عمده‌فروشی: standard | distributor (پخش‌کننده) | retailer (فروشگاه).
   //: ماژول‌های «پخشِ من» / «بازارِ خرید» با این گیت می‌شوند.
   tenant_kind: string
+  //: نقش‌های بازارِ این عضو؛ در سازمانی خریدار و پخش‌کننده می‌توانند هم‌زمان باشند.
+  marketplace_roles: Array<'retailer' | 'distributor'>
+  market_bridge_available?: boolean
   //: حسابِ آزمایشیِ رایگان — نوارِ «X روز مانده»، باکسِ خرید و صفحه‌ی قفل از این مشتق می‌شوند.
   is_trial: boolean
   //: روزهای مانده تا انقضای آزمایشی (منفی = گذشته). برای مشتریِ واقعی null.
@@ -103,6 +106,8 @@ export interface LicenseInfo {
   mods: string[] | null
   feat: string[] | null
   license_id: string | null
+  //: paid | free؛ null یعنی هنوز مجوزی نصب نشده (آزمایشی).
+  tier?: 'paid' | 'free' | null
 }
 
 //: صفحه‌ی پلن‌ها و خرید روی سایتِ تجاری. خریدِ کاربرِ آزمایشی با همین ایمیل، حسابش را
@@ -495,6 +500,14 @@ export async function downloadDiagnostics(token: string): Promise<{ filename: st
 /** کوبیتا سازمانی: فعال‌سازیِ یک‌کلیکی با کدِ فعال‌سازی — سرور خودش با ابر حرف می‌زند (فقط مالک). */
 export const activateLicenseOnline = (token: string, code: string) =>
   authedSend<LicenseInfo>(token, 'POST', '/api/license/activate', { code })
+/** کوبیتا سازمانی: ثبت‌نامِ رایگان، قدمِ اول — کدِ پیامکی به شماره‌ی همراهِ مالک (سرور با ابر حرف می‌زند). */
+export const sendFreeLicenseCode = (token: string, phone: string) =>
+  authedSend<{ phone: string; expires_in: number }>(token, 'POST', '/api/license/free/send-code', { phone })
+/** کوبیتا سازمانی: ثبت‌نامِ رایگان، قدمِ دوم — کدِ پیامکی → مجوزِ رایگانِ دائمی (تا سه کاربر). */
+export const activateFreeLicense = (token: string, phone: string, code: string, org: string) =>
+  authedSend<LicenseInfo>(token, 'POST', '/api/license/free/activate', { phone, code, org: org || null })
+//: صفحه‌ی «کوبیتا سازمانی» روی سایت: مقایسه‌ی رایگان و تجاری و درخواستِ مجوزِ تجاری.
+export const ENTERPRISE_PLANS_URL = 'https://cubita.ir/enterprise#pricing'
 
 export const fetchSubscription = (token: string) => authedGet<SubscriptionStatus>(token, '/api/subscription')
 
@@ -1624,7 +1637,7 @@ export interface ItemIn {
   expense_account_id?: string | null
   primary_unit_id?: string | null
   secondary_unit_id?: string | null
-  conversion_factor?: number
+  conversion_factor?: string | number
   conversion_mode?: string
   unit_weight?: number
   unit_volume?: number
@@ -1822,7 +1835,7 @@ export async function downloadStorefrontBundle(token: string): Promise<{ blob: B
   return { blob, filename: m && m[1] ? m[1] : 'cubita-storefront.zip' }
 }
 
-export interface StockAdjustmentRecord {
+export interface StockAdjustmentRecord extends FrozenQuantityRecord {
   id: string
   item_id: string
   warehouse_id: string
@@ -1844,13 +1857,17 @@ export const voidStockAdjustment = (token: string, id: string, reason: string) =
 
 export const createStockAdjustment = (
   token: string,
-  data: { item_id: string; warehouse_id: string; qty_diff: number; reason: string; adjustment_date: string },
+  data: { item_id: string; warehouse_id: string; qty_diff: string | number; unit_id?: string; observations?: UnitObservation[]; reason: string; adjustment_date: string },
 ) => authedSend<StockAdjustmentRecord>(token, 'POST', '/api/stock-adjustments', data)
 
 export interface SalesQuotationLine {
   id: string
   item_id: string
   qty: string
+  entered_unit_id?: string | null
+  base_qty?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
   unit_price: string
   description: string
 }
@@ -1880,7 +1897,7 @@ export interface SalesQuotationInput {
   contact_id?: string | null
   customer_name?: string | null
   description: string
-  lines: { item_id: string; qty: number; unit_price: number; description: string }[]
+  lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[]; unit_price: number; description: string }[]
 }
 
 export const createSalesQuotation = (token: string, data: SalesQuotationInput) =>
@@ -2043,7 +2060,7 @@ export const fetchWarehouseReceipts = (token: string, invoiceId: string) =>
 export const createWarehouseReceipt = (
   token: string,
   invoiceId: string,
-  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number | string }[] },
 ) => authedSend<WarehouseReceiptRecord>(token, 'POST', `/api/purchase-invoices/${invoiceId}/warehouse-receipts`, data)
 
 export interface PurchasePricePoint {
@@ -2115,7 +2132,9 @@ export interface SalesReturnRecord {
 
 export const fetchSalesReturns = (token: string) => authedGetAll<SalesReturnRecord>(token, '/api/sales-returns')
 
+export interface HistoricalReturnUnit { unit_id: string; unit_name: string; remaining: string; unit_price: string }
 export interface ReturnableLine {
+  return_unit_options?: HistoricalReturnUnit[]
   /** هویتِ ردیفِ مبدأ. یک کالا می‌تواند در یک فاکتور چند ردیف با چند قیمت داشته باشد. */
   sales_invoice_line_id: string | null
   purchase_invoice_line_id: string | null
@@ -2143,7 +2162,7 @@ export const createSalesReturn = (
     return_date: string
     sales_invoice_id: string
     description: string
-    lines: { item_id?: string; sales_invoice_line_id?: string; qty: number; return_reason_id?: string | null }[]
+    lines: { item_id?: string; sales_invoice_line_id?: string; unit_id?: string | null; qty: string | number; return_reason_id?: string | null }[]
   },
   idempotencyKey?: string,
 ) => authedSend<SalesReturnRecord>(token, 'POST', '/api/sales-returns', data, idempotencyKey)
@@ -2192,7 +2211,7 @@ export const createPurchaseReturn = (
     return_date: string
     purchase_invoice_id: string
     description: string
-    lines: { item_id?: string; purchase_invoice_line_id?: string; qty: number }[]
+    lines: { item_id?: string; purchase_invoice_line_id?: string; unit_id?: string | null; qty: string | number }[]
   },
   idempotencyKey?: string,
 ) => authedSend<PurchaseReturnRecord>(token, 'POST', '/api/purchase-returns', data, idempotencyKey)
@@ -2219,7 +2238,7 @@ export const createStockTransfer = (
     from_warehouse_id: string
     to_warehouse_id: string
     description: string
-    lines: { item_id: string; qty: number }[]
+    lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[] }[]
   },
   //: تکرارِ شبکه‌ای نباید دو انتقال بسازد — کلید به همین حواله گره می‌خورد.
   idempotencyKey?: string,
@@ -2759,7 +2778,7 @@ export const createPurchaseInvoiceDirect = (
     invoice_discount?: number
     invoice_addition?: number
     duty_amount?: number
-    lines: { item_id: string; qty: number; unit_cost: number; discount?: number; addition?: number; duty_amount?: number; description?: string }[]
+    lines: { item_id: string; qty: number | string; unit_id?: string | null; observations?: UnitObservation[]; unit_cost: number; discount?: number; addition?: number; duty_amount?: number; description?: string }[]
   },
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/purchase-invoices', data, idempotencyKey)
@@ -4680,7 +4699,7 @@ export interface SalesDashboard {
 export const fetchSalesDashboard = (token: string, months = 12) =>
   authedGet<SalesDashboard>(token, `/api/reports/dashboard?months=${months}`)
 
-export interface KardexLine {
+export interface KardexLine extends FrozenQuantityRecord {
   entry_date: string
   source_type: string
   source_label: string
@@ -5616,7 +5635,7 @@ export interface BomLineRecord {
   component_item_id: string
   qty: string
 }
-export interface BomRecord {
+export interface BomRecord extends FrozenQuantityRecord {
   id: string
   finished_item_id: string
   name: string
@@ -5630,7 +5649,7 @@ export interface ProductionOrderLineRecord {
   qty: string
   unit_cost: string
 }
-export interface ProductionOrderRecord {
+export interface ProductionOrderRecord extends FrozenQuantityRecord {
   id: string
   number: number | null
   bom_id: string
@@ -5647,7 +5666,7 @@ export interface ProductionOrderRecord {
 
 export type ProductionPlanStatus = 'draft' | 'started' | 'in_progress' | 'stopped' | 'finished' | 'cancelled'
 
-export interface ProductionPlanRecord {
+export interface ProductionPlanRecord extends FrozenQuantityRecord {
   id: string
   number: number
   bom_id: string
@@ -5663,6 +5682,8 @@ export interface ProductionPlanRecord {
 }
 
 export interface ProductionPlanIn {
+  unit_id?: string | null
+  observations?: UnitObservation[]
   bom_id: string
   warehouse_id: string
   planned_date: string
@@ -5679,8 +5700,8 @@ export interface BomInput {
 }
 
 export const fetchBoms = (token: string) => authedGet<BomRecord[]>(token, '/api/boms')
-export const createBom = (token: string, data: BomInput) => authedSend<BomRecord>(token, 'POST', '/api/boms', data)
-export const updateBom = (token: string, id: string, patch: Partial<BomInput> & { is_active?: boolean }) =>
+export const createBom = (token: string, data: UnitAwareBomInput) => authedSend<BomRecord>(token, 'POST', '/api/boms', data)
+export const updateBom = (token: string, id: string, patch: Partial<UnitAwareBomInput> & { is_active?: boolean }) =>
   authedSend<BomRecord>(token, 'PATCH', `/api/boms/${id}`, patch)
 export const deleteBom = (token: string, id: string) => authedDelete(token, `/api/boms/${id}`)
 
@@ -5690,7 +5711,7 @@ export const fetchProductionPlans = (token: string, query?: { status?: string })
   const suffix = qs.toString()
   return authedGetAll<ProductionPlanRecord>(token, `/api/production-plans${suffix ? `?${suffix}` : ''}`)
 }
-export const createProductionPlan = (token: string, data: ProductionPlanIn, idempotencyKey?: string) =>
+export const createProductionPlan = (token: string, data: Omit<ProductionPlanIn, 'qty_planned'> & { qty_planned: number | string }, idempotencyKey?: string) =>
   authedSend<ProductionPlanRecord>(token, 'POST', '/api/production-plans', data, idempotencyKey)
 export const changeProductionPlanStatus = (token: string, planId: string, status: ProductionPlanStatus) =>
   authedSend<ProductionPlanRecord>(token, 'PATCH', `/api/production-plans/${planId}/status`, { status })
@@ -5699,14 +5720,14 @@ export const changeProductionPlanStatus = (token: string, planId: string, status
 export const issueMaterialsToProduction = (
   token: string,
   planId: string,
-  data: { issue_date: string; qty?: number | null },
+  data: { issue_date: string; qty?: number | string | null; unit_id?: string; observations?: UnitObservation[] },
   idempotencyKey?: string,
 ) => authedSend<WarehouseIssueRecord>(token, 'POST', `/api/production-plans/${planId}/issue-materials`, data, idempotencyKey)
 
 export const receiveProductionOutput = (
   token: string,
   planId: string,
-  data: { receipt_date: string; qty: number },
+  data: ProductionOutputInput,
   idempotencyKey?: string,
 ) => authedSend<WarehouseReceiptFull>(token, 'POST', `/api/production-plans/${planId}/receive-output`, data, idempotencyKey)
 
@@ -6085,6 +6106,10 @@ export interface ListingComponent {
   item_id: string
   item_name: string
   qty: string
+  unit_id?: string | null
+  unit_name?: string
+  base_qty?: string | null
+  observations?: UnitObservation[]
 }
 
 export interface Listing {
@@ -6122,11 +6147,13 @@ export interface ListingIn {
   category?: string
   is_published?: boolean
   extra_trades?: string[]
-  min_order_qty?: number
-  max_order_qty?: number
+  min_order_qty?: number | string
+  max_order_qty?: number | string
   daily_order_limit?: number
   item_id?: string | null
-  components?: { item_id: string; qty: number }[]
+  unit_id?: string
+  observations?: UnitObservation[]
+  components?: { item_id: string; qty: number | string; unit_id?: string; observations?: UnitObservation[] }[]
 }
 
 // سمتِ پخش‌کننده
@@ -6171,6 +6198,7 @@ export interface MpMessage {
   id: string
   sender_role: 'distributor' | 'retailer'
   sender_user_id: string | null
+  sender_name?: string | null
   body: string
   created_at: string
 }
@@ -6253,7 +6281,7 @@ export const fetchMpDistributorConnections = (token: string) =>
   authedGet<MpConnection[]>(token, '/api/marketplace/distributor/connections')
 
 export const setMpConnectionStatus = (token: string, id: string, status: 'approved' | 'rejected' | 'blocked') =>
-  authedSend<MpConnection>(token, 'POST', `/api/marketplace/distributor/connections/${id}/status`, { status })
+  authedMarketSend<MpConnection>(token, `/api/marketplace/distributor/connections/${id}/status`, { status })
 
 // --- زونِ ارسال (پخش‌کننده) --------------------------------------
 export interface MpZone {
@@ -6265,16 +6293,16 @@ export interface MpZone {
 export const fetchMpZones = (token: string) =>
   authedGet<MpZone[]>(token, '/api/marketplace/distributor/zones')
 export const createMpZone = (token: string, data: { name: string; notes?: string }) =>
-  authedSend<MpZone>(token, 'POST', '/api/marketplace/distributor/zones', data)
+  authedMarketSend<MpZone>(token, '/api/marketplace/distributor/zones', data)
 export const updateMpZone = (token: string, id: string, data: { name: string; notes?: string }) =>
-  authedSend<MpZone>(token, 'PUT', `/api/marketplace/distributor/zones/${id}`, data)
+  authedMarketSend<MpZone>(token, `/api/marketplace/distributor/zones/${id}`, data, 'PUT')
 export const deleteMpZone = (token: string, id: string) =>
-  authedDelete(token, `/api/marketplace/distributor/zones/${id}`)
+  authedMarketDelete(token, `/api/marketplace/distributor/zones/${id}`)
 export const assignMpConnectionZone = (token: string, connectionId: string, zoneId: string | null) =>
-  authedSend<MpConnection>(token, 'POST', `/api/marketplace/distributor/connections/${connectionId}/zone`, { zone_id: zoneId })
+  authedMarketSend<MpConnection>(token, `/api/marketplace/distributor/connections/${connectionId}/zone`, { zone_id: zoneId })
 
 // --- مرجوعیِ بازار --------------------------------------
-export type MpReturnStatus = 'requested' | 'approved' | 'rejected'
+export type MpReturnStatus = 'requested' | 'sync_pending' | 'approved' | 'rejected'
 export interface MpReturnLine {
   order_line_id: string
   title: string
@@ -6300,21 +6328,21 @@ export interface MpReturn {
 }
 export interface MpReturnRequestIn {
   order_id: string
-  lines: { order_line_id: string; qty: number }[]
+  lines: { order_line_id: string; qty: number | string }[]
   reason?: string
 }
 // سمتِ فروشگاه
 export const fetchMpRetailerReturns = (token: string) =>
   authedGet<MpReturn[]>(token, '/api/marketplace/retailer/returns')
 export const requestMpReturn = (token: string, data: MpReturnRequestIn) =>
-  authedSend<MpReturn>(token, 'POST', '/api/marketplace/retailer/returns', data)
+  authedMarketSend<MpReturn>(token, '/api/marketplace/retailer/returns', data)
 // سمتِ پخش‌کننده
 export const fetchMpDistributorReturns = (token: string) =>
   authedGet<MpReturn[]>(token, '/api/marketplace/distributor/returns')
 export const approveMpReturn = (token: string, id: string) =>
-  authedSend<MpReturn>(token, 'POST', `/api/marketplace/distributor/returns/${id}/approve`, {})
+  authedMarketSend<MpReturn>(token, `/api/marketplace/distributor/returns/${id}/approve`, {})
 export const rejectMpReturn = (token: string, id: string, response_note?: string) =>
-  authedSend<MpReturn>(token, 'POST', `/api/marketplace/distributor/returns/${id}/reject`, { response_note: response_note ?? '' })
+  authedMarketSend<MpReturn>(token, `/api/marketplace/distributor/returns/${id}/reject`, { response_note: response_note ?? '' })
 
 // سمتِ فروشگاه — کشف/اتصال/کاتالوگ
 export const fetchMpDistributors = (token: string) =>
@@ -6324,7 +6352,7 @@ export const fetchMpRetailerConnections = (token: string) =>
   authedGet<MpConnection[]>(token, '/api/marketplace/retailer/connections')
 
 export const requestMpConnection = (token: string, distributor_tenant_id: string) =>
-  authedSend<MpConnection>(token, 'POST', '/api/marketplace/retailer/connections', { distributor_tenant_id })
+  authedMarketSend<MpConnection>(token, '/api/marketplace/retailer/connections', { distributor_tenant_id })
 
 // گفتگوی اتصال (مشترک بین فروشگاه و پخش‌کننده) — رشته‌ی دائم به‌ازای هر اتصالِ approved.
 export const fetchMpMessages = (token: string, connectionId: string, afterIso?: string) =>
@@ -6334,7 +6362,7 @@ export const fetchMpMessages = (token: string, connectionId: string, afterIso?: 
   )
 
 export const sendMpMessage = (token: string, connectionId: string, body: string) =>
-  authedSend<MpMessage>(token, 'POST', `/api/marketplace/connections/${connectionId}/messages`, { body })
+  authedMarketSend<MpMessage>(token, `/api/marketplace/connections/${connectionId}/messages`, { body })
 
 // جمعِ پیام‌های خوانده‌نشده‌ی همه‌ی اتصال‌های approved — برای نشانِ نویگیشن.
 export const fetchMpUnread = (token: string) => authedGet<number>(token, '/api/marketplace/unread')
@@ -6347,7 +6375,53 @@ export const fetchMpCatalog = (token: string, distributorId?: string) =>
 
 // --- سفارش‌ها (M4) --------------------------------------------------------------
 
-export type MpOrderStatus = 'placed' | 'confirmed' | 'delivered' | 'rejected' | 'shipped' | 'received' | 'cancelled'
+export type MpOrderStatus = 'placed' | 'sync_pending' | 'confirmed' | 'delivered' | 'rejected' | 'shipped' | 'received' | 'cancelled'
+
+export interface EnterpriseMarketState {
+  status: 'unlinked' | 'pending' | 'active' | 'revoked'
+  cloud_tenant_id?: string | null
+  last_sync_at: string | null
+  last_error_code: string
+  catalog_approved: boolean
+}
+
+export const fetchEnterpriseMarketState = (token: string) =>
+  authedGet<EnterpriseMarketState>(token, '/api/local-market/state')
+
+export const startEnterpriseMarketPair = (token: string) =>
+  authedSend<{ link_id: string; pair_code: string; expires_at: string }>(token, 'POST', '/api/local-market/pair/start', {})
+
+export const completeEnterpriseMarketPair = (token: string) =>
+  authedSend<{ status: string; cloud_tenant_id?: string }>(token, 'POST', '/api/local-market/pair/complete', {})
+
+export const claimEnterpriseMarketPair = (token: string, code: string) =>
+  authedSend<{ link_id: string; status: string }>(token, 'POST', '/api/enterprise/market/pair/claim', { code })
+
+export interface EnterpriseMarketMappings {
+  approved: boolean
+  last_sync_at: string | null
+  last_error_code: string
+  listings: Array<{ local_listing_id: string; market_listing_ref: string }>
+  items: Array<{ local_item_id: string; market_item_ref: string }>
+}
+
+export const fetchEnterpriseMarketMappings = (token: string) =>
+  authedGet<EnterpriseMarketMappings>(token, '/api/local-market/catalog/mappings')
+
+export const mapEnterpriseMarketListing = (token: string, listing: Listing) =>
+  authedSend<{ market_listing_ref: string }>(token, 'POST', '/api/local-market/catalog/mappings', {
+    local_listing_id: listing.id,
+    items: listing.components.map(component => ({ local_item_id: component.item_id })),
+  })
+
+export const approveEnterpriseMarketCatalog = (token: string) =>
+  authedSend<{ approved: boolean }>(token, 'POST', '/api/local-market/catalog/approve', {})
+
+export const pauseEnterpriseMarketCatalog = (token: string) =>
+  authedSend<{ approved: boolean }>(token, 'POST', '/api/local-market/catalog/pause', {})
+
+export const removeEnterpriseMarketListingMapping = (token: string, listingId: string) =>
+  authedDelete(token, `/api/local-market/catalog/mappings/${listingId}`)
 
 export interface MpOrderLine {
   id: string | null
@@ -6389,13 +6463,13 @@ export interface MpOrder {
 
 export interface MpOrderPlaceIn {
   distributor_tenant_id: string
-  lines: { listing_id: string; qty: number }[]
+  lines: { listing_id: string; qty: number | string }[]
   note?: string
 }
 
 // سمتِ فروشگاه
 export const placeMpOrder = (token: string, data: MpOrderPlaceIn) =>
-  authedSend<MpOrder>(token, 'POST', '/api/marketplace/retailer/orders', data)
+  authedMarketSend<MpOrder>(token, '/api/marketplace/retailer/orders', data)
 
 export const fetchMpRetailerOrders = (token: string) =>
   authedGet<MpOrder[]>(token, '/api/marketplace/retailer/orders')
@@ -6408,14 +6482,14 @@ export const fetchMpDistributorOrders = (token: string) =>
   authedGet<MpOrder[]>(token, '/api/marketplace/distributor/orders')
 
 export const confirmMpOrder = (token: string, id: string, cashPercent = 0) =>
-  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/confirm`, { cash_percent: cashPercent })
+  authedMarketSend<MpOrder>(token, `/api/marketplace/distributor/orders/${id}/confirm`, { cash_percent: cashPercent })
 
 // ثبتِ تحویل توسطِ مامور حمل/انتقال — ورودِ کالا به انبارِ فروشگاه اینجا انجام می‌شود.
 export const deliverMpOrder = (token: string, id: string, cashPercent = 0) =>
-  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/deliver`, { cash_percent: cashPercent })
+  authedMarketSend<MpOrder>(token, `/api/marketplace/distributor/orders/${id}/deliver`, { cash_percent: cashPercent })
 
 export const rejectMpOrder = (token: string, id: string) =>
-  authedSend<MpOrder>(token, 'POST', `/api/marketplace/distributor/orders/${id}/reject`, {})
+  authedMarketSend<MpOrder>(token, `/api/marketplace/distributor/orders/${id}/reject`, {})
 
 // گفتگوی زیرِ هر سفارش — رشته‌ی جدا؛ هر دو سمتِ همان سفارش (بدونِ گیتِ وضعیت).
 export const fetchMpOrderMessages = (token: string, orderId: string, afterIso?: string) =>
@@ -6425,7 +6499,7 @@ export const fetchMpOrderMessages = (token: string, orderId: string, afterIso?: 
   )
 
 export const sendMpOrderMessage = (token: string, orderId: string, body: string) =>
-  authedSend<MpMessage>(token, 'POST', `/api/marketplace/orders/${orderId}/messages`, { body })
+  authedMarketSend<MpMessage>(token, `/api/marketplace/orders/${orderId}/messages`, { body })
 
 // ── کمیسیونِ پلتفرم (۲٪) ───────────────────────────────────────────────
 export interface MpCommissionPeriod {
@@ -8588,7 +8662,7 @@ export const voidWarehouseReceipt = (token: string, id: string, reason: string) 
 export const createWarehouseReceiptIdempotent = (
   token: string,
   invoiceId: string,
-  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number }[] },
+  data: { receipt_date: string; warehouse_id: string; description?: string; lines: { purchase_invoice_line_id: string; qty: number | string }[] },
   idempotencyKey: string,
 ) => authedSend<WarehouseReceiptRecord>(
   token,
@@ -8620,6 +8694,8 @@ export interface PurchaseInvoiceDuplicateDraft {
   lines: Array<{
     item_id: string
     qty: string | number
+    unit_id?: string | null
+    unit_name?: string
     unit_cost: string | number
     discount: string | number
     addition: string | number
@@ -8697,6 +8773,11 @@ export interface SalesInvoiceRecord {
 }
 
 export interface InvoiceLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  base_qty?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
   addition: string
   duty_amount: string
   item_code_snapshot: string
@@ -8731,7 +8812,9 @@ export interface SalesInvoiceCommercialInput {
   source_warehouse_issue_id?: string | null
   lines: Array<{
     item_id: string
-    qty: number
+    qty: number | string
+    unit_id?: string | null
+    observations?: UnitObservation[]
     unit_price: number
     discount?: number
     addition?: number
@@ -8749,7 +8832,7 @@ export const createSalesInvoiceCommercial = (
 
 export const createImmediateSalesInvoice = (
   token: string,
-  data: Parameters<typeof createSalesInvoiceDirect>[1],
+  data: ImmediateSalesInvoiceInput,
   idempotencyKey?: string,
 ) => authedSend<unknown>(token, 'POST', '/api/sales-invoices/immediate', data, idempotencyKey)
 
@@ -8808,7 +8891,7 @@ export const createWarehouseIssueIdempotent = (
     issue_date: string
     warehouse_id: string
     description?: string
-    lines: { sales_invoice_line_id: string; qty: number }[]
+    lines: { sales_invoice_line_id: string; qty: number | string }[]
   },
   idempotencyKey: string,
 ) => authedSend<WarehouseIssueRecord>(
@@ -8919,7 +9002,7 @@ export interface DirectWarehouseReceiptIn {
   freight_basis?: string
   tax_rate?: number
   description?: string
-  lines: { item_id: string; qty: number; unit_cost: number; description?: string }[]
+  lines: { item_id: string; unit_id?: string | null; observations?: UnitObservation[]; qty: string | number; unit_cost: string | number; description?: string }[]
 }
 
 export const createDirectWarehouseReceipt = (token: string, data: DirectWarehouseReceiptIn, idempotencyKey: string) =>
@@ -8929,6 +9012,7 @@ export const printWarehouseReceipt = (token: string, receiptId: string) =>
   openInvoicePrintView(token, `/api/warehouse-receipts/${receiptId}/print`)
 
 export interface ReceiptReturnableLine {
+  return_unit_options?: HistoricalReturnUnit[]
   warehouse_receipt_line_id: string
   purchase_invoice_line_id: string | null
   receipt_number: number
@@ -8957,7 +9041,8 @@ export interface ReceiptReturnIn {
   description?: string
   lines: {
     warehouse_receipt_line_id: string
-    qty: number
+    qty: string | number
+    unit_id?: string | null
     /** خالی یعنی «همان ارزشِ دفتری» — هیچ اختلافی ساخته نمی‌شود. */
     agreed_unit_value?: number | null
     description?: string
@@ -9127,10 +9212,10 @@ export interface SalesReviewSummary {
   tax: string
   return_amount: string
   net_sales: string
-  sold_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  issued_qty: string | null
   /** فروخته‌شده منهای خارج‌شده. */
-  unissued_qty: string
+  unissued_qty: string | null
   item_count: number
 }
 
@@ -9169,9 +9254,9 @@ export interface SalesByCustomer {
   group_name: string
   credit_limit: string
   invoice_count: number
-  sold_qty: string
-  returned_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string | null
   gross_amount: string
   discount: string
   tax: string
@@ -9187,7 +9272,7 @@ export interface SalesByWarehouse {
   warehouse_name: string
   issue_count: number
   invoice_count: number
-  issued_qty: string
+  issued_qty: string | null
   issued_cost: string
 }
 
@@ -9202,9 +9287,9 @@ export interface SalesReviewDocument {
   sale_type_name: string
   is_voided: boolean
   line_count: number
-  sold_qty: string
-  returned_qty: string
-  issued_qty: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string | null
   gross_amount: string
   discount: string
   tax: string
@@ -9384,15 +9469,16 @@ export interface DirectWarehouseIssueIn {
   description?: string
   lines: {
     item_id: string
-    qty: number
+    qty: string | number
     unit_id?: string | null
+    observations?: UnitObservation[]
     account_id?: string | null
     description?: string
     /**
      * نقضِ FEFO (§۱۱) — مقدارها به **واحدِ اصلیِ کالا**.
      * `null`/نیامده = سرور خودش نزدیک‌ترین انقضا را برمی‌دارد.
      */
-    batch_allocations?: { batch_id: string; qty: number }[] | null
+    batch_allocations?: { batch_id: string; qty: string | number }[] | null
   }[]
 }
 
@@ -9562,7 +9648,7 @@ export interface IssueReturnIn {
   lines: {
     sales_return_line_id?: string | null
     warehouse_issue_line_id?: string | null
-    qty: number
+    qty: string | number
     unit_id?: string | null
     /**
      * §۱۴ — حالِ کالای برگشتی. سالم به موجودیِ قابلِ فروش برمی‌گردد؛
@@ -9601,6 +9687,7 @@ export const fetchIssueReturnBasis = (token: string, returnType: IssueReturnType
   authedGet<IssueReturnBasisDoc[]>(token, `/api/warehouse-issue-returns/basis?return_type=${returnType}`)
 
 export interface IssueReturnBasisLine {
+  return_unit_options?: HistoricalReturnUnit[]
   kind: 'sales_return' | 'issue'
   basis_line_id: string
   item_id: string
@@ -10612,3 +10699,539 @@ export async function printOfficeLetter(token: string, id: string): Promise<void
 
 export const sendOfficeLetter = (token: string, id: string, version: number, recipientId: string, instruction: string) =>
   authedSend<OfficeLetter>(token, 'POST', `/api/automation/letters/${id}/send`, { version, recipient_id: recipientId, instruction })
+
+// --- اصلاحِ سند ثبت‌شده و تاریخچهٔ همان سند -------------------------------------
+
+export interface JournalEntryRecord { updated_at?: string }
+
+export interface JournalEditLineInput {
+  id?: string
+  account_id: string
+  debit: string
+  credit: string
+  description: string
+  cost_center_id?: string | null
+  analytic_id?: string | null
+  currency_code?: string | null
+  fx_amount?: string | null
+  fx_rate?: string | null
+  tracking_no?: string | null
+  tracking_date?: string | null
+}
+
+export interface JournalEditInput {
+  expected_updated_at: string
+  reason: string
+  entry_date: string
+  description: string
+  sub_number: string | null
+  status: string
+  lines: JournalEditLineInput[]
+}
+
+export interface JournalEditEvent {
+  id: string
+  at: string
+  actor_email: string
+  summary: string
+  changes: Record<string, { from: unknown; to: unknown }> | null
+}
+
+export const updateJournalEntry = (token: string, entryId: string, data: JournalEditInput) =>
+  authedSend<JournalEntryRecord>(token, 'PUT', `/api/journal-entries/${entryId}`, data)
+
+export const fetchJournalEditHistory = (token: string, entryId: string) =>
+  authedGetAll<JournalEditEvent>(token, `/api/journal-entries/${entryId}/history`)
+
+// Keep one key for the same market intent across a lost response or manual
+// retry. The enterprise broker commits this key with the order mutation.
+const marketRequestKeys = new Map<string, string>()
+function marketIntent(path: string, body: unknown): string { return `cubita:market:${path}:${JSON.stringify(body)}` }
+function marketRequestKey(path: string, body: unknown): string {
+  const intent = marketIntent(path, body)
+  let key = marketRequestKeys.get(intent)
+  if (!key) {
+    try { key = sessionStorage.getItem(intent) ?? undefined } catch { /* private storage unavailable */ }
+  }
+  if (!key) key = globalThis.crypto.randomUUID()
+  marketRequestKeys.set(intent, key)
+  try { sessionStorage.setItem(intent, key) } catch { /* in-memory retry still works */ }
+  return key
+}
+async function authedMarketSend<T>(token: string, path: string, body: unknown, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
+  const result = await authedSend<T>(token, method, path, body, marketRequestKey(path, body))
+  // A basket spans multiple orders: retain those keys until the whole basket
+  // succeeds. Other commands may intentionally repeat after a successful reply.
+  if (path !== '/api/marketplace/retailer/orders') clearMarketRequest(path, body)
+  return result
+}
+export function clearMpOrderRequest(data: MpOrderPlaceIn): void {
+  clearMarketRequest('/api/marketplace/retailer/orders', data)
+}
+function clearMarketRequest(path: string, body: unknown): void {
+  const intent = marketIntent(path, body)
+  marketRequestKeys.delete(intent)
+  try { sessionStorage.removeItem(intent) } catch { /* in-memory key was removed */ }
+}
+
+async function authedMarketDelete(token: string, path: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': marketRequestKey(path, null) },
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw apiError(body, `حذف ناموفق بود (${res.status})`, res.status)
+  }
+  clearMarketRequest(path, null)
+}
+
+export interface EnterpriseMarketPostingError {
+  event_id: string
+  order_number: number
+  side: 'buyer' | 'seller'
+  kind: string
+  status: string
+  attempts: number
+  error_code: string
+  error_detail: string
+  lines: Array<{ market_item_ref: string; name: string; unit: string; qty?: string; local_item_id?: string | null }>
+}
+export const fetchEnterpriseMarketSyncStatus = (token: string) =>
+  authedGet<{ last_sync_at: string | null; offline: boolean; access_denied: boolean }>(token, '/api/local-market/sync-status')
+export const fetchEnterpriseMarketPostingErrors = (token: string) =>
+  authedGet<EnterpriseMarketPostingError[]>(token, '/api/local-market/posting-errors')
+export const retryEnterpriseMarketPosting = (token: string, eventId: string) =>
+  authedSend<{ outcome: string }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/retry`, {})
+export const repairEnterpriseMarketPostingMapping = (token: string, eventId: string, marketRef: string, itemId: string) =>
+  authedSend<{ mapped: boolean }>(token, 'POST', `/api/local-market/posting-errors/${eventId}/mapping`, { market_item_ref: marketRef, local_item_id: itemId })
+
+
+export interface ItemUnitRecord {
+  unit_id: string
+  unit_name: string
+  is_base: boolean
+  purchase_allowed: boolean
+  sale_allowed: boolean
+  inventory_allowed: boolean
+  production_allowed: boolean
+  decimal_allowed: boolean
+  is_active: boolean
+}
+export interface ItemConversionRule {
+  id: string
+  from_unit_id: string
+  to_unit_id: string
+  mode: 'fixed' | 'variable'
+  factor: string | null
+  version: number
+  is_active: boolean
+}
+export interface QuantityConversionSnapshot {
+  market_suggested_price?: { amount:string; unit_id:string; unit_name:string }
+  source_qty: string
+  source_unit_id: string
+  target_qty: string
+  target_unit_id: string
+  source_unit_name?: string
+  target_unit_name?: string
+  rounding_adjustment?: string
+  numerator: string
+  denominator: string
+  path: Array<{ rule_id: string; version: number; source: string;
+    observation?: { from_qty: string; to_qty: string; from_unit_id: string; to_unit_id: string } }>
+}
+export interface UnitObservation { rule_id: string; from_qty: string; to_qty: string }
+export type ItemConversionInput = Pick<ItemConversionRule, 'from_unit_id' | 'to_unit_id' | 'mode' | 'factor'>
+export const fetchItemUnits = (token: string, itemId: string) =>
+  authedGet<ItemUnitRecord[]>(token, `/api/items/${itemId}/units`)
+export const addItemUnit = (token: string, itemId: string, unitId: string) =>
+  authedSend<ItemUnitRecord>(token, 'POST', `/api/items/${itemId}/units`, { unit_id: unitId })
+export const updateItemUnit = (token: string, itemId: string, unitId: string, data: Partial<ItemUnitRecord>) =>
+  authedSend<ItemUnitRecord>(token, 'PATCH', `/api/items/${itemId}/units/${unitId}`, data)
+export const fetchItemConversionRules = (token: string, itemId: string) =>
+  authedGet<ItemConversionRule[]>(token, `/api/items/${itemId}/unit-conversions`)
+export const saveItemConversionRule = (token: string, itemId: string, data: ItemConversionInput, ruleId?: string) =>
+  authedSend<ItemConversionRule>(token, ruleId ? 'PUT' : 'POST', `/api/items/${itemId}/unit-conversions${ruleId ? `/${ruleId}` : ''}`, data)
+export const deactivateItemConversionRule = (token: string, itemId: string, ruleId: string) =>
+  authedDelete(token, `/api/items/${itemId}/unit-conversions/${ruleId}`)
+export const previewItemQuantity = (token: string, itemId: string, data: {
+  qty: string; unit_id: string; context: 'purchase' | 'sale' | 'inventory' | 'production'
+  batch_id?: string; observations?: Array<{ rule_id: string; from_qty: string; to_qty: string }>
+}) => authedSend<QuantityConversionSnapshot>(token, 'POST', `/api/items/${itemId}/convert-quantity`, data)
+
+/** POS quantities retain entered decimal strings and transaction units. */
+export type ImmediateSalesInvoiceInput = Omit<Parameters<typeof createSalesInvoiceDirect>[1], 'lines'> & { lines: SalesInvoiceCommercialInput['lines'] }
+
+export interface BomLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+export interface ProductionOrderLineRecord {
+  entered_qty?: string | null
+  entered_unit_id?: string | null
+  base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+export type UnitAwareBomInput = Omit<BomInput, 'yield_qty' | 'lines'> & {
+  unit_id?: string | null
+  observations?: UnitObservation[]
+  yield_qty?: string | number
+  lines: { component_item_id: string; qty: string | number; unit_id?: string; observations?: UnitObservation[] }[]
+}
+
+export interface ProductionOutputInput {
+  receipt_date: string
+  qty: string | number
+  unit_id?: string
+  observations?: UnitObservation[]
+}
+
+export interface SalesQuantityTotal {
+  unit_key: string
+  unit_name: string
+  sold_qty: string | null
+  returned_qty: string | null
+  issued_qty: string
+  unissued_qty: string | null
+}
+export interface SalesReviewSummary { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesByCustomer { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesByWarehouse { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesReviewDocument { quantity_totals?: SalesQuantityTotal[] }
+export interface SalesReviewLine {
+  entered_qty?: string | null
+  entered_unit_name?: string
+  entered_unit_price?: string | null
+}
+export interface PreinvoiceProgress { unit_name?: string }
+
+export interface FrozenQuantityRecord {
+  entered_qty?: string | null; entered_unit_id?: string | null; base_unit_id?: string | null
+  unit_conversion_snapshot?: QuantityConversionSnapshot | null
+}
+
+export interface ProductionMaterialPreview {
+  qty: string; remaining: string; lines: { item_id: string; qty: string; unit: string; reserved_other: string }[]
+}
+export const previewProductionMaterials = (token: string, id: string, data: {
+  issue_date: string; qty?: string | null; unit_id?: string; observations?: UnitObservation[]
+}) => authedSend<ProductionMaterialPreview>(token, 'POST', `/api/production-plans/${id}/material-preview`, data)
+
+export const approveEnterpriseMarketQuantity = (token: string, eventId: string, data: {
+  line_index: number; unit_id: string; observations: UnitObservation[]
+}) => authedSend<{ approved: boolean; conversion: QuantityConversionSnapshot }>(token, 'POST',
+  `/api/local-market/posting-errors/${eventId}/quantity-input`, data)
+
+export interface RepairBranch { id: string; name: string; is_active: boolean; diagnostic_fee?: string; cancellation_fee?: string; discount_ceiling?: string }
+export interface RepairDeviceType extends RepairBranch { fields: string[]; checklist: string[]; diagnostic_checklist?: string[]; quality_checklist?: string[] }
+export interface RepairDeviceInput { type_id: string; brand: string; model: string; serial: string; imei: string; attributes: Record<string, string> }
+export interface RepairAdmissionInput {
+  contact_id: string; branch_id: string; device_id?: string; device?: RepairDeviceInput;
+  delivering_name: string; delivering_phone: string; reported_issue: string; appearance: string; accessories: string;
+  intake_checklist: Record<string, boolean>; priority: 'normal' | 'high' | 'urgent'; admission_date: string; due_date: string | null;
+  storage_location: string; terms: string; approval_method: 'in_person' | 'phone' | 'written';
+}
+export interface RepairCase extends Omit<RepairAdmissionInput, 'device'> {
+  id: string; number: number; device_id: string; version: number; status: string;
+  owner_snapshot: { name: string; phone: string }; device_snapshot: RepairDeviceInput & { category: string };
+  open_case_warnings?: { id: string; number: number }[];
+  visits?: { id: string; number: number; admission_date: string; status: string }[];
+  events?: { id: string; action: string; created_at: string; detail: Record<string, string> }[];
+  assigned_to_id?: string | null; pause_reason?: string;
+  allowed_statuses?: { key: string; label: string }[]; tasks?: RepairTask[];
+  initial_diagnosis?: string; final_diagnosis?: string; diagnosis_checklist?: Record<string,boolean>; fault_ids?: string[];
+  estimates?: RepairEstimate[]; estimate_decisions?: RepairEstimateDecision[];
+  parts?: RepairPart[]; work?: RepairWork[]; outsources?: RepairOutsource[]; quality_checks?: RepairQualityCheck[]; removed_parts?: RepairRemovedPart[]; has_device_secret?: boolean;
+}
+export interface RepairTask { id: string; title: string; internal_note: string; status: 'pending' | 'working' | 'done'; due_date: string | null; started_at: string | null; completed_at: string | null }
+export const fetchRepairBranches = (token: string) => authedGet<RepairBranch[]>(token, '/api/repair/branches')
+export const fetchRepairMembers = (token: string) => authedGet<{ id: string; name: string }[]>(token, '/api/repair/members')
+export const fetchRepairBranchAccess = (token: string, id: string) => authedGet<{ user_ids: string[] }>(token, `/api/repair/branches/${id}/access`)
+export const createRepairBranch = (token: string, name: string) => authedSend<RepairBranch>(token, 'POST', '/api/repair/branches', { name })
+export const grantRepairBranch = (token: string, id: string, user_ids: string[]) => authedSend(token, 'PUT', `/api/repair/branches/${id}/access`, { user_ids })
+export const fetchRepairTypes = (token: string) => authedGet<RepairDeviceType[]>(token, '/api/repair/device-types')
+export const createRepairType = (token: string, data: { name: string; fields: string[]; checklist: string[] }) => authedSend<RepairDeviceType>(token, 'POST', '/api/repair/device-types', data)
+export const fetchRepairCases = (token: string, q = '', cursor?: string, dateFrom?: string, dateTo?: string, filters: { mine?: boolean; overdue?: boolean; inactive_days?: number; status?: string } = {}) => authedGet<Page<RepairCase>>(token,
+  `/api/repair/cases?${new URLSearchParams({ q, ...(cursor ? { cursor } : {}), ...(dateFrom ? { date_from: dateFrom } : {}), ...(dateTo ? { date_to: dateTo } : {}), ...Object.fromEntries(Object.entries(filters).filter(([,v]) => !!v).map(([k,v]) => [k,String(v)])) })}`)
+export const fetchRepairCase = (token: string, id: string) => authedGet<RepairCase>(token, `/api/repair/cases/${id}`)
+export const createRepairCase = (token: string, data: RepairAdmissionInput, key: string) => authedSend<RepairCase>(token, 'POST', '/api/repair/cases', data, key)
+export const relocateRepairCase = (token: string, row: RepairCase, storage_location: string) => authedSend<RepairCase>(token, 'PUT', `/api/repair/cases/${row.id}/location`, { version: row.version, storage_location })
+export interface RepairFile { id: string; filename: string; size: number; content_type: string }
+export const fetchRepairFiles = (token: string, id: string) => authedGet<RepairFile[]>(token, `/api/repair/cases/${id}/attachments`)
+export async function uploadRepairFile(token: string, id: string, file: File): Promise<RepairFile> {
+  const body = new FormData(); body.append('file', file)
+  const response = await fetch(`${API_BASE_URL}/api/repair/cases/${id}/attachments`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body })
+  if (!response.ok) throw apiError(await response.json().catch(() => ({})), 'پیوست ثبت نشد؛ فایل را بررسی کنید.', response.status)
+  return response.json()
+}
+export async function downloadRepairFile(token: string, caseId: string, file: RepairFile): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/repair/cases/${caseId}/attachments/${file.id}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!response.ok) throw apiError(await response.json().catch(() => ({})), 'دریافت پیوست انجام نشد.', response.status)
+  const url = URL.createObjectURL(await response.blob()); const a = document.createElement('a'); a.href = url; a.download = file.filename; a.click(); URL.revokeObjectURL(url)
+}
+export async function printRepairReceipt(token: string, id: string): Promise<void> {
+  const win = window.open('', '_blank')
+  if (!win) throw new Error('اجازهٔ بازشدن پنجرهٔ چاپ را فعال کنید.')
+  win.opener = null
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/repair/cases/${id}/receipt`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!response.ok) throw apiError(await response.json().catch(() => ({})), 'دریافت رسید انجام نشد.', response.status)
+    win.document.write(await response.text()); win.document.close(); win.focus(); win.print()
+  } catch (error) { win.close(); throw error }
+}
+export const fetchRepairTechnicians = (token: string, branchId: string) => authedGet<{ id: string; name: string }[]>(token, `/api/repair/technicians?branch_id=${encodeURIComponent(branchId)}`)
+export const transitionRepairCase = (token: string, row: RepairCase, status: string, reason: string, exceptional = false) => authedSend<RepairCase>(token, 'POST', `/api/repair/cases/${row.id}/status`, { version: row.version, status, reason, exceptional })
+export const assignRepairCase = (token: string, row: RepairCase, user_id: string | null, reason: string) => authedSend<RepairCase>(token, 'POST', `/api/repair/cases/${row.id}/assignment`, { version: row.version, user_id, reason })
+export const addRepairTask = (token: string, row: RepairCase, title: string, internal_note: string, due_date: string | null, key: string) => authedSend<RepairTask>(token, 'POST', `/api/repair/cases/${row.id}/tasks`, { version: row.version, title, internal_note, due_date }, key)
+export const changeRepairTask = (token: string, row: RepairCase, taskId: string, status: 'working' | 'done') => authedSend<RepairCase>(token, 'POST', `/api/repair/cases/${row.id}/tasks/${taskId}/status`, { version: row.version, status })
+export interface RepairEstimateLine { kind: 'labor' | 'part' | 'extra'; title: string; item_id: string | null; qty: string; unit_price: string; amount?: string }
+export interface RepairEstimateOption { title: string; lines: RepairEstimateLine[]; total?: string }
+export interface RepairEstimate { id: string; case_id: string; version: number; options: RepairEstimateOption[]; valid_until: string; duration_days: number; customer_ceiling: string | null; currency: 'IRR'; diagnosis_snapshot: string }
+export interface RepairEstimateDecision { id: string; estimate_id: string; decision: 'approved' | 'rejected'; option_index: number | null; method: string; customer_name: string; authorized_ceiling: string | null; reason: string }
+export interface RepairFault { id: string; name: string; type_id: string | null; is_active: boolean }
+export const fetchRepairFaults = (token: string) => authedGet<RepairFault[]>(token, '/api/repair/faults')
+export const createRepairFault = (token: string, name: string, type_id: string | null) => authedSend<RepairFault>(token, 'POST', '/api/repair/faults', { name,type_id })
+export const fetchRepairCatalog = (token: string) => authedGetAll<{ id: string; name: string; is_service: boolean; unit: string }>(token, '/api/repair/catalog')
+export const updateRepairType = (token: string, row: RepairDeviceType, diagnostic_checklist: string[], quality_checklist = row.quality_checklist ?? []) => authedSend<RepairDeviceType>(token, 'PUT', `/api/repair/device-types/${row.id}`, { name:row.name,fields:row.fields,checklist:row.checklist,diagnostic_checklist,quality_checklist })
+export const updateRepairFees = (token: string, id: string, diagnostic_fee: string, cancellation_fee: string, discount_ceiling = '0') => authedSend<RepairBranch>(token, 'PUT', `/api/repair/branches/${id}/fees`, { diagnostic_fee,cancellation_fee,discount_ceiling })
+export const saveRepairDiagnosis = (token: string, row: RepairCase, data: { initial_diagnosis: string; final_diagnosis: string; checklist: Record<string,boolean>; fault_ids: string[] }) => authedSend<RepairCase>(token,'POST',`/api/repair/cases/${row.id}/diagnosis`,{version:row.version,...data})
+export const createRepairEstimate = (token: string, row: RepairCase, data: { options: RepairEstimateOption[]; valid_until: string; duration_days: number; customer_ceiling: string | null }, key: string) => authedSend<RepairEstimate>(token,'POST',`/api/repair/cases/${row.id}/estimates`,{version:row.version,...data},key)
+export const decideRepairEstimate = (token: string, row: RepairCase, estimateId: string, data: { decision: 'approved' | 'rejected'; option_index: number | null; method: 'in_person' | 'phone' | 'written'; customer_name: string; reason: string; authorized_ceiling: string | null }, key: string) => authedSend<RepairEstimateDecision>(token,'POST',`/api/repair/cases/${row.id}/estimates/${estimateId}/decision`,{version:row.version,...data},key)
+
+export interface RepairPartMovement { id:string; action:string; qty:string; document_type:string; document_id:string|null; document_line_id:string|null; serials:string[]; reason:string }
+export interface RepairPart { id:string; owner:'company'|'customer'; item_id:string|null; title:string; qty:string; unit_snapshot:{ source_unit_name:string;target_unit_name:string }; unit_price:string; charge_to_customer:boolean; source_warehouse_id:string|null;work_warehouse_id:string|null;status:string;consumed_qty:string;custody_qty:string;movements:RepairPartMovement[];purchase_request:{id:string;due_date:string;reason:string;status:string;purchase_invoice_id:string|null}|null }
+export interface RepairPartInput { owner:'company'|'customer';item_id:string|null;title:string;qty:string;unit_id?:string|null;customer_unit:string;unit_price:string;charge_to_customer:boolean;source_warehouse_id:string|null;work_warehouse_id:string|null;batch_id?:string|null;substitute_for_id?:string|null;compatibility_reason?:string;observations?:UnitObservation[] }
+export interface RepairWork { id:string;technician_id:string;service_id:string|null;description:string;internal_result:string;customer_result:string;work_minutes:number;charge_amount:string;started_at:string|null;completed_at:string|null }
+export interface RepairOutsource { id:string;vendor_id:string;description:string;expected_cost:string;due_date:string;returned_at:string|null;return_result:string;purchase_invoice_id:string|null }
+export interface RepairQualityCheck { id:string;passed:boolean;result:string;checklist:Record<string,boolean> }
+export interface RepairRemovedPart { id:string;title:string;disposition:string;customer_name:string;reason:string }
+export const fetchRepairWarehouses = (token:string) => authedGet<{id:string;name:string}[]>(token,'/api/repair/warehouses')
+export const requestRepairPart = (token:string,row:RepairCase,data:RepairPartInput,key:string) => authedSend<RepairPart>(token,'POST',`/api/repair/cases/${row.id}/parts`,{version:row.version,...data},key)
+export const moveRepairPart = (token:string,row:RepairCase,partId:string,data:{action:string;on:string;qty?:string|null;reason:string;serials:string[];source_movement_id?:string|null;return_condition?:string;purchase_invoice_id?:string|null;purchase_invoice_line_id?:string|null},key:string) => authedSend<RepairPartMovement>(token,'POST',`/api/repair/cases/${row.id}/parts/${partId}/actions`,{version:row.version,...data},key)
+export const recordRepairWork = (token:string,row:RepairCase,data:{technician_id:string;collaborators:string[];service_id:string|null;description:string;internal_result:string;customer_result:string;work_minutes:number;charge_amount:string;started_at:string|null;completed_at:string|null},key:string) => authedSend<RepairWork>(token,'POST',`/api/repair/cases/${row.id}/work`,{version:row.version,...data},key)
+export const recordRepairQuality = (token:string,row:RepairCase,data:{passed:boolean;checklist:Record<string,boolean>;result:string},key:string) => authedSend<RepairQualityCheck>(token,'POST',`/api/repair/cases/${row.id}/quality`,{version:row.version,...data},key)
+export const createRepairOutsource = (token:string,row:RepairCase,data:{vendor_id:string;description:string;expected_cost:string;due_date:string},key:string) => authedSend<RepairOutsource>(token,'POST',`/api/repair/cases/${row.id}/outsources`,{version:row.version,...data},key)
+export const returnRepairOutsource = (token:string,row:RepairCase,id:string,result:string,purchase_invoice_id:string|null) => authedSend<RepairOutsource>(token,'POST',`/api/repair/cases/${row.id}/outsources/${id}/return`,{version:row.version,result,purchase_invoice_id})
+export const recordRepairRemovedPart = (token:string,row:RepairCase,data:{title:string;disposition:string;authorization_method:string;customer_name:string;reason:string},key:string) => authedSend<RepairRemovedPart>(token,'POST',`/api/repair/cases/${row.id}/removed-parts`,{version:row.version,...data},key)
+export const createRepairPurchaseRequest = (token:string,row:RepairCase,partId:string,due_date:string,reason:string,key:string) => authedSend(token,'POST',`/api/repair/cases/${row.id}/parts/${partId}/purchase-request`,{version:row.version,due_date,reason},key)
+export const updateRepairPurchaseRequest = (token:string,row:RepairCase,partId:string,status:string,purchase_invoice_id:string|null) => authedSend(token,'PUT',`/api/repair/cases/${row.id}/parts/${partId}/purchase-request`,{version:row.version,status,purchase_invoice_id})
+export const fetchRepairAccessCapabilities = (token:string) => authedGet<{encrypted_storage_available:boolean}>(token,'/api/repair/access-capabilities')
+export const setRepairDeviceSecret = (token:string,row:RepairCase,secret:string,expires_days:number) => authedSend(token,'PUT',`/api/repair/cases/${row.id}/device-secret`,{version:row.version,secret,expires_days})
+export const revealRepairDeviceSecret = (token:string,row:RepairCase,reason:string) => authedSend<{secret:string;expires_at:string}>(token,'POST',`/api/repair/cases/${row.id}/device-secret/reveal`,{reason})
+export const clearRepairDeviceSecret = (token:string,row:RepairCase) => authedSend(token,'POST',`/api/repair/cases/${row.id}/device-secret/clear`,{version:row.version})
+
+export interface RepairFinancialDocument { id:string;document_id:string;document_type:string;number:number|null;voided:boolean;amount:string;settled_amount:string;remaining_amount:string;work_version:number }
+export interface RepairFinancial { currency:'IRR';document_balance:string;remaining_balance:string;documents:RepairFinancialDocument[] }
+export interface RepairCashInput { on:string;amount:string;method:'cash'|'transfer'|'card';cashbox_id:string|null;bank_account_id:string|null;pos_terminal_id:string|null;reference_no:string;reason:string }
+export const fetchRepairFinance=(token:string,row:RepairCase)=>authedGet<RepairFinancial>(token,`/api/repair/cases/${row.id}/finance`)
+export const issueRepairInvoice=(token:string,row:RepairCase,data:{on:string;discount:string;discount_reason:string;tax_rate:string},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/invoice`,{version:row.version,...data},key)
+export const recordRepairCash=(token:string,row:RepairCase,data:RepairCashInput,refund:boolean,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/${refund?'refunds':'receipts'}`,{version:row.version,...data},key)
+export const deliverRepairDevice=(token:string,row:RepairCase,data:{receiver_name:string;receiver_phone:string;authorization:string;accessories:string;care_instructions:string;credit_reason:string;approval_method:string;checklist:Record<string,boolean>},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/delivery`,{version:row.version,...data},key)
+export const closeRepairCase=(token:string,row:RepairCase)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/close`,{version:row.version})
+export const fetchRepairLinkableDocuments=(token:string,row:RepairCase,kind:string)=>authedGet<{id:string;number:number|null}[]>(token,`/api/repair/cases/${row.id}/linkable-documents?kind=${encodeURIComponent(kind)}`)
+export const linkRepairDocument=(token:string,row:RepairCase,document_type:string,document_id:string,reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/documents`,{version:row.version,document_type,document_id,reason},key)
+export const voidRepairDocument=(token:string,row:RepairCase,id:string,on:string,reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/documents/${id}/void`,{version:row.version,on,reason},key)
+export const updateRepairRemovedPart=(token:string,row:RepairCase,part:RepairRemovedPart,disposition:string,authorization_method:string,customer_name:string,reason:string)=>authedSend(token,'PUT',`/api/repair/cases/${row.id}/removed-parts/${part.id}/disposition`,{version:row.version,title:part.title,disposition,authorization_method,customer_name,reason})
+export const fetchRepairQuantityOptions=(token:string,itemId:string,warehouseId:string)=>authedGet<{units:ItemUnitRecord[];rules:ItemConversionRule[];batches:{id:string;batch_number:string;qty:string}[]}>(token,`/api/repair/items/${itemId}/quantity-options${warehouseId?'?warehouse_id='+encodeURIComponent(warehouseId):''}`)
+
+export type RepairMessageKind='admission'|'approval'|'due'|'ready'
+export interface RepairMessageTemplate {id:string;branch_id:string|null;scope:string;kind:RepairMessageKind;version:number;body:string;enabled:boolean}
+export interface RepairNotification {id:string;kind:RepairMessageKind;recipient:string;body:string;status:'queued'|'sending'|'accepted'|'uncertain'|'unavailable'|'cancelled';last_result:string;created_at:string;attempt_count:number;attempts:{id:string;number:number;outcome:string;result:string;created_at:string}[]}
+export const fetchRepairNotifications=(token:string,row:RepairCase)=>authedGet<{sms_available:boolean;messages:RepairNotification[]}>(token,`/api/repair/cases/${row.id}/notifications`)
+export const fetchRepairMessageTemplates=(token:string)=>authedGet<RepairMessageTemplate[]>(token,'/api/repair/message-templates')
+export const saveRepairMessageTemplate=(token:string,data:{branch_id:string|null;kind:RepairMessageKind;body:string;enabled:boolean})=>authedSend<RepairMessageTemplate>(token,'POST','/api/repair/message-templates',data)
+export const queueRepairNotification=(token:string,row:RepairCase,kind:RepairMessageKind,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/notifications`,{version:row.version,kind},key)
+export const retryRepairNotification=(token:string,row:RepairCase,id:string,reason:string,acknowledge_duplicate_risk:boolean)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/notifications/${id}/retry`,{version:row.version,reason,acknowledge_duplicate_risk})
+export const cancelRepairNotification=(token:string,row:RepairCase,id:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/notifications/${id}/cancel`,{version:row.version})
+
+export interface RepairPortalLink {id:string;created_at:string;expires_at:string;revoked_at:string|null}
+export const fetchRepairPortalLinks=(token:string,row:RepairCase)=>authedGet<RepairPortalLink[]>(token,`/api/repair/cases/${row.id}/portal-links`)
+export const createRepairPortalLink=(token:string,row:RepairCase,expires_days:number)=>authedSend<{id:string;expires_at:string;url:string}>(token,'POST',`/api/repair/cases/${row.id}/portal-links`,{version:row.version,expires_days})
+export const revokeRepairPortalLink=(token:string,row:RepairCase,id:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/portal-links/${id}/revoke`,{version:row.version})
+export const setRepairFileVisibility=(token:string,row:RepairCase,id:string,customer_visible:boolean)=>authedSend(token,'PUT',`/api/repair/cases/${row.id}/attachments/${id}/visibility`,{version:row.version,customer_visible})
+export interface RepairCustomerMessage {id:string;kind:'comment'|'complaint'|'survey';name:string;body:string;rating:number|null;created_at:string}
+export const fetchRepairCustomerMessages=(token:string,row:RepairCase)=>authedGet<RepairCustomerMessage[]>(token,`/api/repair/cases/${row.id}/customer-messages`)
+export interface RepairPortalView {number:number;version:number;status:string;status_label:string;admission_date:string;due_date:string|null;device:Record<string,string>;customer:string;reported_issue:string;accessories:string;terms:string;results:string[];attachments:{id:string;filename:string;size:number}[];messages:RepairCustomerMessage[];online_payment_available:boolean;estimate:null|{id:string;version:number;valid_until:string;duration_days:number;currency:'IRR';options:{title:string;total:string;lines:{kind:string;title:string;qty:string;unit_price:string;amount:string}[]}[];decision:null|{decision:string;customer_name:string;created_at:string;option_index:number|null;authorized_ceiling:string|null}}}
+export async function repairPortalRequest(credential:string,path:string,method='GET',data?:unknown,key?:string) {
+  const headers:Record<string,string>={Authorization:'RepairPortal '+credential}
+  if(data!==undefined&&!(data instanceof FormData))headers['Content-Type']='application/json'
+  if(key)headers['Idempotency-Key']=key
+  const response=await fetch(API_BASE_URL+'/api/repair-portal'+path,{method,headers,cache:'no-store',credentials:'omit',body:data instanceof FormData?data:data!==undefined?JSON.stringify(data):undefined})
+  if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(formatErrorDates(typeof error.detail==='string'?error.detail:'درخواست ثبت نشد؛ اطلاعات را بررسی و صفحه را تازه کنید.'))}
+  return response
+}
+export const fetchRepairPortalView=async(credential:string):Promise<RepairPortalView>=>(await repairPortalRequest(credential,'/case')).json()
+export interface RepairFile { customer_visible?:boolean }
+export interface RepairOnlinePayment {id:string;amount_rial:string;status:'pending'|'verification_failed'|'accounting_pending'|'posted';created_at:string;verified_at:string|null;last_result:string}
+export interface RepairPortalView {remaining_balance_rial:string;payments:RepairOnlinePayment[]}
+export interface RepairOnlinePaymentConfiguration {encrypted_storage_available:boolean;settings:{gateway_id:string;pos_terminal_id:string;enabled:boolean}|null;gateways:{id:string;provider:string;active:boolean;has_merchant:boolean}[]}
+export const fetchRepairOnlineSettings=(token:string,row:RepairCase)=>authedGet<RepairOnlinePaymentConfiguration>(token,`/api/repair/branches/${row.branch_id}/online-payment`)
+export const setRepairOnlineSettings=(token:string,row:RepairCase,data:{gateway_id:string;pos_terminal_id:string;enabled:boolean})=>authedSend(token,'PUT',`/api/repair/branches/${row.branch_id}/online-payment`,data)
+export const fetchRepairOnlinePayments=(token:string,row:RepairCase)=>authedGet<RepairOnlinePayment[]>(token,`/api/repair/cases/${row.id}/online-payments`)
+export const postRepairOnlinePayment=(token:string,row:RepairCase,id:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/online-payments/${id}/post`,{version:row.version})
+export interface RepairPortalView {documents:{id:string;document_type:'sales_invoice'|'receipt';number:number|null;amount:string;voided:boolean}[]}
+
+export interface RepairWarranty {id:string;scope:'service'|'part';source_id:string;title:string;valid_from:string;valid_until:string;terms:string;exclusions:string}
+export interface RepairWarrantyClaim {id:string;original_case_id:string;revisit_case_id:string;classification:'repeat_fault'|'new_fault';responsibility:'company'|'technician'|'vendor'|'customer';cost_policy:'covered'|'customer'|'responsible';reason:string}
+export interface RepairWarrantyView {warranties:RepairWarranty[];origin:RepairWarrantyClaim|null;revisits:RepairWarrantyClaim[]}
+export const fetchRepairWarranties=(token:string,row:RepairCase)=>authedGet<RepairWarrantyView>(token,`/api/repair/cases/${row.id}/warranties`)
+export const createRepairWarranty=(token:string,row:RepairCase,data:Omit<RepairWarranty,'id'>,key:string)=>authedSend<RepairWarranty>(token,'POST',`/api/repair/cases/${row.id}/warranties`,{version:row.version,...data},key)
+export const createRepairRevisit=(token:string,row:RepairCase,data:{warranty_id:string;admission:RepairAdmissionInput;classification:RepairWarrantyClaim['classification'];responsibility:RepairWarrantyClaim['responsibility'];cost_policy:RepairWarrantyClaim['cost_policy'];reason:string},key:string)=>authedSend<RepairCase>(token,'POST',`/api/repair/cases/${row.id}/revisits`,data,key)
+
+export interface RepairFeeRule {id:string;technician_id:string;version:number;mode:'fixed_case'|'percent_labor'|'per_operation';value:string;payee_id:string;service_id:string;enabled:boolean;reason:string}
+export interface RepairTechnicianFee {id:string;technician_id:string;amount_rial:string;work_version:number;calculation:{mode:RepairFeeRule['mode'];rule_version:number;labor_rial:string;operations:number;expected_rial:string;already_posted_rial:string};purchase_invoice_id:string|null;status:'draft'|'payable'|'settled'|'voided';remaining_rial:string|null;settled_rial:string|null;invoice_number:number|null}
+export const fetchRepairFeeRules=(token:string)=>authedGet<RepairFeeRule[]>(token,'/api/repair/fee-rules')
+export const createRepairFeeRule=(token:string,data:Omit<RepairFeeRule,'id'|'version'>,key:string)=>authedSend<RepairFeeRule>(token,'POST','/api/repair/fee-rules',data,key)
+export const fetchRepairTechnicianFees=(token:string,row:RepairCase)=>authedGet<RepairTechnicianFee[]>(token,`/api/repair/cases/${row.id}/technician-fees`)
+export const draftRepairTechnicianFee=(token:string,row:RepairCase,technician_id:string,key:string)=>authedSend<RepairTechnicianFee>(token,'POST',`/api/repair/cases/${row.id}/technician-fees`,{version:row.version,technician_id},key)
+export const approveRepairTechnicianFee=(token:string,row:RepairCase,id:string,on:string,key:string)=>authedSend<RepairTechnicianFee>(token,'POST',`/api/repair/cases/${row.id}/technician-fees/${id}/approve`,{version:row.version,on},key)
+
+export interface RepairReportRow {id:string;number:number;status:string;customer:string;admission_date:string;due_date:string|null;age_days:number;overdue:boolean;last_activity_at:string;waiting_minutes:Record<string,number>;technician_minutes:Record<string,number>;open_outsources:number;revisit_count:number;survey_count:number;average_rating:string|null;uncollected:boolean;financial:null|{revenue_net_rial:string;parts_cost_rial:string;outsource_cost_rial:string;technician_cost_rial:string;recorded_margin_rial:string;remaining_balance_rial:string;pending_costs:{kind:string;id:string;message:string}[]}}
+export interface RepairReport {generated_at:string;date_basis:string;financial_basis:string;status_counts:Record<string,number>;items:RepairReportRow[];next_cursor:string|null}
+export const fetchRepairReport=(token:string,filters:{from_date?:string;to_date?:string;cursor?:string;financial?:boolean}={})=>{const q=new URLSearchParams();for(const [k,v] of Object.entries(filters))if(v!==undefined&&v!=='')q.set(k,String(v));return authedGet<RepairReport>(token,'/api/repair/reports?'+q)}
+
+export interface RepairServiceRequest {id:string;version:number;branch_id:string;contact_id:string;type_id:string;case_id:string|null;device_description:string;reported_issue:string;address:string;coordinator_name:string;coordinator_phone:string;status:string;appointments:RepairAppointment[];events:{id:string;action:string;created_at:string;detail:Record<string,string>}[]}
+export interface RepairAppointment {id:string;technician_id:string;starts_at:string;ends_at:string;status:'scheduled'|'dispatched'|'onsite'|'completed'|'cancelled';result:string;arrived_at:string|null;completed_at:string|null}
+export const fetchRepairServiceRequests=(token:string,mine=false,cursor?:string)=>authedGet<{items:RepairServiceRequest[];next_cursor:string|null}>(token,'/api/repair/service-requests?mine='+String(mine)+(cursor?'&cursor='+encodeURIComponent(cursor):''))
+export const createRepairServiceRequest=(token:string,data:Omit<RepairServiceRequest,'id'|'version'|'case_id'|'status'|'appointments'|'events'|'maintenance_device_id'>,key:string)=>authedSend<RepairServiceRequest>(token,'POST','/api/repair/service-requests',data,key)
+export const fetchRepairSkills=(token:string,uid:string)=>authedGet<{type_ids:string[]}>(token,`/api/repair/technicians/${uid}/skills`)
+export const setRepairSkills=(token:string,uid:string,type_ids:string[])=>authedSend(token,'PUT',`/api/repair/technicians/${uid}/skills`,{type_ids})
+export const scheduleRepairAppointment=(token:string,row:RepairServiceRequest,data:{technician_id:string;starts_at:string;ends_at:string},key:string)=>authedSend(token,'POST',`/api/repair/service-requests/${row.id}/appointments`,{version:row.version,...data},key)
+export const updateRepairAppointment=(token:string,row:RepairServiceRequest,id:string,status:RepairAppointment['status'],result:string)=>authedSend(token,'POST',`/api/repair/service-requests/${row.id}/appointments/${id}/status`,{version:row.version,status,result})
+export const admitRepairServiceRequest=(token:string,row:RepairServiceRequest,admission:RepairAdmissionInput,key:string)=>authedSend<RepairCase>(token,'POST',`/api/repair/service-requests/${row.id}/admission`,{version:row.version,admission},key)
+
+export interface RepairCustodyTransfer {id:string;from_branch_id:string;to_branch_id:string;destination_location:string;from_location:string;carrier_name:string;carrier_phone:string;reason:string;status:'in_transit'|'received'|'returned';receiver_name:string;receipt_confirmation:string;received_at:string|null;legs:{id:string;from_carrier:string;to_carrier:string;location:string;confirmation:string;created_at:string}[]}
+export const fetchRepairCustody=(token:string,row:RepairCase)=>authedGet<RepairCustodyTransfer[]>(token,`/api/repair/cases/${row.id}/custody`)
+export const dispatchRepairCustody=(token:string,row:RepairCase,data:{to_branch_id:string;destination_location:string;carrier_name:string;carrier_phone:string;reason:string},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/custody`,{version:row.version,...data},key)
+export const handoverRepairCustody=(token:string,row:RepairCase,id:string,data:{carrier_name:string;carrier_phone:string;location:string;confirmation:string},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/custody/${id}/handover`,{version:row.version,...data},key)
+export const receiveRepairCustody=(token:string,row:RepairCase,id:string,data:{receiver_name:string;confirmation:string;return_to_source:boolean},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/custody/${id}/receive`,{version:row.version,...data},key)
+export interface RepairLoan {id:string;asset_id:string;asset_snapshot:{name:string;category:string};serial:string;receiver_name:string;authorization:string;accessories:string;condition_out:string;due_date:string;return_custodian_id:string;return_location:string;checkout_assignment_id:string;return_assignment_id:string|null;returned_at:string|null;condition_in:string;return_confirmation:string}
+export const fetchRepairLoanAssets=(token:string,q='')=>authedGet<{id:string;name:string;category:string;location:string}[]>(token,'/api/repair/loan-assets?q='+encodeURIComponent(q))
+export const fetchRepairLoans=(token:string,row:RepairCase)=>authedGet<RepairLoan[]>(token,`/api/repair/cases/${row.id}/loans`)
+export const checkoutRepairLoan=(token:string,row:RepairCase,data:Omit<RepairLoan,'id'|'asset_snapshot'|'checkout_assignment_id'|'return_assignment_id'|'returned_at'|'condition_in'|'return_confirmation'>,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/loans`,{version:row.version,...data},key)
+export const returnRepairLoan=(token:string,row:RepairCase,id:string,condition_in:string,confirmation:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/loans/${id}/return`,{version:row.version,condition_in,confirmation},key)
+
+export interface RepairMaintenanceContract {id:string;code:string;version:number;contact_id:string;title:string;valid_from:string;valid_until:string;terms:string;address:string;coordinator_name:string;coordinator_phone:string;covers_labor:boolean;covers_parts:boolean;visit_quota:number|null;minute_quota:number|null;value_quota_rial:string|null;response_hours:number;completion_hours:number;enabled:boolean;device_ids:string[];usage:{visits:number;minutes:number;value_rial:string}}
+export type RepairMaintenanceContractInput=Omit<RepairMaintenanceContract,'id'|'version'|'usage'>
+export interface RepairContractCoverage {id:string;contract_id:string;service_date:string;allocated_minutes:number;consumed_minutes:number|null;covered_value_rial:string;snapshot:{code:string;version:number;title:string;valid_from:string;valid_until:string;terms:string;covers_labor:boolean;covers_parts:boolean};outside_estimate_id:string|null;response_due_at:string;completion_due_at:string;response_at:string|null;completed_at:string|null;response_overdue:boolean;completion_overdue:boolean}
+export interface RepairMaintenancePlan {id:string;contract_id:string;device_id:string;branch_id:string;title:string;interval_days:number;next_due:string;allocated_minutes:number;covered_value_rial:string;enabled:boolean;visits:{id:string;request_id:string;due_date:string;performed_at:string|null;result:string}[]}
+export interface RepairConsolidatedBill {id:string;contact_id:string;title:string;issued_date:string;members:{case_id:string;case_number:number;invoice_id:string;invoice_snapshot:{number:number;net_rial:string;tax_rial:string};current_document:RepairFinancial['documents'][number]|null}[]}
+export const fetchRepairContractDevices=(token:string,contact_id:string,q='')=>authedGet<(RepairDeviceInput&{id:string})[]>(token,'/api/repair/contract-devices?contact_id='+encodeURIComponent(contact_id)+'&q='+encodeURIComponent(q))
+export const fetchRepairMaintenanceContracts=(token:string)=>authedGet<RepairMaintenanceContract[]>(token,'/api/repair/maintenance-contracts')
+export const createRepairMaintenanceContract=(token:string,data:RepairMaintenanceContractInput,key:string)=>authedSend<RepairMaintenanceContract>(token,'POST','/api/repair/maintenance-contracts',data,key)
+export const fetchRepairCoverage=(token:string,row:RepairCase)=>authedGet<RepairContractCoverage|null>(token,`/api/repair/cases/${row.id}/contract`)
+export const bindRepairCoverage=(token:string,row:RepairCase,data:{contract_id:string;service_date:string;allocated_minutes:number;covered_value_rial:string},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/contract`,{version:row.version,...data},key)
+export const approveRepairOutsideCoverage=(token:string,row:RepairCase,estimate_id:string,reason:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/outside-coverage`,{version:row.version,estimate_id,reason})
+export const fetchRepairMaintenancePlans=(token:string,due_only=false)=>authedGet<RepairMaintenancePlan[]>(token,'/api/repair/maintenance-plans?due_only='+String(due_only))
+export const createRepairMaintenancePlan=(token:string,data:Omit<RepairMaintenancePlan,'id'|'enabled'|'visits'>,key:string)=>authedSend(token,'POST','/api/repair/maintenance-plans',data,key)
+export const requestRepairMaintenanceVisit=(token:string,id:string)=>authedSend(token,'POST',`/api/repair/maintenance-plans/${id}/request`,{})
+export const completeRepairMaintenanceVisit=(token:string,pid:string,vid:string,result:string)=>authedSend(token,'POST',`/api/repair/maintenance-plans/${pid}/visits/${vid}/complete`,{result})
+export const fetchRepairConsolidatedBills=(token:string)=>authedGet<RepairConsolidatedBill[]>(token,'/api/repair/consolidated-bills')
+export const createRepairConsolidatedBill=(token:string,data:{title:string;on:string;case_ids:string[]},key:string)=>authedSend<RepairConsolidatedBill>(token,'POST','/api/repair/consolidated-bills',data,key)
+export interface RepairServiceRequest {maintenance_device_id:string|null}
+
+export const printRepairConsolidatedBill=(token:string,id:string)=>openInvoicePrintView(token,`/api/repair/consolidated-bills/${id}/print`)
+export interface RepairContractCoverage {released_at:string|null;release_reason:string}
+
+// Public warranty projection contains terms only; internal responsibility/cost is private.
+export interface RepairPortalView {warranties?:{scope:string;title:string;terms:string;exclusions:string;valid_from:string;valid_until:string}[]}
+
+export interface RepairTimeSession {id:string;case_id:string;technician_id:string;used_work_id:string|null;version:number;started_at:string;stopped_at:string|null;confirmed_at:string|null;confirmed_seconds:number|null;elapsed_seconds:number}
+export const fetchRepairTimeSessions=(token:string,caseId:string,technicianId?:string)=>authedGet<RepairTimeSession[]>(token,`/api/repair/time-sessions?case_id=${caseId}${technicianId?'&technician_id='+technicianId:''}`)
+export const startRepairTime=(token:string,row:RepairCase,key:string)=>authedSend<RepairTimeSession>(token,'POST',`/api/repair/cases/${row.id}/time-sessions`,{version:row.version},key)
+export const changeRepairTime=(token:string,row:RepairTimeSession,action:'stop'|'confirm'|'correct',seconds:number|null,reason:string,key:string)=>authedSend<RepairTimeSession>(token,'POST',`/api/repair/time-sessions/${row.id}/actions`,{version:row.version,action,seconds,reason},key)
+export const acknowledgeRepair=(token:string,row:RepairCase,data:{kind:'intake'|'delivery';signer_name:string;signer_relation:string;strokes:number[][][]},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/acknowledgments`,{version:row.version,...data},key)
+export const printRepairLabel=(token:string,id:string)=>openInvoicePrintView(token,`/api/repair/cases/${id}/label`)
+export interface RepairIntakeSettings {version:number;code:string;default_location:string;terms:string;number_format:string}
+export type RepairQuickAdmission=Pick<RepairAdmissionInput,'contact_id'|'branch_id'|'reported_issue'|'admission_date'> & Partial<Omit<RepairAdmissionInput,'storage_location'|'terms'>> & {storage_location?:string|null;terms?:string|null;organization_unit?:string;representative?:string;organization_order?:string;representative_contact_id?:string|null;organization_unit_contact_id?:string|null}
+export const fetchRepairIntakeSettings=(token:string,id:string)=>authedGet<RepairIntakeSettings|null>(token,`/api/repair/branches/${id}/intake-settings`)
+export const saveRepairIntakeSettings=(token:string,id:string,data:RepairIntakeSettings)=>authedSend<RepairIntakeSettings>(token,'PUT',`/api/repair/branches/${id}/intake-settings`,{version:data.version,code:data.code,default_location:data.default_location,terms:data.terms,number_format:data.number_format})
+export const createRepairIntakeBatch=(token:string,contact_id:string,admissions:RepairQuickAdmission[],key:string)=>authedSend<{id:string;items:RepairCase[]}>(token,'POST','/api/repair/intake-batches',{contact_id,admissions},key)
+export interface RepairTechnicianSuggestion {id:string;name:string;active_cases:number;max_active_cases:number|null;capacity_version:number;has_skill:boolean;available:boolean}
+export const fetchRepairSuggestions=(token:string,branch:string,type?:string)=>authedGet<RepairTechnicianSuggestion[]>(token,`/api/repair/technician-suggestions?branch_id=${branch}${type?'&type_id='+type:''}`)
+export const saveRepairCapacity=(token:string,tech:RepairTechnicianSuggestion,limit:number|null)=>authedSend(token,'PUT',`/api/repair/technicians/${tech.id}/capacity`,{version:tech.capacity_version,max_active_cases:limit})
+export const assignRepairWithCapacity=(token:string,row:RepairCase,user_id:string|null,reason:string,capacity_override:boolean)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/assignment`,{version:row.version,user_id,reason,capacity_override})
+export interface RepairBulkResult {id:string;results:{case_id:string;ok:boolean;error?:string;status?:string;version?:number}[]}
+export const runRepairBulk=(token:string,data:{action:'assign'|'notify';cases:{case_id:string;version:number}[];technician_id:string|null;reason:string;capacity_override:boolean;notification_event:'admission'|'ready'|'approval'},key:string)=>authedSend<RepairBulkResult>(token,'POST','/api/repair/bulk-operations',data,key)
+export async function downloadRepairPdf(token:string,row:RepairCase){
+  const response=await fetch(`${API_BASE_URL}/api/repair/cases/${row.id}/receipt.pdf`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
+  if(!response.ok)throw apiError(await response.json().catch(()=>({})),'دریافت PDF رسید انجام نشد.',response.status)
+  const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=`repair-${row.number}.pdf`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+export interface RepairCase {intake_details?:{display_number:string;receipt_revision:number;organization_unit:string;representative:string;organization_order:string}|null}
+export const amendRepairIntake=(token:string,row:RepairCase,data:{appearance:string;accessories:string;delivering_name:string;delivering_phone:string;organization_unit:string;representative:string;organization_order:string},key:string)=>authedSend<RepairCase>(token,'PATCH',`/api/repair/cases/${row.id}/intake-details`,{version:row.version,...data},key)
+
+export interface RepairServiceProfile {id:string;service_id:string;revision:number;suggested_charge:string;estimated_minutes:number;enabled:boolean}
+export interface RepairProtocolMetric {key:string;title:string;unit:string;minimum:string|null;maximum:string|null;required:boolean}
+export interface RepairTypeProtocol {id:string;revision:number;type_id:string;metrics:RepairProtocolMetric[];checklist:string[];requires_supervisor_review:boolean}
+export interface RepairDiagnostic {id:string;revision:number;root_cause:string;test_failure_reason:string;measurements:{key:string;value:string;passed:boolean}[];checklist:Record<string,boolean>;protocol_snapshot:RepairTypeProtocol}
+export interface RepairPause {id:string;version:number;reason:string;end_reason:string;started_at:string;ended_at:string|null;duration_seconds:number}
+export interface RepairDeadline {id:string;version:number;old_due_date:string|null;new_due_date:string;estimate_id:string|null;estimate_revision:number|null;reason:string;status:string;customer_name:string;decision_reason:string}
+export interface RepairTechnicalRecords {diagnostics:RepairDiagnostic[];reviews:{id:string;diagnostic_id:string;approved:boolean;reason:string}[];pauses:RepairPause[];agreements:RepairDeadline[];similar_cases:{id:string;number:number;device_model:string;final_diagnosis:string}[]}
+export interface RepairKnowledge {id:string;family_id:string;revision:number;version:number;type_id:string;title:string;symptoms:string;root_cause:string;solution:string;approved_at:string|null}
+export const fetchRepairServiceProfiles=(token:string,branch:string)=>authedGet<RepairServiceProfile[]>(token,`/api/repair/branches/${branch}/service-profiles`)
+export const saveRepairServiceProfile=(token:string,branch:string,data:{service_id:string;previous_revision:number;suggested_charge:string;estimated_minutes:number;enabled:boolean},key:string)=>authedSend(token,'POST',`/api/repair/branches/${branch}/service-profiles`,data,key)
+export const fetchRepairProtocol=(token:string,branch:string,type:string)=>authedGet<RepairTypeProtocol|null>(token,`/api/repair/branches/${branch}/type-protocols/${type}`)
+export const saveRepairProtocol=(token:string,branch:string,data:Omit<RepairTypeProtocol,'id'|'revision'>&{previous_revision:number},key:string)=>authedSend(token,'POST',`/api/repair/branches/${branch}/type-protocols`,data,key)
+export const fetchRepairTechnicalRecords=(token:string,id:string)=>authedGet<RepairTechnicalRecords>(token,`/api/repair/cases/${id}/technical-records`)
+export const saveRepairDiagnostic=(token:string,row:RepairCase,data:{protocol_id:string|null;measurements:{key:string;value:string}[];checklist:Record<string,boolean>;root_cause:string;test_failure_reason:string},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/diagnostic-records`,{version:row.version,...data},key)
+export const reviewRepairDiagnostic=(token:string,row:RepairCase,diagnostic_id:string,approved:boolean,reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/supervisor-reviews`,{version:row.version,diagnostic_id,approved,reason},key)
+export const startRepairPause=(token:string,row:RepairCase,reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/work-pauses`,{version:row.version,reason},key)
+export const endRepairPause=(token:string,row:RepairCase,pause:RepairPause,end_reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/work-pauses/${pause.id}/end`,{version:row.version,pause_version:pause.version,end_reason},key)
+export const proposeRepairDeadline=(token:string,row:RepairCase,new_due_date:string,estimate_id:string|null,reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/deadline-agreements`,{version:row.version,new_due_date,estimate_id,reason},key)
+export const decideRepairDeadline=(token:string,row:RepairCase,agreement:RepairDeadline,decision:'accepted'|'rejected',customer_name:string,method:'in_person'|'phone'|'written',reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/deadline-agreements/${agreement.id}/decision`,{version:row.version,agreement_version:agreement.version,decision,customer_name,method,reason},key)
+export const fetchRepairKnowledge=(token:string,branch:string,type:string,q='')=>authedGet<RepairKnowledge[]>(token,`/api/repair/branches/${branch}/knowledge?type_id=${type}&q=${encodeURIComponent(q)}`)
+export const saveRepairKnowledge=(token:string,branch:string,data:{family_id:string|null;previous_revision:number;type_id:string;title:string;symptoms:string;root_cause:string;solution:string},key:string)=>authedSend(token,'POST',`/api/repair/branches/${branch}/knowledge`,data,key)
+export const approveRepairKnowledge=(token:string,article:RepairKnowledge,key:string)=>authedSend(token,'POST',`/api/repair/knowledge/${article.id}/approval`,{version:article.version,privacy_confirmed:true},key)
+export const recordRepairTimedWork=(token:string,row:RepairCase,data:Parameters<typeof recordRepairWork>[2]&{time_session_id:string|null},key:string)=>authedSend<RepairWork>(token,'POST',`/api/repair/cases/${row.id}/work`,{version:row.version,...data},key)
+
+export interface RepairPartAssessment {id:string;part_id:string;revision:number;quality:'new'|'refurbished'|'used'|'rejected';compatibility:string;test_result:string;expected_supply_date:string|null;purchase_invoice_id:string|null;purchase_line_id:string|null;supplier_snapshot:{name?:string};warranty_until:string|null;warranty_terms:string}
+export interface RepairSupplierClaim {id:string;assessment_id:string;version:number;status:string;reason:string;response:string}
+export const fetchRepairSupply=(token:string,id:string)=>authedGet<{assessments:RepairPartAssessment[];claims:RepairSupplierClaim[]}>(token,`/api/repair/cases/${id}/supply-records`)
+export const assessRepairPart=(token:string,row:RepairCase,part:string,data:Omit<RepairPartAssessment,'id'|'part_id'|'revision'|'supplier_snapshot'>&{previous_revision:number},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/parts/${part}/assessments`,{version:row.version,...data},key)
+export const claimRepairSupplier=(token:string,row:RepairCase,assessment_id:string,reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/supplier-claims`,{version:row.version,assessment_id,reason},key)
+export const resolveRepairSupplierClaim=(token:string,row:RepairCase,claim:RepairSupplierClaim,data:{status:'accepted'|'rejected'|'replaced'|'refunded';response:string;purchase_return_id:string|null;replacement_part_id:string|null},key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/supplier-claims/${claim.id}/resolution`,{version:row.version,claim_version:claim.version,...data},key)
+export interface RepairHarvestOutput {item_id:string;qty:string;unit_id:string|null;percent:string;serials:string[];allocated_cost?:string;batch_ids?:string[]}
+export interface RepairHarvest {id:string;version:number;status:string;item_id:string;on:string;reason:string;outputs:RepairHarvestOutput[];waste_percent:string;device_cost:string|null;waste_cost:string|null;issue_id:string|null;receipt_id:string|null}
+export interface RepairHarvestInput {item_id:string;on:string;source_warehouse_id:string;output_warehouse_id:string;unit_id:string|null;qty:string;batch_id:string|null;serials:string[];outputs:RepairHarvestOutput[];waste_percent:string;waste_account_id:string|null;reason:string}
+export const fetchRepairHarvests=(token:string,branch:string)=>authedGet<RepairHarvest[]>(token,`/api/repair/branches/${branch}/harvests`)
+export const createRepairHarvest=(token:string,branch:string,data:RepairHarvestInput,key:string)=>authedSend<RepairHarvest>(token,'POST',`/api/repair/branches/${branch}/harvests`,data,key)
+export const approveRepairHarvest=(token:string,row:RepairHarvest,key:string)=>authedSend(token,'POST',`/api/repair/harvests/${row.id}/approval`,{version:row.version},key)
+export const voidRepairHarvest=(token:string,row:RepairHarvest,on:string,reason:string,key:string)=>authedSend(token,'POST',`/api/repair/harvests/${row.id}/void`,{version:row.version,on,reason},key)
+
+export interface RepairWork {collaborators?:string[]}
+export interface RepairParticipation {id:string;work_id:string;revision:number;shares:{technician_id:string;percent:string}[];reason:string}
+export const fetchRepairParticipations=(token:string,row:RepairCase)=>authedGet<RepairParticipation[]>(token,`/api/repair/cases/${row.id}/participations`)
+export const approveRepairParticipation=(token:string,row:RepairCase,work:string,previous_revision:number,shares:RepairParticipation['shares'],reason:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/work/${work}/participation`,{version:row.version,previous_revision,shares,reason},key)
+export interface RepairCustomerFollowup {id:string;message_id:string|null;previous_id:string|null;kind:'call'|'reply'|'complaint';body:string;customer_name:string;direction:'incoming'|'outgoing'|'internal';complaint_stage:'none'|'received'|'investigating'|'awaiting_customer'|'resolved'|'closed';responsible_id:string|null;created_at:string}
+export const fetchRepairFollowups=(token:string,row:RepairCase)=>authedGet<RepairCustomerFollowup[]>(token,`/api/repair/cases/${row.id}/customer-followups`)
+export const createRepairFollowup=(token:string,row:RepairCase,data:Omit<RepairCustomerFollowup,'id'|'created_at'>,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/customer-followups`,{version:row.version,...data},key)
+export interface RepairNotificationPolicy {revision:number;events:('admission'|'approval'|'due'|'ready'|'uncollected')[];overdue_days:number;uncollected_days:number;repeat_days:number}
+export const fetchRepairNotificationPolicy=(token:string,branch:string)=>authedGet<RepairNotificationPolicy|null>(token,`/api/repair/branches/${branch}/notification-policy`)
+export const saveRepairNotificationPolicy=(token:string,branch:string,data:Omit<RepairNotificationPolicy,'revision'>&{previous_revision:number},key:string)=>authedSend(token,'POST',`/api/repair/branches/${branch}/notification-policy`,data,key)
+export const repairFeeWeightedOperations=(fee:RepairTechnicianFee)=>(fee.calculation as RepairTechnicianFee['calculation']&{weighted_operations?:string}).weighted_operations
+export interface RepairReportRow {operations?:{estimate_versions:number;estimates_approved:number;estimates_rejected:number;latest_estimate_decision:string|null;pauses:{reason:string;minutes:number;active:boolean}[];calls:number;staff_replies:number;complaints:{stage:string;responsible_id:string;last_activity_at:string}[];active_warranties:number;expired_warranties:number;supplier_claims_open:number;parts:{id:string;title:string;owner:string;status:string;qty:string;consumed_qty:string;custody_qty:string}[];contract:boolean;outsources_returned:number}}
+export const repairReportReceipts=(row:RepairReportRow)=>(row.financial as (NonNullable<RepairReportRow['financial']>&{actual_receipts_rial?:string})|null)?.actual_receipts_rial
+export interface RepairHistoryImport {id:string;branch_id:string;source_id:string;version:number;status:'preview'|'committed';rows:{row:number;data:Record<string,string>;errors:string[];duplicate:boolean;outcome?:'imported'|'duplicate'|'invalid'}[]}
+export interface RepairHistoricalRecord {id:string;source_id:string;external_id:string;data:Record<string,string>}
+export const fetchRepairHistory=(token:string,branch:string)=>authedGet<RepairHistoricalRecord[]>(token,`/api/repair/branches/${branch}/history`)
+export const commitRepairHistory=(token:string,row:RepairHistoryImport,key:string)=>authedSend<RepairHistoryImport>(token,'POST',`/api/repair/history-imports/${row.id}/commit`,{version:row.version},key)
+export async function previewRepairHistory(token:string,branch:string,source:string,file:File):Promise<RepairHistoryImport>{const body=new FormData();body.append('file',file);body.append('source_id',source);const result=await fetch(`${API_BASE_URL}/api/repair/branches/${branch}/history-imports`,{method:'POST',headers:{Authorization:`Bearer ${token}`},body});if(!result.ok)throw apiError(await result.json(), 'ورود فایل ناموفق بود',result.status);return result.json()}
+export async function downloadRepairExcel(token:string,filters:Record<string,string|boolean>={},template=false){const q=new URLSearchParams();Object.entries(filters).forEach(([k,v])=>{if(v!=='')q.set(k,String(v))});const response=await fetch(`${API_BASE_URL}/api/repair/${template?'history-imports/template.xlsx':'exchange.xlsx?'+q}`,{headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw apiError(await response.json(),'دریافت Excel ناموفق بود',response.status);const url=URL.createObjectURL(await response.blob());const anchor=document.createElement('a');anchor.href=url;anchor.download=template?'repair-history-template.xlsx':'repair.xlsx';anchor.click();setTimeout(()=>URL.revokeObjectURL(url),10000)}
+export interface RepairOnsiteAction {id:string;appointment_id:string;version:number;description:string;result:string;approval:null|{id:string;approver_name:string;created_at:string;action_version:number}}
+export const fetchRepairOnsiteActions=(token:string,rid:string)=>authedGet<RepairOnsiteAction[]>(token,`/api/repair/service-requests/${rid}/onsite-actions`)
+export const createRepairOnsiteAction=(token:string,row:RepairServiceRequest,appointment:string,description:string,result:string,key:string)=>authedSend<RepairOnsiteAction>(token,'POST',`/api/repair/service-requests/${row.id}/appointments/${appointment}/actions`,{version:row.version,description,result},key)
+export const approveRepairOnsiteAction=(token:string,row:RepairServiceRequest,action:RepairOnsiteAction,name:string,strokes:number[][][],key:string)=>authedSend(token,'POST',`/api/repair/service-requests/${row.id}/onsite-actions/${action.id}/approval`,{version:row.version,action_version:action.version,approver_name:name,strokes},key)
+
+// Additive client helper for the existing repair branch filter.
+export const fetchRepairWorkspaceCases = (token:string,q='',cursor?:string,from='',to='',filters:{branch_id?:string;mine?:boolean;overdue?:boolean;inactive_days?:number;status?:string}={}) => authedGet<Page<RepairCase>>(token, `/api/repair/cases?${new URLSearchParams({q,...(cursor?{cursor}:{}),...(from?{date_from:from}:{}),...(to?{date_to:to}:{}),...Object.fromEntries(Object.entries(filters).filter(([,value])=>!!value).map(([key,value])=>[key,String(value)]))})}`)
+
+/** ویرایشِ قاعده‌ی پورسانت (برگه‌ی «پورسانت»، ۱۴۰۵/۰۷/۱۸) — نرخ، مبنا، وضعیت و شرح. فروشنده ثابت است؛
+ *  محاسبه‌های ذخیره‌شده نرخِ زمانِ خودشان را نگه داشته‌اند و عوض نمی‌شوند. */
+export const updateCommissionRule = (
+  token: string,
+  id: string,
+  data: Partial<{ rate: number; basis: 'net' | 'profit'; is_active: boolean; description: string }>,
+) => authedSend<CommissionRule>(token, 'PATCH', `/api/sales-ops/commission-rules/${id}`, data)

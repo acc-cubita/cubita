@@ -21,6 +21,7 @@ from app.models.email_verification import EmailVerificationCode
 from app.models.advanced_inventory import PriceList, PriceListItem, StockBatch, StockBatchSerial
 from app.models.batch_substitutions import BatchSubstitution
 from app.models.marketplace_allocations import MarketplaceCatalogAllocation
+from app.models.item_units import ItemUnit, ItemUnitConversion, BatchUnitConversion
 from app.models.stock_reservations import StockReservation
 from app.models.warehouse_locations import WarehouseLocation
 from app.models.crm import (
@@ -104,7 +105,19 @@ from app.models.payroll import (
 )
 from app.models.refresh_token import RefreshToken
 from app.models.enterprise_license import EnterpriseLicense
-from app.models.enterprise_license_registry import EnterpriseLicenseEvent, EnterpriseLicenseRecord
+from app.models.enterprise_license_registry import EnterpriseFreeCode, EnterpriseLicenseEvent, EnterpriseLicenseRecord
+from app.models.enterprise_market_bridge import (
+    EnterpriseMarketCatalog,
+    EnterpriseMarketCommand,
+    EnterpriseMarketCloudItemMap,
+    EnterpriseMarketCounterpartyMap,
+    EnterpriseMarketEvent,
+    EnterpriseMarketItemMap,
+    EnterpriseMarketLink,
+    EnterpriseMarketListingMap,
+    EnterpriseMarketLocalPosting,
+    EnterpriseMarketLocalState,
+)
 from app.models.sales_inquiry import SalesInquiry
 from app.models.subscription import Subscription
 from app.models.recurring import RecurringJournalEntry, RecurringJournalLine
@@ -149,7 +162,24 @@ from app.models.tenant import Membership, PlatformAdmin, Tenant, TenantMixin
 from app.models.staff_audit import StaffAuditLog
 from app.models.user import Role, User
 
+from app.models.repair import RepairBranch, RepairBranchAccess, RepairDeviceType, RepairDevice, RepairCase, RepairEvent, RepairAttachment, RepairTask, RepairFault, RepairEstimate, RepairEstimateDecision
+from app.models.repair import RepairPart, RepairPartMovement, RepairWork, RepairOutsource, RepairQualityCheck, RepairRemovedPart, RepairDeviceSecret
+from app.models.repair import RepairPurchaseRequest
+from app.models.repair import RepairDocument, RepairDelivery
+from app.models.repair import RepairMessageTemplate, RepairNotification, RepairNotificationAttempt
+from app.models.repair import RepairPortalToken, RepairPortalSubmission, RepairCustomerMessage
+from app.models.repair import RepairOnlineSettings,RepairPaymentIntent
+
 __all__ = [
+    "RepairBranch", "RepairBranchAccess", "RepairDeviceType", "RepairDevice", "RepairCase", "RepairEvent", "RepairAttachment",
+    "RepairTask",
+    "RepairFault", "RepairEstimate", "RepairEstimateDecision",
+    "RepairPart", "RepairPartMovement", "RepairWork", "RepairOutsource", "RepairQualityCheck", "RepairRemovedPart", "RepairDeviceSecret",
+    "RepairPurchaseRequest",
+    "RepairDocument", "RepairDelivery",
+    "RepairMessageTemplate", "RepairNotification", "RepairNotificationAttempt",
+    "RepairPortalToken", "RepairPortalSubmission", "RepairCustomerMessage",
+    "RepairOnlineSettings", "RepairPaymentIntent",
     "AssuranceEngagement",
     "PlatformAdmin",
     "StaffAuditLog",
@@ -280,8 +310,19 @@ __all__ = [
     "TreasuryTransaction",
     "AuthToken",
     "EnterpriseLicense",
+    "EnterpriseFreeCode",
     "EnterpriseLicenseEvent",
     "EnterpriseLicenseRecord",
+    "EnterpriseMarketCatalog",
+    "EnterpriseMarketCommand",
+    "EnterpriseMarketCloudItemMap",
+    "EnterpriseMarketCounterpartyMap",
+    "EnterpriseMarketEvent",
+    "EnterpriseMarketItemMap",
+    "EnterpriseMarketLink",
+    "EnterpriseMarketListingMap",
+    "EnterpriseMarketLocalPosting",
+    "EnterpriseMarketLocalState",
     "RefreshToken",
     "DeviceToken",
     "EmailVerificationCode",
@@ -325,3 +366,40 @@ __all__ = [
     "SalesInquiry",
     "OfficeLetter", "OfficeReferral", "OfficeAttachment", "OfficeEvent",
 ]
+
+from app.models.repair import RepairWarranty, RepairWarrantyClaim
+__all__ += ["RepairWarranty", "RepairWarrantyClaim"]
+
+from app.models.repair import RepairFeeRule, RepairTechnicianFee
+__all__ += ["RepairFeeRule", "RepairTechnicianFee"]
+
+from app.models.repair import RepairServiceRequest, RepairTechnicianSkill, RepairAppointment, RepairFieldEvent
+__all__ += ["RepairServiceRequest", "RepairTechnicianSkill", "RepairAppointment", "RepairFieldEvent"]
+
+from app.models.repair import RepairCustodyTransfer, RepairCustodyLeg
+__all__ += ["RepairCustodyTransfer", "RepairCustodyLeg"]
+
+from app.models.repair import RepairLoan
+__all__ += ["RepairLoan"]
+
+from app.models.repair import RepairMaintenanceContract, RepairContractDevice, RepairContractCase, RepairMaintenancePlan, RepairMaintenanceVisit, RepairConsolidatedBill, RepairConsolidatedBillMember
+__all__ += ["RepairMaintenanceContract", "RepairContractDevice", "RepairContractCase", "RepairMaintenancePlan", "RepairMaintenanceVisit", "RepairConsolidatedBill", "RepairConsolidatedBillMember"]
+
+from app.models.repair_completion import RepairBranchSettings, RepairIntakeBatch, RepairCaseDetails, RepairTechnicianCapacity, RepairAcknowledgment
+__all__ += ['RepairBranchSettings', 'RepairIntakeBatch', 'RepairCaseDetails', 'RepairTechnicianCapacity', 'RepairAcknowledgment']
+
+from app.models.repair_completion import RepairBulkOperation, RepairTimeSession, RepairTimeCorrection
+__all__ += ["RepairBulkOperation", "RepairTimeSession", "RepairTimeCorrection"]
+
+from app.models.repair_completion import RepairServiceProfile, RepairTypeProtocol, RepairDiagnosticRecord, RepairSupervisorReview, RepairWorkPause, RepairDeadlineAgreement, RepairKnowledgeArticle, RepairWorkTimeLink
+__all__ += ["RepairServiceProfile", "RepairTypeProtocol", "RepairDiagnosticRecord", "RepairSupervisorReview", "RepairWorkPause", "RepairDeadlineAgreement", "RepairKnowledgeArticle", "RepairWorkTimeLink"]
+
+from .repair_completion import RepairPartAssessment, RepairSupplierClaim, RepairHarvest
+__all__.extend(['RepairPartAssessment','RepairSupplierClaim','RepairHarvest'])
+from .repair_completion import RepairHistoryImport, RepairHistoricalRecord
+__all__.extend(['RepairHistoryImport','RepairHistoricalRecord'])
+from .repair_completion import RepairOnsiteAction, RepairOnsiteApproval
+__all__.extend(['RepairOnsiteAction','RepairOnsiteApproval'])
+
+from .repair_completion import RepairParticipation, RepairCustomerFollowup, RepairNotificationPolicy
+__all__.extend(['RepairParticipation','RepairCustomerFollowup','RepairNotificationPolicy'])

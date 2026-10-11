@@ -1,3 +1,4 @@
+from app.schemas.item_units import ObservedRatioIn
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class SalesInvoiceLineIn(BaseModel):
     item_id: UUID
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
     qty: Decimal
     unit_price: Decimal
     #: تخفیفِ ردیف به مبلغ (نه درصد). درصد در رابط کاربری به مبلغ تبدیل می‌شود تا
@@ -101,6 +104,11 @@ class SalesInvoiceLineOut(BaseModel):
     id: UUID
     item_id: UUID
     qty: Decimal
+    base_qty: Decimal | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_price: Decimal
     discount: Decimal = Decimal(0)
     addition: Decimal = Decimal(0)
@@ -234,6 +242,8 @@ class PurchaseDeductionIn(BaseModel):
 
 class PurchaseInvoiceLineIn(BaseModel):
     item_id: UUID
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
     #: معینِ هزینه‌ی ردیفِ خدمت. خالی = همان معینی که روی خودِ خدمت تعریف شده.
     #: فقط در فاکتور خرید خدمات پذیرفته می‌شود.
     expense_account_id: UUID | None = None
@@ -324,6 +334,11 @@ class PurchaseInvoiceLineOut(BaseModel):
     id: UUID
     item_id: UUID
     qty: Decimal
+    base_qty: Decimal | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_cost: Decimal
     discount: Decimal = Decimal(0)
     addition: Decimal = Decimal(0)
@@ -423,6 +438,8 @@ class WarehouseReceiptLineIn(BaseModel):
     purchase_invoice_line_id: UUID | None = None
     item_id: UUID | None = None
     qty: Decimal
+    unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
     #: فقط در رسیدِ مستقیم معنا دارد؛ در مسیرِ فاکتور نادیده گرفته می‌شود چون
     #: بهای ورود از خالصِ ردیفِ فاکتور مشتق می‌شود.
     unit_cost: Decimal = Decimal(0)
@@ -520,6 +537,10 @@ class WarehouseReceiptIn(BaseModel):
 
 
 class WarehouseReceiptLineOut(BaseModel):
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     id: UUID
     purchase_invoice_line_id: UUID | None = None
     seq: int = 0
@@ -612,6 +633,7 @@ class WarehouseIssueLineIn(BaseModel):
     #: واحدی که مقدار با آن وارد شده؛ خالی یعنی واحدِ اصلی. تبدیل فقط در
     #: `units.to_primary` — همان تبدیلِ خرید، رسید و فروش (§۱۱).
     unit_id: UUID | None = None
+    observations: list[ObservedRatioIn] = Field(default_factory=list, max_length=100)
     #: معینِ طرفِ بدهکار برای «مصرف» و «سایر». خالی = حسابِ سربرگ.
     account_id: UUID | None = None
     description: str = ""
@@ -710,6 +732,10 @@ class WarehouseIssueLineOut(BaseModel):
     sales_invoice_line_id: UUID | None = None
     item_id: UUID
     qty: Decimal
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_cost: Decimal
     amount: Decimal = Decimal(0)
     secondary_qty: Decimal | None = None

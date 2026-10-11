@@ -4,11 +4,13 @@ import type { ItemCache } from '../../electron.d'
 import type { ListingDraft } from '../../lib/listingDraft'
 import type { TradeGroup } from '../../api'
 import { ItemPicker } from '../ItemPicker'
+import { TransactionUnitPicker } from '../TransactionUnitPicker'
 import { NumberInput } from '../NumberInput'
 import { ImageUploader } from '../ImageUploader'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { TradePicker, ExtraTradesHint } from '../TradePicker'
 import { useTrades, labelOfTrade } from '../../lib/useTrades'
+import { toFaDigits } from '../../lib/jalali'
 
 const faMoney = (v: string | number) => Math.round(Number(v) || 0).toLocaleString('fa-IR')
 
@@ -151,12 +153,10 @@ function DetailsStep({ draft, items }: { draft: ListingDraft; items: ItemCache[]
         <div className="field-pair">
           <label>
             کالا (از انبارِ خودتان)
-            <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id })} />
+            <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id,unitId:undefined,observations:[],baseQtyPreview:undefined })} />
           </label>
-          <label>
-            واحد
-            <input type="text" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-          </label>
+          <TransactionUnitPicker token={draft.token} itemId={form.itemId} qty="1" unitId={form.unitId}
+            observations={form.observations} context="sale" onChange={patch=>setForm(previous=>({...previous,...patch,unit:patch.unitName || previous.unit}))} />
         </div>
       ) : (
         <div className="field-full">
@@ -166,7 +166,9 @@ function DetailsStep({ draft, items }: { draft: ListingDraft; items: ItemCache[]
               <tbody>
                 {form.components.map((r, i) => (
                   <tr key={i}>
-                    <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id })} /></td>
+                    <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id,unitId:undefined,observations:[],baseQtyPreview:undefined })} />
+                      <TransactionUnitPicker token={draft.token} itemId={r.itemId} qty={r.qty} unitId={r.unitId}
+                        observations={r.observations} context="sale" onChange={patch=>draft.setPackRow(i,patch)} /></td>
                     <td data-label="تعداد"><NumberInput allowDecimal value={r.qty} onChange={(v) => draft.setPackRow(i, { qty: v })} /></td>
                     <td className="card-actions">
                       <button type="button" className="icon-btn-danger" onClick={() => draft.removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف">
@@ -220,7 +222,7 @@ function ReviewStep({
             <thead><tr><th>قلم</th><th>تعداد در پک</th></tr></thead>
             <tbody>
               {draft.packRows.map((r, i) => (
-                <tr key={i}><td data-label="قلم">{itemName(r.itemId)}</td><td data-label="تعداد در پک">{Number(r.qty).toLocaleString('fa-IR')}</td></tr>
+                <tr key={i}><td data-label="قلم">{itemName(r.itemId)}</td><td data-label="تعداد در پک">{toFaDigits(r.qty)} {r.unitName}</td></tr>
               ))}
             </tbody>
           </table>

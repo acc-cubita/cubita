@@ -4,12 +4,15 @@
 لیستینگ سنجیده می‌شود.
 """
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from fastapi import HTTPException
 
 from app.models.advanced_inventory import StockBatch
+from app.models.enterprise_license_registry import EnterpriseLicenseRecord
+from app.models.enterprise_market_bridge import EnterpriseMarketCatalog, EnterpriseMarketCloudItemMap, EnterpriseMarketEvent, EnterpriseMarketLink
 from app.models.inventory import Item, Warehouse
 from app.models.invoices import PurchaseInvoice
 from app.models.marketplace import (
@@ -19,6 +22,7 @@ from app.models.marketplace import (
     MarketplaceListing,
     MarketplaceListingComponent,
     MarketplaceOrder,
+    MarketplaceOrderLine,
     MarketplaceReturn,
     MarketplaceSettings,
 )
@@ -26,6 +30,7 @@ from app.models.storefront_native import PaymentGateway
 from app.models.tenant import Tenant
 from app.models.treasury import TreasuryTransaction
 from app.schemas.invoices import PurchaseInvoiceIn, PurchaseInvoiceLineIn
+from app.schemas.enterprise_market_bridge import MarketPostingReceipt
 from app.schemas.marketplace import (
     OrderLineIn,
     OrderPlaceIn,
@@ -35,6 +40,7 @@ from app.schemas.marketplace import (
 from app.seed import provision_tenant
 from app.services import inventory as inventory_service
 from app.services import marketplace as svc
+from app.services import enterprise_market_transport as market_transport
 from app.tenant_context import apply_tenant_to_transaction, bind_session_tenant, tenant_scope
 from tests.conftest import PRIMARY_SLUG
 
@@ -530,6 +536,16 @@ def test_place_order_requires_approval_and_records_lines(as_retailer, distributo
     assert any(o["id"] == body["id"] for o in orders)
 
 
+def test_company_cannot_order_from_itself_when_both_market_roles_are_enabled(db):
+    own_id = _primary_id(db)
+    with pytest.raises(HTTPException) as error:
+        svc.place_order(
+            db, own_id,
+            OrderPlaceIn(distributor_tenant_id=own_id, lines=[OrderLineIn(listing_id=uuid.uuid4(), qty=1)]),
+        )
+    assert error.value.status_code == 400
+
+
 def test_order_line_carries_listing_image(as_retailer, distributor_tenant, db):
     # عکسِ نخستِ لیستینگ باید در ردیف‌های سفارش (از روی listing_id) دیده شود.
     did = distributor_tenant
@@ -729,6 +745,171 @@ def test_deliver_on_already_fulfilled_marks_without_reposting(as_distributor, re
     with tenant_scope(db, retailer_id):
         assert db.query(PurchaseInvoice).count() == 1
 
+
+def _link_both_market_parties(db, seller_id, buyer_id, seller_item_id):
+    links = {}
+    for side, tenant_id in (("seller", seller_id), ("buyer", buyer_id)):
+        license_row = EnterpriseLicenseRecord(
+            lic_id=f"MKT{uuid.uuid4().hex[:10]}", org_name=side,
+            code_hash=uuid.uuid4().hex.ljust(64, "0"), code_hint="TEST",
+            status="active", install_id=f"market-{side}-{uuid.uuid4().hex[:8]}",
+        )
+        db.add(license_row)
+        db.flush()
+        link = EnterpriseMarketLink(
+            cloud_tenant_id=tenant_id, license_id=license_row.id,
+            install_id=license_row.install_id, status="active", catalog_approved=True,
+        )
+        db.add(link)
+        db.flush()
+        links[side] = link
+    db.add(EnterpriseMarketCloudItemMap(
+        link_id=links["seller"].id, cloud_item_id=seller_item_id,
+        market_item_ref=uuid.uuid4(),
+    ))
+    db.flush()
+    return links
+
+
+@pytest.mark.parametrize("require_delivery", [False, True])
+def test_linked_order_waits_for_both_financial_receipts(
+    as_distributor, retailer_tenant, db, user, require_delivery,
+):
+    seller_id = _primary_id(db)
+    item, _, order = _setup_delivery_scenario(
+        db, user, seller_id, retailer_tenant, require_delivery=require_delivery,
+    )
+    links = _link_both_market_parties(db, seller_id, retailer_tenant, item.id)
+    listing = db.get(MarketplaceListing, order.lines[0].listing_id)
+    listing.components[0].qty = 20  # A later catalog change must not rewrite this order.
+    assert svc._explode_order(order, {listing.id: listing})[0]["units"] == Decimal(10)
+
+    confirmed = svc.confirm_order(db, seller_id, user, order.id)
+    assert confirmed.status == ("confirmed" if require_delivery else "sync_pending")
+    if require_delivery:
+        delivered = svc.deliver_order(db, seller_id, user, order.id)
+        assert delivered.status == "sync_pending"
+        assert delivered.delivered_at is not None
+    events = db.query(EnterpriseMarketEvent).filter_by(operation_ref=order.id).all()
+    assert {event.side for event in events} == {"seller", "buyer"}
+    assert all(event.status == "pending" for event in events)
+    assert db.query(MarketplaceCommission).filter_by(order_id=order.id).count() == 0
+
+    for index, event in enumerate(events):
+        receipt = MarketPostingReceipt(
+            event_id=event.id, order_id=order.id, side=event.side, outcome="posted",
+        )
+        market_transport.record_receipt(db, links[event.side].id, event.id, receipt)
+        if index == 0:
+            assert order.status == "sync_pending"
+            assert db.query(MarketplaceCommission).filter_by(order_id=order.id).count() == 0
+        else:
+            assert order.status == ("delivered" if require_delivery else "confirmed")
+            assert db.query(MarketplaceCommission).filter_by(order_id=order.id).count() == 1
+        market_transport.record_receipt(db, links[event.side].id, event.id, receipt)
+    assert db.query(EnterpriseMarketEvent).filter_by(operation_ref=order.id).count() == 2
+    assert db.query(MarketplaceCommission).filter_by(order_id=order.id).count() == 1
+    if not require_delivery:
+        assert svc.deliver_order(db, seller_id, user, order.id).status == "delivered"
+        assert db.query(EnterpriseMarketEvent).filter_by(operation_ref=order.id).count() == 2
+
+
+def test_linked_return_waits_for_both_local_receipts(as_distributor, retailer_tenant, db, user):
+    seller_id = _primary_id(db)
+    item, _, order = _setup_delivery_scenario(
+        db, user, seller_id, retailer_tenant, require_delivery=False,
+    )
+    links = _link_both_market_parties(db, seller_id, retailer_tenant, item.id)
+    svc.confirm_order(db, seller_id, user, order.id)
+    for event in db.query(EnterpriseMarketEvent).filter_by(operation_ref=order.id).all():
+        market_transport.record_receipt(
+            db, links[event.side].id, event.id,
+            MarketPostingReceipt(event_id=event.id, order_id=order.id, side=event.side, outcome="posted"),
+        )
+    assert order.status == "confirmed"
+
+    ret = svc.request_return(db, retailer_tenant, ReturnRequestIn(
+        order_id=order.id, lines=[ReturnRequestLineIn(order_line_id=order.lines[0].id, qty=Decimal(1))],
+        reason="معیوب",
+    ))
+    svc.approve_return(db, seller_id, user, ret.id)
+    assert ret.status == "sync_pending"
+    events = db.query(EnterpriseMarketEvent).filter_by(operation_ref=ret.id).all()
+    assert {event.side for event in events} == {"seller", "buyer"}
+    assert all(event.kind == "return" and event.status == "pending" for event in events)
+    for index, event in enumerate(events):
+        receipt = MarketPostingReceipt(event_id=event.id, order_id=order.id, side=event.side, outcome="posted")
+        market_transport.record_receipt(db, links[event.side].id, event.id, receipt)
+        assert ret.status == ("sync_pending" if index == 0 else "approved")
+        market_transport.record_receipt(db, links[event.side].id, event.id, receipt)
+    assert db.query(EnterpriseMarketEvent).filter_by(operation_ref=ret.id).count() == 2
+
+
+def test_linked_seller_and_cloud_buyer_order_and_return(as_distributor, retailer_tenant, db, user):
+    seller_id = _primary_id(db)
+    item, _, order = _setup_delivery_scenario(
+        db, user, seller_id, retailer_tenant, require_delivery=False,
+    )
+    links = _link_both_market_parties(db, seller_id, retailer_tenant, item.id)
+    links["buyer"].status = "revoked"  # Only the seller remains on-premise.
+    db.flush()
+    svc.confirm_order(db, seller_id, user, order.id)
+    original = db.query(EnterpriseMarketEvent).filter_by(operation_ref=order.id).all()
+    assert {row.side: row.status for row in original} == {"seller": "pending", "buyer": "posted"}
+    assert order.retailer_purchase_invoice_id is not None
+    seller_event = next(row for row in original if row.side == "seller")
+    market_transport.record_receipt(db, links["seller"].id, seller_event.id, MarketPostingReceipt(
+        event_id=seller_event.id, order_id=order.id, side="seller", outcome="posted",
+    ))
+    assert order.status == "confirmed"
+
+    ret = svc.request_return(db, retailer_tenant, ReturnRequestIn(
+        order_id=order.id, lines=[ReturnRequestLineIn(order_line_id=order.lines[0].id, qty=Decimal(1))],
+    ))
+    svc.approve_return(db, seller_id, user, ret.id)
+    events = db.query(EnterpriseMarketEvent).filter_by(operation_ref=ret.id).all()
+    assert {row.side: row.status for row in events} == {"seller": "pending", "buyer": "posted"}
+    assert ret.retailer_purchase_return_id is not None
+    assert ret.distributor_sales_return_id is None
+    seller_return = next(row for row in events if row.side == "seller")
+    market_transport.record_receipt(db, links["seller"].id, seller_return.id, MarketPostingReceipt(
+        event_id=seller_return.id, order_id=order.id, side="seller", outcome="posted",
+    ))
+    assert ret.status == "approved"
+
+
+def test_external_stock_reservation_survives_receipt_until_new_local_snapshot(db, tenant_id):
+    buyer = _bare_tenant(db, "retailer", "خریدار")
+    item = _make_item(db, "EXT-STOCK", "کالا")
+    listing = MarketplaceListing(distributor_tenant_id=tenant_id, title="کالا", kind="single")
+    db.add(listing)
+    db.flush()
+    links = _link_both_market_parties(db, tenant_id, buyer.id, item.id)
+    now = datetime.now(timezone.utc)
+    catalog = EnterpriseMarketCatalog(
+        link_id=links["seller"].id, market_listing_ref=uuid.uuid4(),
+        cloud_listing_id=listing.id, public_snapshot={}, available_qty=Decimal(10),
+        last_synced_at=now - timedelta(minutes=1),
+    )
+    db.add(catalog)
+    order = MarketplaceOrder(
+        distributor_tenant_id=tenant_id, retailer_tenant_id=buyer.id,
+        order_number=1, status="confirmed", lines=[MarketplaceOrderLine(
+            listing_id=listing.id, title="کالا", qty=Decimal(3),
+        )],
+    )
+    db.add(order)
+    db.flush()
+    assert svc._reserved_external_by_listing(db, {listing.id: catalog})[listing.id] == 3
+    db.add(EnterpriseMarketEvent(
+        link_id=links["seller"].id, operation_ref=order.id, order_id=order.id,
+        side="seller", kind="order", payload={}, status="posted", posted_at=now,
+    ))
+    db.flush()
+    assert svc._reserved_external_by_listing(db, {listing.id: catalog})[listing.id] == 3
+    catalog.last_synced_at = now + timedelta(seconds=1)
+    db.flush()
+    assert svc._reserved_external_by_listing(db, {listing.id: catalog}) == {}
 
 def test_delivery_agent_role_can_deliver_not_confirm():
     """نقشِ «مامور حمل» فقط deliver دارد نه approve؛ مالک با wildcard هر دو را دارد."""

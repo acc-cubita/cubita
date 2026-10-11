@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
+from fractions import Fraction
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -46,6 +47,7 @@ from app.services.inventory import (
 )
 from app.services.period_close import assert_period_open
 from app.services import valuation
+from app.services import units
 
 
 @dataclass
@@ -100,7 +102,7 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
 
     #: تخصیص‌های **فعال** — برگشتِ باطل‌شده مانده را آزاد می‌کند (§۷۶).
     allocated = dict(
-        db.query(SalesReturnLine.sales_invoice_line_id, func.coalesce(func.sum(SalesReturnLine.qty), 0))
+        db.query(SalesReturnLine.sales_invoice_line_id, func.coalesce(func.sum(func.coalesce(SalesReturnLine.base_qty, SalesReturnLine.qty)), 0))
         .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
         .filter(
             SalesReturn.sales_invoice_id == invoice_id,
@@ -113,7 +115,7 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
     legacy = {
         item_id: Decimal(qty)
         for item_id, qty in db.query(
-            SalesReturnLine.item_id, func.coalesce(func.sum(SalesReturnLine.qty), 0)
+            SalesReturnLine.item_id, func.coalesce(func.sum(func.coalesce(SalesReturnLine.base_qty, SalesReturnLine.qty)), 0)
         )
         .join(SalesReturn, SalesReturn.id == SalesReturnLine.return_id)
         .filter(
@@ -133,11 +135,11 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
     issued_cost = issued_unit_cost_by_line(db, invoice_id)
     rows: list[_SourceLine] = []
     for line in lines:
-        sold = Decimal(line.qty)
+        sold = Decimal(line.base_qty if line.base_qty is not None else line.qty)
         # مبلغ **پس از کسر تخفیف** تا قیمتِ واحدِ مؤثر همان چیزی باشد که مشتری
         # واقعاً پرداخت کرده؛ وگرنه برگشت، بیش از دریافتی به او برمی‌گرداند و
         # تخفیف عملاً دو بار داده می‌شود.
-        net = (sold * Decimal(line.unit_price)) - Decimal(line.discount or 0)
+        net = (Decimal(line.qty) * Decimal(line.unit_price)) - Decimal(line.discount or 0)
         returned = Decimal(allocated.get(line.id, 0))
         rows.append(
             _SourceLine(
@@ -154,6 +156,19 @@ def _returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = False) -> l
     return rows
 
 
+def _historical_options_for_rows(db, rows, items, parent, movement, anchor):
+    """One grouped read of return movements; do not reload a graph for each line."""
+    ids = [row.line.id for row in rows]
+    grouped = {}
+    for move in db.query(movement).join(parent, parent.id == movement.return_id).filter(
+        anchor.in_(ids), parent.voided_at.is_(None)).all():
+        grouped.setdefault(getattr(move, anchor.key), []).append(move)
+    return {row.line.id: units.historical_return_options(
+        units.document_conversion(db, row.line, items[row.line.item_id]),
+        grouped.get(row.line.id, []), row.remaining, row.unit_price)
+        for row in rows if row.line.item_id in items}
+
+
 def get_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
     """برای هر **ردیفِ** فاکتور فروش: فروخته‌شده، قبلاً برگشت‌خورده، و باقی‌ماندهٔ قابل‌برگشت.
 
@@ -166,17 +181,21 @@ def get_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور فروش یافت نشد")
     rows = _returnable_lines(db, invoice_id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    options = _historical_options_for_rows(db, rows, items, SalesReturn, SalesReturnLine,
+                                         SalesReturnLine.sales_invoice_line_id)
     return [
         {
             "sales_invoice_line_id": row.line.id,
             "invoice_number": invoice.number,
             "item_id": row.line.item_id,
             "item_name": items[row.line.item_id].name if row.line.item_id in items else "",
-            "unit": items[row.line.item_id].unit if row.line.item_id in items else "",
+            "unit": (row.line.unit_conversion_snapshot or {}).get("target_unit_name")
+                or (items[row.line.item_id].unit if row.line.item_id in items else ""),
             "sold": row.sold,
             "already_returned": row.returned,
             "remaining": row.remaining,
             "unit_price": row.unit_price,
+            "return_unit_options": options.get(row.line.id, []),
         }
         for row in rows
     ]
@@ -492,8 +511,10 @@ def post_sales_return(
     item_ids = {row.line.item_id for row in rows} | {l.item_id for l in data.lines if l.item_id}
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
     _assert_reasons_selectable(db, data.lines)
+    normalized, conversions = _return_quantities(db, rows, data.lines, items_by_id,
+        "sales_invoice_line_id", line_model=SalesReturnLine, header_model=SalesReturn)
     plan = _allocate(
-        rows, data.lines, items_by_id,
+        rows, normalized, items_by_id,
         source_attr="sales_invoice_line_id", doc_label="فاکتور فروش",
     )
 
@@ -517,6 +538,8 @@ def post_sales_return(
 
     for row, qty, req in plan:
         item = items_by_id[row.line.item_id]
+        conversion = conversions.get(id(req)) or units.historical_return_conversion(
+            units.document_conversion(db, row.line, item), qty, None, returned_base=row.returned)
         line_net = qty * row.unit_price
         total_amount += line_net
         net_by_nature[bool(item.is_service)] += line_net
@@ -526,10 +549,11 @@ def post_sales_return(
         tax_weight += line_net * row.tax_rate
         return_lines.append(
             SalesReturnLine(
+                **units.snapshot_fields(conversion, commercial=True),
                 sales_invoice_line_id=row.line.id,
                 item_id=row.line.item_id,
-                qty=qty,
-                unit_price=row.unit_price,
+                qty=conversion.source_qty,
+                unit_price=row.unit_price * qty / conversion.source_qty,
                 unit_cost=row.unit_cost,
                 return_reason_id=getattr(req, "return_reason_id", None),
                 description=req.description,
@@ -541,12 +565,14 @@ def post_sales_return(
             new_qty = existing_qty + qty
             if new_qty > 0:
                 item.average_cost = ((existing_qty * item.average_cost) + (qty * row.unit_cost)) / new_qty
-            stock_moves.extend(
-                _return_stock_moves(
+            inline_moves = _return_stock_moves(
                     db, invoice, row.line.id, row.line.item_id,
                     qty, row.unit_cost, data.return_date, item.name,
                 )
-            )
+            for move in inline_moves:
+                for field, value in units.movement_snapshot_fields(conversion, move.qty).items():
+                    setattr(move, field, value)
+            stock_moves.extend(inline_moves)
         elif not item.is_service:
             requested_physical[row.line.id] = requested_physical.get(row.line.id, Decimal(0)) + qty
 
@@ -695,7 +721,7 @@ def _purchase_returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = Fa
 
     allocated = dict(
         db.query(
-            PurchaseReturnLine.purchase_invoice_line_id, func.coalesce(func.sum(PurchaseReturnLine.qty), 0)
+            PurchaseReturnLine.purchase_invoice_line_id, func.coalesce(func.sum(func.coalesce(PurchaseReturnLine.base_qty, PurchaseReturnLine.qty)), 0)
         )
         .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnLine.return_id)
         .filter(
@@ -723,8 +749,8 @@ def _purchase_returnable_lines(db: Session, invoice_id: UUID, *, lock: bool = Fa
 
     rows: list[_SourceLine] = []
     for line in lines:
-        bought = Decimal(line.qty)
-        net = (bought * Decimal(line.unit_cost)) - Decimal(line.discount or 0)
+        bought = Decimal(line.base_qty if line.base_qty is not None else line.qty)
+        net = (Decimal(line.qty) * Decimal(line.unit_cost)) - Decimal(line.discount or 0)
         unit = net / bought if bought else Decimal(0)
         returned = Decimal(allocated.get(line.id, 0))
         rows.append(
@@ -755,17 +781,21 @@ def get_purchase_returnable_summary(db: Session, invoice_id: UUID) -> list[dict]
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فاکتور خرید یافت نشد")
     rows = _purchase_returnable_lines(db, invoice_id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    options = _historical_options_for_rows(db, rows, items, PurchaseReturn, PurchaseReturnLine,
+                                         PurchaseReturnLine.purchase_invoice_line_id)
     return [
         {
             "purchase_invoice_line_id": row.line.id,
             "invoice_number": invoice.number,
             "item_id": row.line.item_id,
             "item_name": items[row.line.item_id].name if row.line.item_id in items else "",
-            "unit": items[row.line.item_id].unit if row.line.item_id in items else "",
+            "unit": (row.line.unit_conversion_snapshot or {}).get("target_unit_name")
+                or (items[row.line.item_id].unit if row.line.item_id in items else ""),
             "sold": row.sold,
             "already_returned": row.returned,
             "remaining": row.remaining,
             "unit_price": row.unit_cost,
+            "return_unit_options": options.get(row.line.id, []),
         }
         for row in rows
     ]
@@ -835,7 +865,7 @@ def _receipt_returnable_lines(
     allocated = dict(
         db.query(
             PurchaseReturnLine.warehouse_receipt_line_id,
-            func.coalesce(func.sum(PurchaseReturnLine.qty), 0),
+            func.coalesce(func.sum(func.coalesce(PurchaseReturnLine.base_qty, PurchaseReturnLine.qty)), 0),
         )
         .join(PurchaseReturn, PurchaseReturn.id == PurchaseReturnLine.return_id)
         .filter(
@@ -880,6 +910,8 @@ def get_receipt_returnable_summary(db: Session, receipt_id: UUID) -> list[dict]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "رسید انبار یافت نشد")
     rows = _receipt_returnable_lines(db, receipt_id)
     items = {i.id: i for i in db.query(Item).filter(Item.id.in_([r.line.item_id for r in rows])).all()}
+    options = _historical_options_for_rows(db, rows, items, PurchaseReturn, PurchaseReturnLine,
+                                         PurchaseReturnLine.warehouse_receipt_line_id)
     return [
         {
             "warehouse_receipt_line_id": row.line.id,
@@ -896,6 +928,7 @@ def get_receipt_returnable_summary(db: Session, receipt_id: UUID) -> list[dict]:
             "received": row.sold,
             "already_returned": row.returned,
             "remaining": row.remaining,
+            "return_unit_options": options.get(row.line.id, []),
             #: «فی» و «فی تمام‌شده» هر دو، چون فصل هر دو را در جدول دارد.
             "unit_cost": row.unit_price,
             "landed_unit_cost": row.unit_cost,
@@ -989,6 +1022,48 @@ def _resolve_return_source(
     return invoice, receipt, warehouse_id
 
 
+def _return_quantities(db, rows, requested, items_by_id, source_attr, *,
+                       line_model=PurchaseReturnLine, header_model=PurchaseReturn):
+    """Normalize allocation to base, retaining exact entered quantity and frozen ratio."""
+    sources = {row.line.id: row for row in rows}
+    key_column = getattr(line_model, source_attr)
+    prior = db.query(line_model).join(header_model).filter(
+        key_column.in_(sources), header_model.voided_at.is_(None)).all()
+    normalized, conversions = [], {}
+    consumed_base, consumed_source = {}, {}
+    for req in requested:
+        source_id = getattr(req, source_attr)
+        row = sources.get(source_id)
+        if row is None:
+            if req.unit_id is not None:
+                raise HTTPException(400, "برای انتخاب واحد برگشت، ردیف سند اصلی را مشخص کنید")
+            normalized.append(req)
+            continue
+        original = units.document_conversion(db, row.line, items_by_id[row.line.item_id])
+        if source_id not in consumed_base:
+            consumed_base[source_id] = row.returned
+            consumed_source[source_id] = sum((Fraction(p.entered_qty)
+                if p.entered_unit_id == original.source_unit_id and p.entered_qty is not None
+                else Fraction(p.base_qty if p.base_qty is not None else p.qty) / original.ratio
+                for p in prior if getattr(p, source_attr) == source_id), Fraction(0))
+        try:
+            conversion = units.historical_return_conversion(original, req.qty, req.unit_id,
+                returned_base=consumed_base[source_id], returned_in_source=consumed_source[source_id])
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        consumed_base[source_id] += conversion.target_qty
+        consumed_source[source_id] += (Fraction(conversion.source_qty)
+            if conversion.source_unit_id == original.source_unit_id
+            else Fraction(conversion.target_qty) / original.ratio)
+        updates = {"qty": conversion.target_qty}
+        if getattr(req, "agreed_unit_value", None) is not None:
+            updates["agreed_unit_value"] = req.agreed_unit_value * conversion.source_qty / conversion.target_qty
+        base_request = req.model_copy(update=updates)
+        normalized.append(base_request)
+        conversions[id(base_request)] = conversion
+    return normalized, conversions
+
+
 def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> PurchaseReturn:
     assert_period_open(db, data.return_date)
 
@@ -1003,7 +1078,8 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
 
     item_ids = {row.line.item_id for row in rows} | {l.item_id for l in data.lines if l.item_id}
     items_by_id = {i.id: i for i in db.query(Item).filter(Item.id.in_(item_ids)).all()}
-    plan = _allocate(rows, data.lines, items_by_id, source_attr=source_attr, doc_label=doc_label)
+    normalized, conversions = _return_quantities(db, rows, data.lines, items_by_id, source_attr)
+    plan = _allocate(rows, normalized, items_by_id, source_attr=source_attr, doc_label=doc_label)
     lock_items(db, {row.line.item_id for row, _, _ in plan})
 
     total_amount = Decimal(0)
@@ -1017,13 +1093,12 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
     credit_by_account: dict[UUID, Decimal] = {}
     inventory_account_id = warehouses.inventory_account_id(db, warehouse_id)
     agreed_total = Decimal(0)
-    agreed_by_source = {
-        line_in.warehouse_receipt_line_id or line_in.purchase_invoice_line_id: line_in
-        for line_in in data.lines
-    }
 
     for index, (row, qty, req) in enumerate(plan, start=1):
         item = items_by_id[row.line.item_id]
+        conversion = conversions.get(id(req)) or units.historical_return_conversion(
+            units.document_conversion(db, row.line, item), qty, None,
+            returned_base=row.returned)
         if not item.is_service:
             #: **دو سقفِ جدا، و فصل صریح می‌گوید قاطی‌شان نکنیم.**
             #:
@@ -1074,8 +1149,7 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
         #: فصل می‌گوید این دو را یکی فرض نکنیم و حسابِ اختلاف را هم اختراع
         #: نکنیم. پس وقتی کاربر عددی نداده، پیش‌فرض همان ارزشِ موجودی است و
         #: اختلافی وجود ندارد؛ وقتی داده و فرق می‌کند، پایین‌تر رد می‌شود.
-        source_key = row.line.id
-        requested = agreed_by_source.get(source_key)
+        requested = req
         agreed_unit = (
             Decimal(requested.agreed_unit_value)
             if requested is not None and requested.agreed_unit_value is not None
@@ -1086,6 +1160,7 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
 
         return_lines.append(
             PurchaseReturnLine(
+                **units.snapshot_fields(conversion, commercial=True),
                 seq=index,
                 #: لنگر روی همان سندی که مبدأ بوده — و اگر رسید به فاکتوری گره
                 #: خورده، **هر دو** نوشته می‌شوند تا برگشت از مسیرِ فاکتور هم
@@ -1095,10 +1170,10 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
                 ),
                 warehouse_receipt_line_id=row.line.id if receipt is not None else None,
                 item_id=row.line.item_id,
-                qty=qty,
-                unit_cost=unit_price,
+                qty=conversion.source_qty,
+                unit_cost=unit_price * qty / conversion.source_qty,
                 freight_share=freight_share,
-                agreed_unit_value=agreed_unit,
+                agreed_unit_value=agreed_unit * qty / conversion.source_qty,
                 agreed_amount=line_agreed,
                 tax_rate_snapshot=row.tax_rate,
                 tax_amount_snapshot=line_tax,
@@ -1113,6 +1188,7 @@ def post_purchase_return(db: Session, data: PurchaseReturnIn, user: User) -> Pur
                 item.average_cost = ((existing_qty * item.average_cost) - line_landed) / new_qty
             stock_moves.append(
                 StockLedger(
+                    **units.movement_snapshot_fields(conversion, -qty),
                     item_id=row.line.item_id,
                     warehouse_id=warehouse_id,
                     qty=-qty,
@@ -1300,7 +1376,7 @@ def return_print_projection(db: Session, pret: PurchaseReturn) -> dict:
                 "seq": line.seq,
                 "code": item.sku if item else "",
                 "name": item.name if item else "",
-                "unit": item.unit if item else "",
+                "unit": (line.unit_conversion_snapshot or {}).get("source_unit_name") or (item.unit if item else ""),
                 "qty": line.qty,
                 "unit_cost": line.unit_cost,
                 "amount": amount,

@@ -99,9 +99,13 @@ def cmd_serve(args) -> int:
 
     from app.main import app
     from app.onprem.maintenance import BackupScheduler
+    from app.services.enterprise_market_sync import MarketSyncScheduler
 
     #: پشتیبانِ خودکار داخلِ همین سرویس — چیزی جدا برای نصب و خراب‌شدن نیست.
     BackupScheduler(layout, _pg_bin(args), env["MIGRATION_DATABASE_URL"]).start()
+    #: Separate outbound worker; an internet outage never blocks the LAN API or
+    #: local accounting.  Disabled by default until the full bridge is approved.
+    MarketSyncScheduler().start()
 
     uvicorn.run(
         app,
@@ -117,11 +121,12 @@ def cmd_serve(args) -> int:
 def cmd_migrate(args) -> int:
     home = Path(args.home)
     _enter_home(home)
-    from app.onprem.provision import Layout, read_env, run_migrations, verify_isolation
+    from app.onprem.provision import Layout, read_env, run_migrations, verify_isolation, enable_market_for_upgrade
 
     env = read_env(Layout(home))
     version = run_migrations(env["MIGRATION_DATABASE_URL"], _resource_dir() / "alembic")
     verify_isolation(env["DATABASE_URL"])
+    enable_market_for_upgrade(Layout(home))
     print(f"دیتابیس در نسخه‌ی {version}.")
     return 0
 
@@ -273,6 +278,11 @@ def main(argv: list[str] | None = None) -> int:
     common(sub.add_parser("uninstall-services"))
     common(sub.add_parser("status"))
     common(sub.add_parser("backup"))
+    jobs=sub.add_parser("repair-jobs")
+    common(jobs)
+    jobs.add_argument('--tenant',required=True)
+    jobs.add_argument('--limit',type=int,default=20)
+    jobs.add_argument('--send',action='store_true')
     diag = sub.add_parser("diagnostics")
     common(diag)
     diag.add_argument("--out", default=None)
@@ -288,6 +298,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--payload", required=True)
 
     args = parser.parse_args(argv)
+    if args.cmd=='repair-jobs':
+        _enter_home(Path(args.home))
+        from app.repair_jobs import main as run_repair_jobs
+        values=['--tenant',args.tenant,'--limit',str(args.limit)]
+        if args.send: values.append('--send')
+        return run_repair_jobs(values)
     if args.cmd == "service-recover":
         import json
         from app.onprem.service_recovery import recover_local_services

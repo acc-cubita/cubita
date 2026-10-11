@@ -139,6 +139,10 @@ def _issue_token(record: EnterpriseLicenseRecord, install: str, fp: dict) -> str
         payload["mods"] = list(record.mods)
     if record.feat is not None:
         payload["feat"] = list(record.feat)
+    #: فقط وقتی پولی نیست: توکن‌های پولیِ امروز بایت‌به‌بایت مثلِ قبل می‌مانند، و نسخه‌ای که
+    #: `tier` را نمی‌شناسد آن را مثلِ هر کلیدِ ناشناخته‌ی دیگری نادیده می‌گیرد.
+    if record.tier and record.tier != "paid":
+        payload["tier"] = record.tier
     return sign(payload, signing_key())
 
 
@@ -175,7 +179,9 @@ def bind_and_issue(db: Session, record: EnterpriseLicenseRecord, request_code: s
     record.last_issued_at = now
     record.issue_count = (record.issue_count or 0) + 1
     token = _issue_token(record, record.install_id or "", request["fp"])
-    _event(db, record, "activate" if actor == "online" else "issue", actor, {"install": request["install"], "first": first})
+    #: «online» و «free» خودِ مشتری‌اند (کدِ فعال‌سازی / ثبت‌نامِ رایگان)؛ بقیه کارمندِ ستاد.
+    kind = "activate" if actor in ("online", "free") else "issue"
+    _event(db, record, kind, actor, {"install": request["install"], "first": first})
     db.flush()
     return token
 

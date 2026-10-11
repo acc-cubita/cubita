@@ -18,14 +18,18 @@
 اجرای واقعی‌ست که همیشه بود؛ فقط یک FKِ اختیاریِ `production_plan_id` گرفت تا اگر
 از رویِ یک برنامه اجرا شد، ردش بماند.
 """
+from decimal import Decimal
 import uuid
 from datetime import date as date_
 
 from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Numeric, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import EnteredQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin
 from app.models.tenant import TenantMixin
 
@@ -33,17 +37,21 @@ from app.models.tenant import TenantMixin
 PRODUCTION_PLAN_STATUSES = ("draft", "started", "in_progress", "stopped", "finished", "cancelled")
 
 
-class Bom(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class Bom(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """فرمولِ ساخت — یک محصولِ نهایی و اجزایش."""
 
     __tablename__ = "boms"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_boms_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_boms_base_unit_id"),
+    )
 
     finished_item_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("items.id"), index=True
     )
     name: Mapped[str] = mapped_column(String(200), default="", server_default="")
     #: هر «اجرای» این فرمول چند واحدِ محصول می‌سازد (مثلاً یک قالب = ۱۲ عدد).
-    yield_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=1, server_default="1")
+    yield_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=1, server_default="1")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -53,26 +61,32 @@ class Bom(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class BomLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class BomLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """یک جزء از فرمول — کالای جزء + مقدارِ لازم برای هر «بازده»."""
 
     __tablename__ = "bom_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_bom_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_bom_lines_base_unit_id"),
+    )
 
     bom_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("boms.id", ondelete="CASCADE"), index=True
     )
     component_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
 
     bom: Mapped["Bom"] = relationship(back_populates="lines")
 
 
-class ProductionPlan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class ProductionPlan(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """سفارشِ تولید — فقط برنامه. بدونِ ستونِ بها یا اثرِ انبار."""
 
     __tablename__ = "production_plans"
     __table_args__ = (
         CheckConstraint(f"status IN {PRODUCTION_PLAN_STATUSES}", name="ck_production_plans_status"),
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_plans_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_plans_base_unit_id"),
     )
 
     number: Mapped[int] = mapped_column(index=True)
@@ -80,10 +94,11 @@ class ProductionPlan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     finished_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
     planned_date: Mapped[date_] = mapped_column(Date)
-    qty_planned: Mapped[float] = mapped_column(Numeric(18, 3))
+    recipe_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    qty_planned: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: جمعِ qty_produced همه‌ی اسنادِ تولیدی که به این برنامه وصل شده‌اند — برای
     #: نمایشِ «چقدر از این برنامه اجرا شد»، نه مبنای محاسبه‌ی چیزِ دیگری.
-    qty_produced: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    qty_produced: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
     #: جمعِ بهای همه‌ی حواله‌های موادِ متصل به این برنامه — مبنای بهای رسیدِ
     #: محصول (`material_cost_issued ÷ qty_planned`)، پیش از افزودنِ دستمزد/سربار.
     material_cost_issued: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -97,10 +112,14 @@ class ProductionPlan(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     created_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
-class ProductionOrder(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class ProductionOrder(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """سندِ تولید — اجرای واقعی: اجزا مصرف و محصول تولید می‌شود."""
 
     __tablename__ = "production_orders"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_orders_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_orders_base_unit_id"),
+    )
 
     number: Mapped[int | None] = mapped_column(nullable=True, index=True)
     bom_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("boms.id"))
@@ -111,7 +130,7 @@ class ProductionOrder(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("production_plans.id"), nullable=True, index=True
     )
     production_date: Mapped[date_] = mapped_column(Date)
-    qty_produced: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty_produced: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     component_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     overhead_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
@@ -125,16 +144,20 @@ class ProductionOrder(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     )
 
 
-class ProductionOrderLine(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+class ProductionOrderLine(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     """عکس‌برداری از یک جزءِ مصرف‌شده در یک سفارشِ تولید (مقدار و بهای لحظه‌ای)."""
 
     __tablename__ = "production_order_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_order_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_production_order_lines_base_unit_id"),
+    )
 
     production_order_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("production_orders.id", ondelete="CASCADE"), index=True
     )
     component_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0), default=0, server_default="0")
 
     order: Mapped["ProductionOrder"] = relationship(back_populates="lines")

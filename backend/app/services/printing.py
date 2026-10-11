@@ -90,7 +90,7 @@ def fa_number(value) -> str:
         return "—"
     number = Decimal(str(value))
     quantized = number.quantize(Decimal(1)) if number == number.to_integral_value() else number.normalize()
-    return f"{quantized:,}".translate(PERSIAN_DIGITS)
+    return format(quantized, ",f").translate(PERSIAN_DIGITS)
 
 
 _ONES = ("", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه")
@@ -995,6 +995,12 @@ def render_issue_permit(
         if show_amounts
         else '<td colspan="4"></td>'
     )
+    quantity_totals = {}
+    for index, line in enumerate(lines):
+        unit = line.get("unit") or f"واحد نامشخصِ ردیف {index + 1}"
+        quantity_totals[unit] = quantity_totals.get(unit, Decimal(0)) + Decimal(line["qty"])
+    quantity_footer = (fa_number(total_qty) if len(quantity_totals) <= 1 else
+        "<br>".join(f"{fa_number(qty)} {escape(unit)}" for unit, qty in quantity_totals.items()))
     reference_chips = "".join(
         f"<div class='chip'><span>{escape(label)}</span> &nbsp;<strong>{fa_number(value)}</strong></div>"
         for label, value in references
@@ -1065,7 +1071,7 @@ def render_issue_permit(
 {"".join(rows)}
     </tbody>
     <tfoot>
-      <tr class="grand"><td colspan="3">جمع</td><td class="num">{fa_number(total_qty)}</td>{foot_tail}</tr>
+      <tr class="grand"><td colspan="3">جمع</td><td class="num">{quantity_footer}</td>{foot_tail}</tr>
     </tfoot>
   </table>
 

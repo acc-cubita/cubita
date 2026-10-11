@@ -1,3 +1,4 @@
+import { selectedReturnUnit, positiveQuantity, exceedsQuantity } from './returnQuantity'
 import { useEffect, useRef, useState } from 'react'
 import {
   createPurchaseReturn,
@@ -21,6 +22,7 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
   const [returnable, setReturnable] = useState<ReturnableLine[]>([])
   const [returnDate, setReturnDate] = useState(todayIso())
   const [description, setDescription] = useState('')
+  const [unitByLine, setUnitByLine] = useState<Record<string, string>>({})
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -47,7 +49,7 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
   }, [])
 
   useEffect(() => {
-    setQtyByLine({})
+    setQtyByLine({}); setUnitByLine({})
     if (!invoiceId) {
       setReturnable([])
       return
@@ -67,36 +69,38 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
   //: کلید ردیفِ فاکتور است نه کالا — قرینه‌ی برگشت از فروش، و به همان دلیل:
   //: یک کالا می‌تواند در یک فاکتور دو ردیف با دو بها داشته باشد.
   const enteredLines = Object.entries(qtyByLine)
-    .filter(([, qty]) => Number(qty) > 0)
+    .filter(([, qty]) => positiveQuantity(qty))
     .map(([key, qty]) => {
       const row = rowByKey.get(key)
       return {
         ...(row?.purchase_invoice_line_id
           ? { purchase_invoice_line_id: row.purchase_invoice_line_id }
           : { item_id: row?.item_id ?? key }),
-        qty: Number(qty),
+        qty,
+        unit_id: row ? selectedReturnUnit(row, unitByLine[key]).unit_id || null : null,
       }
     })
   const overRemaining = Object.entries(qtyByLine).some(([key, qty]) => {
     const row = rowByKey.get(key)
-    return row !== undefined && Number(qty) > Number(row.remaining)
+    return row !== undefined && exceedsQuantity(qty, selectedReturnUnit(row, unitByLine[key]).remaining)
   })
   const returnLinesValid = enteredLines.length > 0 && !overRemaining
 
   //: نمای نمایشی — جدا از `enteredLines` که دقیقاً payloadِ API است.
   const enteredRows = Object.entries(qtyByLine)
-    .filter(([, qty]) => Number(qty) > 0)
+    .filter(([, qty]) => positiveQuantity(qty))
     .map(([key, qty]) => {
       const row = rowByKey.get(key)
       return {
         key,
         name: row?.item_name ?? '—',
-        unit: row?.unit ?? '',
-        qty: Number(qty),
-        unitPrice: Number(row?.unit_price ?? 0),
+        unit: row ? selectedReturnUnit(row, unitByLine[key]).unit_name : '',
+        qty,
+        unit_id: row ? selectedReturnUnit(row, unitByLine[key]).unit_id || null : null,
+        unitPrice: Number(row ? selectedReturnUnit(row, unitByLine[key]).unit_price : 0),
       }
     })
-  const enteredTotal = enteredRows.reduce((sum, row) => sum + row.qty * row.unitPrice, 0)
+  const enteredTotal = enteredRows.reduce((sum, row) => sum + Number(row.qty) * row.unitPrice, 0)
 
   async function submit(): Promise<boolean> {
     setMessage(null)
@@ -125,7 +129,7 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
         idempotencyKey.current,
       )
       idempotencyKey.current = newIdempotencyKey()
-      setQtyByLine({})
+      setQtyByLine({}); setUnitByLine({})
       setDescription('')
       setMessage('برگشت از خرید با موفقیت ثبت شد.')
       await refresh()
@@ -161,6 +165,8 @@ export function usePurchaseReturnDraft({ token }: { token: string }) {
     setDescription,
     qtyByLine,
     setQtyByLine,
+    unitByLine,
+    setUnitByLine,
     message,
     setMessage,
     busy,

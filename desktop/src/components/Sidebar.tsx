@@ -16,6 +16,8 @@ export function Sidebar({
   userName,
   roleName,
   tenantKind,
+  permissions,
+  marketplaceRoles,
   enabledModules,
   allowedModules,
   isOwner,
@@ -30,7 +32,9 @@ export function Sidebar({
   userName: string
   roleName: string
   /** نوعِ حساب در بازار: standard | distributor | retailer — گیتِ ماژول‌های بازار. */
+  permissions?: Record<string, string[]>
   tenantKind: string
+  marketplaceRoles?: string[]
   /** شخصی‌سازیِ پنل — کلیدِ ماژول‌های روشن/مجاز و اینکه کاربر مالک است. */
   enabledModules?: string[]
   allowedModules?: string[]
@@ -44,6 +48,8 @@ export function Sidebar({
   const { mode } = useExperienceMode()
   const nav = buildNav({
     tenantKind,
+    permissions,
+    marketplaceRoles,
     enabledModules,
     allowedModules,
     isOwner,

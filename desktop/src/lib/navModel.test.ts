@@ -153,6 +153,27 @@ describe('fail-openِ عمومیِ گیت', () => {
   })
 })
 
+describe('نقش‌های مستقلِ بازار', () => {
+  const marketKeys = (roles: string[]) => buildNav({
+    tenantKind: 'standard', marketplaceRoles: roles,
+  }).groups.flatMap((group) => group.items.map((item) => item.key))
+
+  it('شرکتِ دارای هر دو نقش، هر دو ماژول را می‌بیند', () => {
+    expect(marketKeys(['retailer', 'distributor'])).toContain('marketplace')
+    expect(marketKeys(['retailer', 'distributor'])).toContain('distributor')
+  })
+
+  it('عضوِ دارای فقط خرید، پخش را نمی‌بیند', () => {
+    expect(marketKeys(['retailer'])).toContain('marketplace')
+    expect(marketKeys(['retailer'])).not.toContain('distributor')
+  })
+
+  it('عضوِ بدونِ مجوزِ بازار، هیچ‌کدام را نمی‌بیند', () => {
+    expect(marketKeys([])).not.toContain('marketplace')
+    expect(marketKeys([])).not.toContain('distributor')
+  })
+})
+
 describe('ترتیبِ منو در هر حالت — UI-01 §۵۲', () => {
   const MODES: ExperienceMode[] = ['accountant', 'simple']
   const EVERY = [
@@ -423,4 +444,14 @@ describe('منوی یک‌فهرستیِ ماژول — دفتر زیرِ دست
     expect(where('مشتریان و فروش', 'فاکتورهای فروش')).toBe('کار روزانه')
     expect(where('مشتریان و فروش', 'سرنخ‌ها')).toBe('باشگاه مشتریان')
   })
+})
+
+describe('repair workspace navigation', () => {
+ const repairKeys=(permissions:Record<string,string[]>,enabled=['repair']) => buildNav({tenantKind:'standard',permissions,enabledModules:enabled,allowedModules:['repair','accounting']}).groups.find(g=>g.heading==='تعمیرگاه')?.items.map(i=>i.key)??[]
+ it('shows only reception routes to a front-desk user',()=>{expect(repairKeys({repair:['view','create']})).toEqual(['repair','repairintake','repairservices','repairreports','repairexchange'])})
+ it('does not grant harvesting through repair approval',()=>{expect(repairKeys({repair:['view','approve']})).not.toContain('repairharvest')})
+ it('requires the existing repair-view grant before exposing settings or financial selectors',()=>{expect(repairKeys({repair:['approve'],repair_harvest:['approve']})).toEqual([])})
+ it('gates all added routes with the repair module',()=>{expect(repairKeys({repair:['view','create','update','approve'],repair_harvest:['approve']},['accounting'])).toEqual([])})
+ it('keeps all eight repair routes for the existing global owner grant',()=>{expect(repairKeys({'*':['*']})).toHaveLength(8)})
+ it('preserves repair as the case-list landing',()=>{expect(resolveLegacyPage('repair').page).toBe('repair');expect(NAV_GROUPS.find(g=>g.heading==='تعمیرگاه')?.items[0].label).toBe('پرونده‌ها')})
 })

@@ -107,11 +107,12 @@ def db_url(user: str, password: str, port: int) -> str:
     return f"postgresql+psycopg://{user}:{quote(password, safe='')}@127.0.0.1:{port}/{DB_NAME}"
 
 
-def render_env(secrets_: dict, pg_port: int, api_port: int, license_dir: Path | None = None) -> str:
+def render_env(secrets_: dict, pg_port: int, api_port: int, license_dir: Path | None = None, *, market_bridge_enabled: bool = True) -> str:
     """`.env`ِ سرورِ سازمانی. برنامه با `cubita_app` وصل می‌شود، نه با مالک یا superuser."""
     lines = [
         "# ساخته‌شده به دستِ نصابِ کوبیتا سازمانی — دستی ویرایش نکنید؛ «cubita-server setup» دوباره می‌سازدش.",
         "EDITION=enterprise",
+        f"MARKET_BRIDGE_ENABLED={'true' if market_bridge_enabled else 'false'}",
         "ENV=production",
         "ZARINPAL_SANDBOX=true",
         f"DATABASE_URL={db_url(APP_ROLE, secrets_['app_password'], pg_port)}",
@@ -136,6 +137,15 @@ def read_env(layout: Layout) -> dict[str, str]:
             key, _, value = line.partition("=")
             out[key.strip()] = value.strip()
     return out
+
+
+def enable_market_for_upgrade(layout: Layout) -> None:
+    """Older installers omitted the bridge switch; keep an explicit admin choice."""
+    values = read_env(layout)
+    if values.get("EDITION") != "enterprise" or "MARKET_BRIDGE_ENABLED" in values:
+        return
+    with layout.env_file.open("a", encoding="utf-8") as stream:
+        stream.write("\nMARKET_BRIDGE_ENABLED=true\n")
 
 
 # --- Postgres ----------------------------------------------------------------
@@ -470,7 +480,10 @@ def provision(
         log("نقش‌ها و دیتابیس…")
         bootstrap_database(secrets_, pg_port)
 
-        layout.env_file.write_text(render_env(secrets_, pg_port, api_port, layout.home), encoding="utf-8")
+        previous_env = read_env(layout)
+        market_enabled = previous_env.get("MARKET_BRIDGE_ENABLED", "true").lower() not in ("false", "0", "no", "off")
+        layout.env_file.write_text(render_env(secrets_, pg_port, api_port, layout.home,
+                                             market_bridge_enabled=market_enabled), encoding="utf-8")
         env = read_env(layout)
 
         current = current_revision(env["MIGRATION_DATABASE_URL"])

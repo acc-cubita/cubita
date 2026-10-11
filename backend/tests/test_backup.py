@@ -101,3 +101,57 @@ def test_restore_wipes_extra_rows(db, user, client):
     # بازیابیِ نسخه‌ی قبلی → ردیفِ اضافه باید برود
     assert client.post("/api/backup/import", json=base).status_code == 200
     assert len(client.get("/api/backup/export").json()["tables"]["accounts"]) == base_accounts
+
+
+def test_restore_pre_registry_item_creates_base_membership(db, user, client, monkeypatch):
+    from tests.factories import make_item
+    from app.routers import backup as backup_router
+
+    # Isolate the full item restore from the existing cloud broker preservation.
+    monkeypatch.setattr(backup_router, "_skip_tables", lambda: {"roles"})
+
+    item = make_item(db, unit="واحد قدیمی")
+    item_id = str(item.id)
+    backup = client.get("/api/backup/export").json()
+    backup["tables"]["items"][0]["primary_unit_id"] = None
+    backup["tables"]["item_units"] = []
+    backup["tables"]["item_unit_conversions"] = []
+    backup["tables"]["units_of_measure"] = []
+    response = client.post("/api/backup/import", json=backup)
+    assert response.status_code == 200, response.text
+    restored = client.get("/api/backup/export").json()["tables"]
+    row = next(row for row in restored["items"] if row["id"] == item_id)
+    assert row["primary_unit_id"]
+    assert row["unit"] == "واحد قدیمی"
+    assert any(member["item_id"] == item_id and member["unit_id"] == row["primary_unit_id"]
+               for member in restored["item_units"])
+
+
+def test_invalid_backup_base_rejected_before_replace(db, user, client, monkeypatch):
+    from tests.factories import make_item
+    from app.routers import backup as backup_router
+
+    monkeypatch.setattr(backup_router, "_skip_tables", lambda: {"roles"})
+
+    make_item(db)
+    backup = client.get("/api/backup/export").json()
+    before = _counts(backup)
+    backup["tables"]["item_units"][0]["inventory_allowed"] = False
+    response = client.post("/api/backup/import", json=backup)
+    assert response.status_code == 400, response.text
+    assert _counts(client.get("/api/backup/export").json()) == before
+
+
+def test_restore_preserves_registry_of_broker_preserved_items(db, user, client):
+    from tests.factories import make_item
+    from app.models.item_units import ItemUnit
+
+    item = make_item(db, unit="واحد حفظ‌شده")
+    item_id, unit_id = item.id, item.primary_unit_id
+    backup = client.get("/api/backup/export").json()
+    # Current broker references deliberately keep items outside tenant replace.
+    assert "items" not in backup["tables"]
+    assert "item_units" not in backup["tables"]
+    response = client.post("/api/backup/import", json=backup)
+    assert response.status_code == 200, response.text
+    assert db.query(ItemUnit).filter_by(item_id=item_id, unit_id=unit_id).count() == 1

@@ -22,6 +22,8 @@ class LicenseOut(BaseModel):
     mods: list[str] | None = None
     feat: list[str] | None = None
     license_id: str | None = None
+    #: paid | free؛ None یعنی هنوز مجوزی نصب نشده (آزمایشی).
+    tier: str | None = None
 
     @classmethod
     def of(cls, s: LicenseStatus, seats_used: int | None = None) -> "LicenseOut":
@@ -37,6 +39,7 @@ class LicenseOut(BaseModel):
             mods=sorted(s.mods) if s.mods is not None else None,
             feat=sorted(s.feat) if s.feat is not None else None,
             license_id=s.license_id,
+            tier=s.tier,
         )
 
 
@@ -51,3 +54,22 @@ class LicenseActivateIn(BaseModel):
 
 class LicenseInstallIn(BaseModel):
     token: str = Field(min_length=10, max_length=8000)
+
+
+class LicenseFreeCodeIn(BaseModel):
+    """ثبت‌نامِ رایگان، قدمِ اول: کدِ پیامکی به این شماره."""
+
+    phone: str = Field(min_length=10, max_length=32)
+
+
+class LicenseFreeCodeOut(BaseModel):
+    #: شماره‌ی پوشیده، همان‌طور که ابر برگرداند.
+    phone: str
+    expires_in: int
+
+
+class LicenseFreeActivateIn(BaseModel):
+    phone: str = Field(min_length=10, max_length=32)
+    code: str = Field(min_length=4, max_length=12)
+    #: نامِ سازمان روی مجوز؛ خالی = نامِ کسب‌وکار.
+    org: str | None = Field(default=None, max_length=200)

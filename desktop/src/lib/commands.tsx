@@ -48,6 +48,7 @@ export function searchCommands(commands: Command[], query: string, limit?: numbe
 export function buildCommands(me: MeResponse): Command[] {
   const { groups, secondary } = buildNav({
     tenantKind: me.tenant_kind,
+    permissions: me.permissions,
     enabledModules: me.enabled_modules,
     allowedModules: me.allowed_modules,
     isOwner: me.role_key === 'owner',

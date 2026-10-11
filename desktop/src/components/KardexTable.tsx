@@ -1,8 +1,8 @@
 import { ArrowDownToLine, ArrowUpFromLine, Boxes, History, TriangleAlert } from 'lucide-react'
 import type { KardexReport } from '../api'
-import { formatJalali } from '../lib/jalali'
+import { formatJalali, toFaDigits } from '../lib/jalali'
 
-const faQty = (s: string) => (Number(s) || 0).toLocaleString('fa-IR', { maximumFractionDigits: 3 })
+const faQty = (s: string) => toFaDigits(s)
 //: بها و ارزش به ریالِ صحیح نمایش داده می‌شوند؛ میانگین چهار رقم اعشار دارد ولی دفتر
 //: به ریالِ صحیح می‌نویسد و کسرِ نمایشی فقط عدد را از دفتر ناخواناتر می‌کند.
 const faMoney = (s: string) => Math.round(Number(s) || 0).toLocaleString('fa-IR')
@@ -91,6 +91,9 @@ export function KardexTable({
                     {l.source_label}
                     {l.source_number != null && ` شماره ${faNo(l.source_number)}`}
                     {l.voided && <span className="status-badge tone-muted">باطل</span>}
+                    {l.entered_qty != null && l.unit_conversion_snapshot && <small className="hint">
+                      {' '}({faQty(l.entered_qty)} {l.unit_conversion_snapshot.source_unit_name ?? ''})
+                    </small>}
                   </td>
                   <td data-label="ورود" className="pos-in">{Number(l.qty_in) > 0 ? faQty(l.qty_in) : '—'}</td>
                   <td data-label="خروج" className="pos-out">{Number(l.qty_out) > 0 ? faQty(l.qty_out) : '—'}</td>

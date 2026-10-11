@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, BadgeCheck, CheckCircle2, ClipboardCopy, Globe, KeyRound, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, CheckCircle2, ClipboardCopy, ExternalLink, Globe, KeyRound, ShieldCheck } from 'lucide-react'
 import {
   activateLicenseOnline,
+  ENTERPRISE_PLANS_URL,
   fetchLicense,
   fetchLicenseRequestCode,
   fetchMe,
@@ -15,15 +16,21 @@ import { ServerBackupCard } from '../components/ServerBackupCard'
 import { ServerUpdateCard } from '../components/ServerUpdateCard'
 import { ClientUpdateCard } from '../components/ClientUpdateCard'
 import { EnterpriseNetworkCard } from '../components/EnterpriseNetworkCard'
+import { EnterpriseMarketPairCard } from '../components/EnterpriseMarketPairCard'
+import { FreeLicenseForm } from '../components/FreeLicenseForm'
 import { connectionError } from '../lib/serverConnection'
 import { useServerReconnect } from '../lib/useServerConnection'
 import { formatJalali } from '../lib/jalali'
-import { LICENSE_MODE_LABEL, licenseTone } from '../lib/license'
+import { LICENSE_MODE_LABEL, licenseEditionLabel, licenseTone } from '../lib/license'
 
 const fa = (n: number) => n.toLocaleString('fa-IR')
 
 /**
  * «مجوز نرم‌افزار» — فقط در کوبیتا سازمانی.
+ *
+ * سه راهِ فعال‌سازی، به همین ترتیب: ثبت‌نامِ رایگان (شماره‌ی همراه و کدِ پیامکی؛ دائمی، تا سه
+ * کاربر)، کدِ مجوزِ تجاری (کاربرِ بیشتر، مؤدیان)، و برای سرورِ بی‌اینترنت «کدِ درخواست» که هر دو
+ * را از پشتیبانی می‌گیرد. ثبت‌نامِ رایگان وقتی مجوزی نصب است پنهان می‌شود.
  *
  * فعال‌سازیِ آفلاین‌محور: مالک «کدِ درخواست» را می‌گیرد و برای پشتیبانی می‌فرستد، کدِ
  * مجوز را پس می‌گیرد و اینجا می‌چسباند. سرورِ خیلی از شرکت‌ها اینترنت ندارد، پس این راه
@@ -119,6 +126,10 @@ export function LicensePage({
   }
 
   const tone = lic ? licenseTone(lic) : 'ok'
+  //: مجوزِ رایگان یا تجاریِ سالم روی همین سرور؛ «رایانه‌ی دیگر» و «نامعتبر» یعنی هنوز باید ثبت‌نام کرد.
+  const hasFree = lic?.tier === 'free' && lic.writable
+  const hasPaid = lic?.tier === 'paid' && lic.mode !== 'mismatch' && lic.mode !== 'invalid'
+  const showFree = !!lic && !hasFree && !hasPaid
 
   return (
     <div className="page panels">
@@ -154,6 +165,8 @@ export function LicensePage({
               <dd>
                 <span className={`lic-pill lic-pill--${tone}`}>{LICENSE_MODE_LABEL[lic.mode]}</span>
               </dd>
+              <dt>نسخه</dt>
+              <dd>{licenseEditionLabel(lic)}</dd>
               {lic.org && (
                 <>
                   <dt>سازمان</dt>
@@ -191,15 +204,40 @@ export function LicensePage({
         <SectionCard
           icon={KeyRound}
           title="فعال‌سازی"
-          description="با کدِ فعال‌سازی و اینترنت در یک قدم؛ یا بدونِ اینترنت با کدِ درخواست."
+          description={
+            showFree
+              ? 'ثبت‌نامِ رایگان با شماره‌ی همراه؛ یا کدِ مجوزِ تجاری؛ یا بدونِ اینترنت با کدِ درخواست.'
+              : 'ارتقا و تمدید با کدِ مجوزِ تجاری؛ یا بدونِ اینترنت با کدِ درخواست.'
+          }
         >
           {!isOwner ? (
             <p className="muted">فعال‌سازی و تمدید فقط با حسابِ مالکِ کسب‌وکار انجام می‌شود.</p>
           ) : (
             <div className="lic-steps">
+              {showFree && (
+                <FreeLicenseForm
+                  token={token}
+                  defaultOrg={me.tenant_name}
+                  disabled={busy !== null}
+                  onInstalled={applyInstalled}
+                />
+              )}
+              {hasFree && (
+                <div className="lic-step">
+                  <span className="field-hint">
+                    نسخه‌ی رایگان روی این سرور فعال است. برای کاربرِ بیشتر یا سامانه‌ی مؤدیان، مجوزِ تجاری بگیرید و
+                    کدش را این‌جا وارد کنید؛ داده‌ها همان‌طور می‌مانند.
+                  </span>
+                  <a className="btn-ghost" href={ENTERPRISE_PLANS_URL} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink size={15} /> مقایسه‌ی رایگان و تجاری
+                  </a>
+                </div>
+              )}
+
+              {showFree && <p className="lic-or">مجوزِ تجاری خریده‌اید؟</p>}
               <div className="lic-step">
                 <span className="lic-step-title">
-                  <Globe size={15} /> فعال‌سازیِ آنلاین
+                  <Globe size={15} /> {lic?.tier === 'paid' ? 'فعال‌سازیِ آنلاین' : 'کدِ مجوزِ تجاری'}
                 </span>
                 <input
                   type="text"
@@ -223,7 +261,10 @@ export function LicensePage({
                 </button>
               </div>
 
-              <p className="lic-or">سرور اینترنت ندارد؟ از این دو قدم استفاده کنید:</p>
+              <p className="lic-or">
+                سرور اینترنت ندارد؟ کدِ درخواست را برای پشتیبانی بفرستید تا مجوزِ {showFree ? 'رایگان یا تجاری' : 'تازه'} را
+                بفرستد:
+              </p>
 
               <div className="lic-step">
                 <span className="lic-step-title">۱. کدِ درخواستِ این سرور</span>
@@ -270,6 +311,7 @@ export function LicensePage({
         </SectionCard>
       </div>
       {isOwner && <EnterpriseNetworkCard />}
+      {isOwner && me.market_bridge_available && <EnterpriseMarketPairCard token={token} onMeUpdated={onMeUpdated} />}
       <ClientUpdateCard />
       {isOwner && <ServerUpdateCard token={token} />}
       {isOwner && <ServerBackupCard token={token} />}

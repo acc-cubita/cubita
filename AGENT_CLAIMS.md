@@ -35,6 +35,10 @@
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
 
+
+
+
+
 > **حادثه‌ی «دو سرِ زنجیره» — بسته شد (۱۴۰۵/۰۶/۲۴).**
 >
 > تنخواه `0151` گرفت و پیمانکاری هم `0152` را پشتِ `0150` گذاشت: **دو سر روی یک
@@ -113,10 +117,39 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 
 ## تاریخچه‌ی ادعاهای بسته‌شده
 
+- 2026-10-07 — Codex: شکست CI274 ناشی از date.today همراه مراجعهٔ ثابت، با ساعت تحویل و تاریخ‌های نسبی اصلاح شد؛ سه سناریوی نیمه‌شب/کبیسه و۳۳ آزمون تعمیرگاه موفق. فقط تست و گزارش تغییر کرد؛ ادعا/pytest آزاد.
+
+
+- 2026-10-07 — Codex: PR273 ادغام و پنج CI موفق؛ نصاب کامل۱.۹.۱۵، نصب تازه/ارتقای اجرایی جدا با حفظ پرونده و تنظیمات، production0191 و کانال امضاشده با حفظ۱.۹.۱۴ تأیید شد. گزارش REPAIR_RELEASE_1_9_15.md؛ ادعا آزاد، نصب فعال کاربر و GUI نصاب انجام نشده.
+
+
+- 2026-10-07 — Codex: ساده‌سازی تعمیرگاه با هشت مسیر، پذیرش کوتاه و پروندهٔ شش‌تب؛ ۱۰۸۹ آزمون رابط و ۶۳ سناریوی بک‌اند، مرورگر390/1440 و بیلد۱.۹.۱۵ موفق. گزارش و تصاویر آماده؛ ادعا آزاد، انتشار انجام نشده.
+
+
+- 2026-10-07 — Codex: استقرار مالک0191،۷۳ FORCE RLS و کد/وب برابر تأیید؛ کانال سازمانی۱.۹.۱۴ و لینک نصب تازه با امضا/هش/اندازه معتبر منتشر، قبلی محفوظ. مستندات در PR272؛ ادعا آزاد. نصب واقعی و پیامک/پرداخت زنده اجرا نشد.
+
+- 2026-10-07 — Codex: نسخهٔ۱.۹.۱۴، نصاب کامل، QA تازه/ارتقا با حفظ داده/تنظیمات، وب/API با هش برابر در/tmp و پیش‌نیازهای QR/بارکد/Excel آماده؛ DB0190 سالم و بدون deploy. جزئیات REPAIR_RELEASE_1_9_14.md؛ ادعای فایل‌ها آزاد، انتشار منتظر مرحلهٔ مالک.
+
+- 2026-10-07 — Codex: چهار مرحلهٔ تکمیل تعمیرگاه، مهاجرت0191 و۲۶ جدول تازه FORCE RLS، آزمون۴۷۸۷ بک‌اند/۱۰۷۴ رابط و onprem واقعی۱۴، مرورگر390/1440، مهاجرت با پروندهٔ تاریخی و نصاب توسعهٔ کامل موفق؛ گزارش REPAIR_COMPLETION_REPORT.md. ادعاهای فایل و pytest/alembic آزاد؛ انتشار و نصب واقعی انجام نشد.
+
+- 2026-10-06 — Codex: تعمیرگاه در PR268 تحویل پیش‌نویس شد؛ 0190 با ۴۷ جدول، بک‌اند ۴۶۲۷ و فرانت‌اند ۱۰۷۴ پاس. ادعای فایل‌ها و pytest/alembic آزاد شد؛ استقرار انجام نشده.
+
 نگه‌داشتنِ چند ردیفِ آخر کافی است؛ قدیمی‌ترها را پاک کن.
 
 | ایجنت | فایل‌ها | کار | بسته‌شده |
 |---|---|---|---|
+| Claude Code (آرش) | `website/{index.html,package.json,package-lock.json,scripts/prerender.mjs,public/robots.txt,public/sitemap.xml (حذف)}`، `website/src/{main.tsx,routes.tsx,entry-server.tsx,seo/*,content/*,concept/{SiteChrome,ContactSection,PageLayout,FaqList,FinalCta}.tsx,concept/concept.css,pages/*}`، `PROJECT_OVERVIEW.md`، `DEPLOY_NOTES.md` | سایت: پیش‌رندر، ۴۰۴ِ واقعی، صفحه‌های سازمانی/دانلود/امکانات | ۱۴۰۵/۰۷/۱۸ |
+| Claude Code (آرش) | `backend/{alembic/versions/0192_enterprise_free_tier.py,app/services/enterprise_free.py,app/services/enterprise_licenses.py,app/routers/{enterprise_activation,enterprise_license,admin_licenses}.py,app/licensing/state.py,app/schemas/{enterprise,enterprise_admin}.py,app/models/{__init__,enterprise_license_registry}.py,app/{deps,tenancy,rate_limit}.py,app/services/members.py,tests/test_enterprise_free.py}`، `desktop/src/{components/{FreeLicenseForm,LicenseBanner,FeatureUpsell}.tsx,pages/{LicensePage,HelpPage}.tsx,lib/license.ts,api.ts,App.css}`، `admin/src/{api.ts,pages/LicensesPage.tsx}`، `ENTERPRISE_PLAN.md`، `PROJECT_OVERVIEW.md`، `DEPLOY_NOTES.md` | «کوبیتا سازمانی» رایگان: ثبت‌نامِ پیامکی، مجوزِ دائمیِ سه‌کاربره | ۱۴۰۵/۰۷/۱۸ |
+| Claude Code (آرش) | `desktop/build/{installer-os.nsh,installer.nsh,installer-enterprise.nsh,installer-service-guard.ps1}`، `desktop/scripts/dist-enterprise.mjs`، `desktop/package.json` (`nsis.include`)، `desktop/src/pages/HelpPage.tsx`، `PROJECT_OVERVIEW.md`، `DEPLOY_NOTES.md` | نصاب: شرطِ ویندوز ۱۰ (خطای نصبِ سازمانی روی ویندوز ۸) | ۱۴۰۵/۰۷/۱۸ |
+| Claude Code (آرش) | `backend/app/{routers,schemas}/sales_ops.py`، `backend/tests/test_salesperson_wiring.py`، `desktop/src/{pages/sales/{CommissionsPage,SalesOpsPages,SalesListPages}.tsx,components/{DefSheet,Dashboard,moduleLists,moduleSections}.tsx,lib/navModel.tsx,pages/HelpPage.tsx,api.ts,App.css}`، `.claude/skills/cubita-excel-theme/SKILL.md`، `PROJECT_OVERVIEW.md` | «پورسانت»: قاعده و محاسبه یک صفحه با تمِ اکسلی | ۱۴۰۵/۰۷/۱۸ |
+| Codex | desktop/scripts/publish-update.mjs، MARKET_DEFAULT_RELEASE.md | ۱.۹.۱۱ روی کانال امضاشده منتشر شد؛ لینک نصب تازه نیز به همان نصاب وصل شد و انتشار بعدی آن را همگام و سنجش می‌کند | ۱۴۰۵/۰۷/۱۰ |
+
+| Codex | `enterprise_market_local.py`، تست کش/پیوند؛ `pytest` آزاد | اصلاح نهایی #261: پیوند جدید کش گفتگو/بازار و تأیید انتشار قبلی را به ارث نمی‌برد؛ ۱۱ تست پیوند/کش پاس، انتشار همچنان OFF | ۱۴۰۵/۰۷/۰۹ |
+| Codex | بازار سازمانی، مهاجرت `0188`، رابط/ناوبری/ModulesPage، مستندات و تست‌ها؛ ادعای کد و `pytest/alembic` آزاد؛ probe حذف شد | کد و راستی‌آزمایی محلی آمادهٔ PR پیش‌نویس؛ ۴۲۴۸ بک‌اند + راه‌اندازی واقعی PostgreSQL + ۱۴۵ منتخب نهایی، ۱۰۵۲ فرانت‌اند + دو تست کارت، migration round-trip و تطبیق مدل موفق؛ feature OFF، QA بصری/دو نصب واقعی و انتشار باقی است | ۱۴۰۵/۰۷/۰۹ |
+| Codex | یادداشت هشدار و تاریخچهٔ استقرار production #258؛ منابع مستندات آزاد | کاربر `deploy.sh production` را اجرا کرد؛ پیش/پس backup و rollback موجود و خواندنی، hash کد برابر، سرویس فعال، Alembic 0187، health/وب/asset ۲۰۰ و دو مسیر بی‌احراز ۴۰۱. هشدار انجام‌شده پاک و نتیجه در تاریخچه ثبت شد؛ نصب دو رایانه و آزمون حساب کاربر انجام نشده | ۱۴۰۵/۰۷/۰۸ |
+| Codex | یادداشت استقرار و تاریخچهٔ انتشار ۱.۹.۹؛ منابع مستندات آزاد | پس از ادغام #259 کانال امضاشده و لینک پایدار سازمانی ۱.۹.۹ با پشتیبان ۱.۹.۸ منتشر؛ امضا، SHA-256، اندازه و blockmap عمومی تأیید شدند. وب/API فقط در `/tmp` آماده و هنوز مستقر نشده؛ سرویس production و دو نصب اصلی دست‌نخورده‌اند | ۱۴۰۵/۰۷/۰۸ |
+| Codex | نسخه/lock سازمانی ۱.۹.۹، یادداشت استقرار/تاریخچه، بسته‌های production و نصاب؛ بیلد/آزمون آزاد شد | از master ادغام‌شدهٔ #258 بسته‌های وب/API آماده و با هش برابر روی VPS بارگذاری شد؛ نصاب کامل ۱.۹.۹ با ۲۹۰۹ فایل سرور/NSIS/manifest و ۷ آزمون مرتبط پاس. سرویس production، فید سازمانی و دو نصب اصلی هنوز تغییر نکرده‌اند؛ اجرای deploy و ادغام PR انتشار با کاربر است | ۱۴۰۵/۰۷/۰۸ |
+| Codex | ویرایش سند دستی و تاریخچهٔ audit، خروجی Excel اسناد، UI/API/راهنما و آزمون‌ها؛ pytest آزاد شد | سند موقت/دائمِ دستی فقط در دورهٔ باز با دلیل و snapshot کامل اصلاح می‌شود؛ آخرین تغییر بالاست. XLSX دوبرگهٔ RTL با جمع، فیلتر، چاپ و دقتِ اعداد بزرگ. ۴۱۶۶ بک‌اند پاس/یک skip، ۱۰۴۳ فرانت پاس، TypeScript/بیلد/ممیز ۰ و lint مرتبط پاس؛ بدون مهاجرت، نصب یا استقرار، چشمی آزموده نشد | ۱۴۰۵/۰۷/۰۸ |
 | Codex | کانال و شواهد ۱.۹.۸، مستندات؛ ادعای انتشار آزاد | پس از مرج #256 و پنج CI سبز، manifest امضاشده/بلاک‌مپ و نصاب ۱.۹.۸ منتشر؛ دانلود کامل شماره‌دار/پایدار با هش برابر، نسخهٔ ۱.۹.۷ و پشتیبان کانال محفوظ، کانال ابری ثابت. دریافت پیوستهٔ اول با قطع Wi-Fi شکست و آزمونِ ازسرگیر محدودهٔ بایت‌ها پاس شد. بدون نصب/UAC/reboot/داده یا تغییر شبکهٔ دو سیستم اصلی | ۱۴۰۵/۰۷/۰۷ |
 | Codex | بسته‌های production، نسخهٔ ۱.۹.۸ و مستندات؛ بیلد و QA آزاد | کاربر #255 را با پشتیبان پیش/پس و rollback روی production مستقر کرد؛ health/asset ۲۰۰، هش کد برابر، سرویس active و مهاجرت `0187`. نصاب کامل ۱.۹.۸ با CRC و برابری ۲۹۰۹ فایل سرور/asar آمادهٔ PR انتشار؛ کانال سازمانی همچنان ۱.۹.۷، بدون نصب/reboot دو میزبان اصلی. چهار پشتیبان و دو rollback قدیمی در چرخش خودکار حذف شدند | ۱۴۰۵/۰۷/۰۷ |
 | Codex | API/DTO سند، خواندن دسته‌ای نام ثبت‌کننده، فهرست/برگه/CSV، راهنما، آزمون‌ها و مستندات؛ pytest و Vite آزاد | منشأ «دستی» کنار نام واقعی صاحب `created_by_id` است، نه کاربرِ مشاهده‌کننده یا نقشِ حدسی. ۴۱۶۲ بک‌اند/یک skip روی کلاستر دورریختنیِ متوقف و پاک، ۱۰۳۹ فرانت، typecheck/build/ممیز صفر، lint مرتبط و ۳۵ مرورگر در سه پوسته پاس؛ فهرست دسکتاپ/موبایل چشمی دیده شد. بدون migration، تغییر مالی، نصب یا استقرار؛ ادامهٔ PR #255 | ۱۴۰۵/۰۷/۰۷ |
@@ -229,3 +262,25 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 | Claude Opus 5 | `services/check_search.py`, `check_ops.py`, `routers/check_ops.py`, `0115_cheque_traceability.py`, `CheckOpsPages.tsx` | جستجو و ردیابی چک (مهاجرت ۰۱۱۵) | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `models/inventory.py`, `advanced_inventory.py`, `services/items.py`, `units.py`, `pricing.py`, `0117`–`0120`, `ProductsPanel.tsx`, `UnitsPanel.tsx`, `ItemTaxonomyPanel.tsx` | تعریف کالا و خدمت — Item Master (مهاجرت‌های ۰۱۱۷ تا ۰۱۲۰) | ۱۴۰۵/۰۶/۲۰ |
 | Claude Opus 5 | `services/warehouses.py`, `models/inventory.py`, `routers/inventory.py`, `0116_warehouse_master.py`, `WarehousesPanel.tsx` | تعریف و مدیریت انبار (مهاجرت ۰۱۱۶) | ۱۴۰۵/۰۶/۲۰ |
+
+| Codex | نسخه و مستندات انتشار ۱.۹.۱۰ | وب/API بارگذاری با SHA256 برابر؛ سرور کامل selftest موفق؛ بازار خاموش | ۱۴۰۵/۰۷/۰۹ |
+
+| Codex | مستندات انتشار ۱.۹.۱۰ | نصاب کامل منتشر؛ هش و امضای عمومی معتبر؛ وب/API منتظر استقرار کاربر | ۱۴۰۵/۰۷/۰۹ |
+
+| Codex | INV02_AUDIT.md | ممیزی INV-02 و طرح داده/مهاجرت/موتور و ماتریس دامنه‌ها آماده؛ مهاجرت یا کد عملیاتی تغییر نکرد | ۱۴۰۵/۰۷/۱۰ |
+
+| Codex | مستندات انتشار و QA رابط بازار | ۲۴ حالت UI با fixture موفق؛ production ۰۱۸۸/خاموش تأیید؛ آزمون دو نصب منتظر دسترسی | ۱۴۰۵/۰۷/۱۰ |
+| Codex | `_deploy/market-live-qa/*`، مستندات QA بازار | هویت آزمایشی جدا و پیوند؛ دو جهت مالی با یک نصب/دو حساب ابری، مرجوعی، نقد، بازپخش و قطعی پاس؛ سرویس موقت بسته و پرچم عمومی خاموش | ۱۴۰۵/۰۷/۱۰ |
+| Codex | `_deploy/market-activation/*`، مستندات بازار | با درخواست کاربر و تأیید هماهنگی آرش، پل ابر و نصب شکوفه زرین روشن؛ سلامت و sync عمومی موفق؛ هر دو نقش بازار فعال | ۱۴۰۵/۰۷/۱۰ |
+
+| Codex | INV-02 بک‌اند/رابط/مستندات، مهاجرت0189 و آزمون مستقل؛ ادعا آزاد شد | پیاده‌سازی کامل، قرارداد تاریخی عرضه و قیمت خصوصی؛ 269 آزمون نهایی مرتبط و1074 رابط موفق؛ انتشار نشده | ۱۴۰۵/۰۷/۱۲ |
+
+| Codex | نسخه/مستندات۱.۹.۱۲ و بسته‌های انتشار؛ ادعا آزاد شد | نصاب کامل ساخته؛ نصب تازه/ارتقا مستقل پاس؛ وب/API به/tmp منتقل و هش برابر؛ منتظر استقرار دستی و سپس انتشار کانال | 2026-10-06 |
+
+| Codex | ابزار انتشار ویندوز وکانال۱.۹.۱۲؛ ادعا آزاد شد | production0189 سالم،نصاب کامل منتشر،امضا/هش عمومی تأیید؛ بازسازی16MBبا هشتأیید؛پیش‌نویس انتقال حذف؛ QA نصب واقعی باقی | 2026-10-06 |
+
+- 2026-10-06 — Codex: اصلاح روز و ساعت محلی نوبت تعمیرگاه و آزمون عبور از نیمه‌شب UTC تکمیل شد؛ ادعای رابط و گزارش آزاد شد.
+
+- 2026-10-06 — Codex: بستهٔ محلی تعمیرگاه ۱.۹.۱۳، نصب تازه/ارتقای اجرایی جدا تا0190 و گزارش آماده شد؛ ادعای نسخه و گزارش آزاد شد. انتشار/نصب واقعی انجام نشده.
+
+- 2026-10-06 — Codex: PR269 ادغام، پنج CI پاس، ابر0190 و کانال امضاشده۱.۹.۱۳ منتشر؛ نصب محلی با حفظ داده و نقش ارتقا و فقط تعمیرگاه فعال شد. گزارش شواهد تکمیل و ادعا آزاد شد؛ GUI و سرویس‌های زنده آزموده نشده‌اند.

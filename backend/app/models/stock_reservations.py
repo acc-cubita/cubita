@@ -22,6 +22,7 @@
 نه یک نقص. بعداً که بار مشخص شد، یک ردیفِ آزادسازیِ بی‌بار و یک ردیفِ رزروِ
 بار‌دار نوشته می‌شود — و همان جفت، ردِ ممیزیِ جایگزینیِ §۱۳ است.
 """
+from decimal import Decimal
 import uuid
 from datetime import date as date_
 
@@ -84,7 +85,7 @@ class StockReservation(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("stock_batches.id", ondelete="RESTRICT"), nullable=True
     )
     #: علامت‌دار: + رزرو، − آزادسازی/مصرف.
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     kind: Mapped[str] = mapped_column(String(20), default="order", server_default="order")
     event: Mapped[str] = mapped_column(String(20), default="reserve", server_default="reserve")
     source_type: Mapped[str] = mapped_column(String(50), default="", server_default="")

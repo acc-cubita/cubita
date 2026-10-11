@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
 import { createMpListing, updateMpListing, type Listing, type ListingIn } from '../api'
+import type { TransactionUnitPatch } from '../components/TransactionUnitPicker'
 
 /** یک ردیفِ جزءِ پک (کالا + تعداد در پک). */
-export interface PackRow {
+export interface PackRow extends TransactionUnitPatch {
   itemId: string
   qty: string
 }
 
 /** حالتِ فرمِ لیستینگِ «پخشِ من» — مشترکِ فرمِ کلاسیک و ویزارد. */
-export interface ListingFormState {
+export interface ListingFormState extends TransactionUnitPatch {
   kind: 'single' | 'pack'
   title: string
   code: string
@@ -73,14 +74,16 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
       category: l.category,
       isPublished: l.is_published,
       itemId: l.item_id ?? '',
+      unitId: l.kind === 'single' ? l.components[0]?.unit_id || undefined : undefined,
+      observations: l.kind === 'single' ? l.components[0]?.observations || [] : [],
       images: l.images ?? [],
-      minOrderQty: Number(l.min_order_qty) ? String(Number(l.min_order_qty)) : '',
-      maxOrderQty: Number(l.max_order_qty) ? String(Number(l.max_order_qty)) : '',
+      minOrderQty: Number(l.min_order_qty) ? l.min_order_qty : '',
+      maxOrderQty: Number(l.max_order_qty) ? l.max_order_qty : '',
       dailyOrderLimit: Number(l.daily_order_limit) ? String(Number(l.daily_order_limit)) : '',
       extraTrades: l.extra_trades ?? [],
       components:
         l.kind === 'pack' && l.components.length
-          ? l.components.map((c) => ({ itemId: c.item_id, qty: String(Number(c.qty)) }))
+          ? l.components.map((c) => ({ itemId: c.item_id, qty: c.qty, unitId:c.unit_id || undefined, observations:c.observations || [] }))
           : [{ itemId: '', qty: '1' }],
     })
     setMsg(null)
@@ -97,7 +100,7 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
   const packRows = useMemo(() => form.components.filter((r) => r.itemId && Number(r.qty) > 0), [form.components])
 
   // مرحله‌ی «مشخصات» وقتی معتبر است که عنوان داشته باشیم و بسته به نوع، کالا یا حداقل یک جزءِ پک.
-  const detailsValid = !!form.title.trim() && (form.kind === 'single' ? !!form.itemId : packRows.length > 0)
+  const detailsValid = !!form.title.trim() && (form.kind === 'single' ? !!form.itemId && !!form.baseQtyPreview : packRows.length > 0 && packRows.every(row=>!!row.baseQtyPreview))
 
   function buildPayload(): ListingIn {
     return {
@@ -110,12 +113,14 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
       category: form.category.trim(),
       is_published: form.isPublished,
       images: form.images,
-      min_order_qty: Number(form.minOrderQty) || 0,
-      max_order_qty: Number(form.maxOrderQty) || 0,
+      min_order_qty: form.minOrderQty || '0',
+      max_order_qty: form.maxOrderQty || '0',
       daily_order_limit: Number(form.dailyOrderLimit) || 0,
       extra_trades: form.extraTrades,
       item_id: form.kind === 'single' ? form.itemId : null,
-      components: form.kind === 'pack' ? packRows.map((r) => ({ item_id: r.itemId, qty: Number(r.qty) })) : [],
+      unit_id: form.kind === 'single' ? form.unitId : undefined,
+      observations: form.kind === 'single' ? form.observations || [] : [],
+      components: form.kind === 'pack' ? packRows.map((r) => ({ item_id: r.itemId, qty: r.qty, unit_id:r.unitId,observations:r.observations || [] })) : [],
     }
   }
 
@@ -149,6 +154,7 @@ export function useListingDraft({ token, onSaved }: { token: string; onSaved: ()
   }
 
   return {
+    token,
     form,
     setForm,
     editingId,

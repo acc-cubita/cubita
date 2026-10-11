@@ -28,6 +28,8 @@ from app.schemas.manufacturing import (
     ProductionPlanStatusIn,
     ProductionReceiptIn,
 )
+from app.services import units
+from app.services.inventory import lock_items
 from app.services import manufacturing as service
 from app.services import production_reports as reports
 from app.services.idempotency import idempotent
@@ -59,13 +61,17 @@ def create_bom(
     if any(line.component_item_id == data.finished_item_id for line in data.lines):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ نهایی نمی‌تواند جزءِ خودش باشد")
 
+    lock_items(db, [data.finished_item_id, *(line.component_item_id for line in data.lines)])
+    output = units.convert_transaction(db, finished, data.yield_qty, data.unit_id,
+        context="production", observations=data.observations)
     bom = Bom(
         finished_item_id=data.finished_item_id,
         name=data.name,
-        yield_qty=data.yield_qty,
+        yield_qty=output.target_qty,
+        **units.snapshot_fields(output),
         notes=data.notes,
         created_by_id=user.id,
-        lines=[BomLine(component_item_id=line.component_item_id, qty=line.qty) for line in data.lines],
+        lines=service.build_bom_lines(db, data.lines),
     )
     db.add(bom)
     db.flush()
@@ -80,12 +86,23 @@ def update_bom(
     db: Session = Depends(get_db),
     _=Depends(require_permission("manufacturing", "update")),
 ):
-    bom = db.get(Bom, bom_id)
+    bom = db.query(Bom).filter(Bom.id == bom_id).with_for_update().one_or_none()
     if bom is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فرمولِ ساخت یافت نشد")
 
     patch = data.model_dump(exclude_unset=True)
     lines = patch.pop("lines", None)
+    unit_id = patch.pop("unit_id", None)
+    observations = patch.pop("observations", [])
+    if "yield_qty" in patch:
+        lock_items(db, [bom.finished_item_id, *(line.component_item_id for line in (data.lines or []))])
+        finished = db.get(Item, bom.finished_item_id)
+        output = units.convert_transaction(db, finished, data.yield_qty, unit_id,
+            context="production", observations=observations)
+        patch["yield_qty"] = output.target_qty
+        patch.update(units.snapshot_fields(output))
+    elif unit_id is not None or observations:
+        raise HTTPException(400, "برای تغییر واحد بازده، مقدار بازده را نیز وارد کنید")
     for key, value in patch.items():
         setattr(bom, key, value)
 
@@ -96,8 +113,7 @@ def update_bom(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "محصولِ نهایی نمی‌تواند جزءِ خودش باشد")
         bom.lines.clear()
         db.flush()
-        for line in lines:
-            bom.lines.append(BomLine(component_item_id=line["component_item_id"], qty=line["qty"]))
+        bom.lines.extend(service.build_bom_lines(db, data.lines))
 
     db.flush()
     db.refresh(bom)
@@ -110,7 +126,7 @@ def delete_bom(
     db: Session = Depends(get_db),
     _=Depends(require_permission("manufacturing", "delete")),
 ):
-    bom = db.get(Bom, bom_id)
+    bom = db.query(Bom).filter(Bom.id == bom_id).with_for_update().one_or_none()
     if bom is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "فرمولِ ساخت یافت نشد")
     db.delete(bom)
@@ -157,6 +173,12 @@ def change_production_plan_status(
 
 
 # ── تحویلِ مواد به تولید / رسیدِ محصول از تولید ──────────
+@router.post("/production-plans/{plan_id}/material-preview")
+def material_preview(plan_id: UUID, data: ProductionMaterialIssueIn,
+    db: Session = Depends(get_db), _=Depends(require_permission("manufacturing", "view"))):
+    return service.preview_material_issue(db, plan_id, data)
+
+
 @router.post("/production-plans/{plan_id}/issue-materials", response_model=WarehouseIssueOut, status_code=201)
 def issue_materials_to_production(
     plan_id: UUID,

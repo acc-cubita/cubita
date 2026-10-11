@@ -12,6 +12,7 @@
 
 نوشتنِ سند در دو دفتر (روی تأییدِ سفارش) با `tenant_scope` انجام می‌شود؛ اینجا فقط داده.
 """
+from decimal import Decimal
 import uuid
 from datetime import datetime
 
@@ -35,7 +36,7 @@ from app.models.base import TimestampMixin, UUIDPKMixin
 
 LISTING_KINDS = ("single", "pack")
 CONNECTION_STATUSES = ("pending", "approved", "rejected", "blocked")
-ORDER_STATUSES = ("placed", "confirmed", "delivered", "rejected", "shipped", "received", "cancelled")
+ORDER_STATUSES = ("placed", "sync_pending", "confirmed", "delivered", "rejected", "shipped", "received", "cancelled")
 SETTLEMENT_MODES = ("credit", "online")
 ORDER_PAYMENT_STATUSES = ("unpaid", "paid", "refunded")
 COMMISSION_STATUSES = ("pending", "settled")
@@ -122,11 +123,11 @@ class MarketplaceListing(UUIDPKMixin, TimestampMixin, Base):
     #:   daily_order_limit = حداکثر دفعاتِ سفارشِ این کالا در یک روز، به‌ازای هر فروشگاه
     #: **اشانتیون (§۲۵):** «۱۰ کارتن بخر، ۱ کارتن رایگان». صفر = بدونِ
     #: اشانتیون، یعنی رفتارِ امروزِ هر لیستینگی که چیزی اعلام نکرده.
-    bonus_threshold_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
-    bonus_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    bonus_threshold_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
+    bonus_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
 
-    min_order_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
-    max_order_qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    min_order_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
+    max_order_qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
     daily_order_limit: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     #: برای single: کالای متناظرِ خودِ پخش‌کننده (برای کسر از انبارش هنگامِ تأیید). برای
@@ -152,7 +153,10 @@ class MarketplaceListingComponent(UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("items.id", ondelete="CASCADE"), index=True
     )
     item_name: Mapped[str] = mapped_column(String(300), default="")  # snapshot
-    qty: Mapped[float] = mapped_column(Numeric(18, 3), default=1)
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=1)
+    unit_conversion_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    trade_contract_ref: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    trade_unit_name: Mapped[str] = mapped_column(String(50), default="", server_default="", nullable=False)
 
     listing: Mapped["MarketplaceListing"] = relationship(back_populates="components")
 
@@ -262,8 +266,11 @@ class MarketplaceOrderLine(UUIDPKMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(300), default="")  # snapshot
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
-    qty: Mapped[float] = mapped_column(Numeric(18, 3), default=1)
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=1)
     line_total: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
+    # Frozen at placement. A later catalog sync must not change which items a
+    # previously accepted order will move or how its price is allocated.
+    fulfillment_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     order: Mapped["MarketplaceOrder"] = relationship(back_populates="lines")
 
@@ -351,6 +358,7 @@ class MarketplaceMessage(UUIDPKMixin, TimestampMixin, Base):
     sender_tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     sender_role: Mapped[str] = mapped_column(String(20))  # distributor | retailer
     sender_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    sender_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
     body: Mapped[str] = mapped_column(Text)
 
 
@@ -426,7 +434,7 @@ class MarketplaceReturnLine(UUIDPKMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(300), default="")  # snapshot
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
-    qty: Mapped[float] = mapped_column(Numeric(18, 3), default=0)
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0)
     line_total: Mapped[float] = mapped_column(Numeric(18, 0), default=0)
 
     return_: Mapped["MarketplaceReturn"] = relationship(back_populates="lines")

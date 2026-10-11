@@ -1,0 +1,18 @@
+import {useRepairDraftMarker} from './repairDraftContext'
+import { useRepairPanelActive } from './repairPanelActivity'
+import {useEffect,useRef,useState} from 'react'
+import {can,fetchRepairCatalog,fetchRepairServiceProfiles,saveRepairServiceProfile,updateRepairType,type RepairServiceProfile,type RepairDeviceType,type MeResponse} from '../../api'
+import {SearchSelect} from '../../components/SearchSelect'
+import {asciiNumber,rial} from './repairShared'
+export function RepairServiceSettings({token,me,branch,type,types,busy,run,refreshTypes}:{token:string;me:MeResponse;branch:string;type:string;types:RepairDeviceType[];busy:boolean;run:(action:()=>Promise<void>)=>Promise<void>;refreshTypes:()=>Promise<void>}) {
+ const markRepairDraft=useRepairDraftMarker()
+
+ const panelActive = useRepairPanelActive()
+
+ const [catalog,setCatalog]=useState<{id:string;name:string;is_service:boolean}[]>([]),[profiles,setProfiles]=useState<RepairServiceProfile[]>([]),[profileService,setProfileService]=useState(''),[profileCharge,setProfileCharge]=useState('0'),[profileMinutes,setProfileMinutes]=useState('0'),[checks,setChecks]=useState(''),[error,setError]=useState('')
+ const key=useRef(crypto.randomUUID()),kind=types.find(t=>t.id===type)
+ useEffect(()=>{if (!panelActive) return;let alive=true;Promise.all([fetchRepairCatalog(token),fetchRepairServiceProfiles(token,branch)]).then(([c,p])=>{if(alive){setCatalog(c);setProfiles(p)}}).catch(e=>{if(alive)setError(e.message)});return()=>{alive=false}},[token,branch, panelActive])
+ useEffect(()=>setChecks((kind?.quality_checklist??[]).join('\n')),[kind])
+ useEffect(()=>{;key.current=crypto.randomUUID()},[profileService,profileCharge,profileMinutes])
+ return <section className="repair-panel">{error&&<p role="alert">{error}</p>}{can(me,'repair','approve')&&<details><summary>اجرت و زمان پیشنهادی خدمات شعبه</summary><div className="repair-grid"><label>خدمت موجود<SearchSelect aria-label="خدمت موجود" value={profileService} onChange={e=>{markRepairDraft();setProfileService(e.target.value);const p=profiles.find(p=>p.service_id===e.target.value);setProfileCharge(p?.suggested_charge??'0');setProfileMinutes(String(p?.estimated_minutes??0))}}><option value="">انتخاب خدمت</option>{catalog.filter(i=>i.is_service).map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</SearchSelect></label><label>اجرت پیشنهادی (ریال)<input inputMode="numeric" value={profileCharge} onChange={e=>setProfileCharge(e.target.value)}/></label><label>زمان پیشنهادی (دقیقه)<input inputMode="numeric" value={profileMinutes} onChange={e=>setProfileMinutes(e.target.value)}/></label></div><button disabled={busy||!profileService} onClick={()=>run(async()=>{const data={service_id:profileService,previous_revision:profiles.find(p=>p.service_id===profileService)?.revision??0,suggested_charge:rial(profileCharge,'rial'),estimated_minutes:Number(asciiNumber(profileMinutes)),enabled:true};await saveRepairServiceProfile(token,branch,data,key.current);setProfiles(await fetchRepairServiceProfiles(token,branch));key.current=crypto.randomUUID()})}>ثبت نسخهٔ پیشنهاد خدمت</button><p>پیشنهاد خدمت، اجرت یا بدهی ایجاد نمی‌کند؛ ثبت کار واقعی همچنان به برآورد مجاز وابسته است.</p></details>}{can(me,'repair','approve')&&<details><summary>تنظیم چک‌لیست کنترل کیفیت این نوع دستگاه</summary><textarea value={checks} onChange={e=>setChecks(e.target.value)}/><button disabled={busy||!kind} onClick={()=>run(async()=>{if(kind){await updateRepairType(token,kind,kind.diagnostic_checklist??[],checks.split('\n').map(s=>s.trim()).filter(Boolean));await refreshTypes()}})}>ذخیره چک‌لیست</button></details>}</section>
+}

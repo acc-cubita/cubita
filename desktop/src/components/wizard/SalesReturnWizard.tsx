@@ -1,13 +1,15 @@
+import { quantityTotals } from '../../lib/quantityDisplay'
 import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useSalesReturnDraft, type SalesReturnDraft } from '../../lib/salesReturnDraft'
 import { JalaliDatePicker } from '../JalaliDatePicker'
+import { toFaDigits } from '../../lib/jalali'
 import { formatJalali } from '../../lib/jalali'
 import { ReturnableTable, SalesReturnsList } from '../SalesReturnForm'
 import { TaskFlow, type WizardStep } from './TaskFlow'
 import { SearchSelect } from '../../components/SearchSelect'
 
-const fa = (n: number) => n.toLocaleString('fa-IR')
+const fa = (n: number | string) => toFaDigits(String(n))
 
 /** ویزاردِ «برگشت از فروش» برای نسخه‌ی جدید. همان منطقِ فرمِ کلاسیک ([useSalesReturnDraft])
  *  در سه مرحله + پیش‌نمایشِ زنده؛ فهرستِ برگشت‌های گذشته زیرِ ویزارد. */
@@ -152,7 +154,7 @@ function ReviewStep({ r }: { r: SalesReturnDraft }) {
 }
 
 function LivePreview({ r }: { r: SalesReturnDraft }) {
-  const totalQty = r.enteredRows.reduce((s, row) => s + row.qty, 0)
+  const totalQty = quantityTotals(r.enteredRows.map((row) => ({ qty: row.qty, unitKey: row.unit_id ?? row.unit, unitName: row.unit }))).map((group) => `${fa(group.qty)} ${group.unitName}`).join(' · ')
   return (
     <div className="live-preview">
       <p className="live-preview-title">پیش‌نمایشِ برگشت</p>
@@ -160,7 +162,7 @@ function LivePreview({ r }: { r: SalesReturnDraft }) {
       <div className="live-preview-row"><span>تاریخ برگشت</span><strong>{r.returnDate}</strong></div>
       <div className="live-preview-divider" />
       <div className="live-preview-row"><span>تعداد ردیف</span><strong>{r.enteredRows.length.toLocaleString('fa-IR')}</strong></div>
-      <div className="live-preview-row"><span>مجموع مقدار</span><strong>{fa(totalQty)}</strong></div>
+      <div className="live-preview-row"><span>مجموع مقدار</span><strong>{totalQty || '—'}</strong></div>
       <div className="live-preview-row live-preview-total"><span>مبلغ برگشتی</span><strong>{fa(r.enteredTotal)}</strong></div>
     </div>
   )

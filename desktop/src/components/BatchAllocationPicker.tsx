@@ -7,12 +7,15 @@ import {
   fefoOrder,
   fefoPlan,
   totalSellable,
+  quantityAtoms,
   type Allocation,
 } from '../lib/batchAllocation'
 import { formatJalali } from '../lib/jalali'
+import { toFaDigits } from '../lib/jalali'
 import { NumberInput } from './NumberInput'
+import { positiveQuantity } from '../lib/returnQuantity'
 
-const fa = (n: number) => n.toLocaleString('fa-IR')
+const fa = (n: string | number) => toFaDigits(String(n))
 
 /**
  * انتخابِ بارِ یک ردیفِ خروج — پیش‌فرض FEFO، قابلِ نقض (§۱۱).
@@ -35,7 +38,7 @@ export function BatchAllocationPicker({
   token: string
   itemId: string
   warehouseId: string
-  qty: number
+  qty: string | number
   value: Allocation[] | null
   onChange: (next: Allocation[] | null) => void
 }) {
@@ -73,7 +76,7 @@ export function BatchAllocationPicker({
 
   //: پیشنهادِ پیش‌فرض هر بار که مقدار یا کالا عوض شود بازمحاسبه می‌شود — تا وقتی
   //: کاربر صریحاً دست نزده باشد.
-  const suggestion = useMemo(() => (qty > 0 ? fefoPlan(options, qty) : []), [options, qty])
+  const suggestion = useMemo(() => (positiveQuantity(qty || '0') ? fefoPlan(options, qty) : []), [options, qty])
   const current = value ?? suggestion
 
   useEffect(() => {
@@ -96,12 +99,14 @@ export function BatchAllocationPicker({
   }
 
   const byId = new Map(options.map((o) => [o.id, o]))
-  const problem = qty > 0 ? allocationError(current, qty, options) : null
+  const problem = qty ? allocationError(current, qty, options) : null
+  let total = '—'
+  try { total = allocationTotal(current) } catch { /* The validation message explains invalid raw input. */ }
 
   function setQty(batchId: string, raw: string) {
-    const n = Number(raw) || 0
+    const n = raw || '0'
     const next = current.filter((a) => a.batch_id !== batchId)
-    if (n > 0) next.push({ batch_id: batchId, qty: n })
+    if (raw.trim()) next.push({ batch_id: batchId, qty: n })
     onChange(next)
   }
 
@@ -131,7 +136,7 @@ export function BatchAllocationPicker({
                   <tr key={o.id}>
                     <td className="card-title ltr-cell" data-label="بار">{o.batch_number}</td>
                     <td data-label="انقضا">{o.expiry_date ? formatJalali(o.expiry_date) : '—'}</td>
-                    <td className="num" data-label="قابلِ فروش">{fa(Number(o.sellable_qty))}</td>
+                    <td className="num" data-label="قابلِ فروش">{fa(o.sellable_qty)}</td>
                     <td data-label="برداشت">
                       <NumberInput
                         allowDecimal
@@ -147,7 +152,7 @@ export function BatchAllocationPicker({
           </div>
           <div className="batch-allocation-foot">
             <span>
-              جمع: {fa(allocationTotal(current))} از {fa(qty)}
+              جمع: {fa(total)} از {fa(qty)}
             </span>
             <button type="button" onClick={() => { onChange(null); setEditing(false) }}>
               <RotateCcw size={13} /> بازگشت به پیشنهادِ خودکار
@@ -156,7 +161,7 @@ export function BatchAllocationPicker({
         </div>
       )}
       {problem && <div className="hint stock-over">{problem}</div>}
-      {!problem && qty > capacity && (
+      {!problem && positiveQuantity(qty || '0') && quantityAtoms(qty) > quantityAtoms(capacity) && (
         <div className="hint stock-over">
           مجموعِ قابلِ فروشِ بارها {fa(capacity)} است و کمتر از مقدارِ این ردیف.
         </div>

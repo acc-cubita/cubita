@@ -17,6 +17,7 @@ class SalesReturnLineIn(BaseModel):
     item_id: UUID | None = None
     sales_invoice_line_id: UUID | None = None
     qty: Decimal
+    unit_id: UUID | None = None
     return_reason_id: UUID | None = None
     description: str = ""
 
@@ -47,6 +48,11 @@ class SalesReturnLineOut(BaseModel):
     item_id: UUID
     sales_invoice_line_id: UUID | None = None
     qty: Decimal
+    base_qty: Decimal | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     unit_price: Decimal
     unit_cost: Decimal
     return_reason_id: UUID | None = None
@@ -87,6 +93,13 @@ class SalesReturnOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class HistoricalReturnUnitOut(BaseModel):
+    unit_id: UUID
+    unit_name: str
+    remaining: Decimal
+    unit_price: Decimal
+
+
 class ReturnableLineOut(BaseModel):
     """یک **ردیفِ** «قابلِ برگشت» از یک فاکتور.
 
@@ -104,6 +117,7 @@ class ReturnableLineOut(BaseModel):
     already_returned: Decimal
     remaining: Decimal
     unit_price: Decimal
+    return_unit_options: list[HistoricalReturnUnitOut] = []
 
 
 class PurchaseReturnLineIn(BaseModel):
@@ -115,6 +129,7 @@ class PurchaseReturnLineIn(BaseModel):
     #: باید معلوم باشد کدام ورود برگشت می‌خورد.
     warehouse_receipt_line_id: UUID | None = None
     qty: Decimal
+    unit_id: UUID | None = None
     #: «فیِ مرجوعی توافقی». `None` یعنی «همان ارزشِ دفتری» — پس گردشِ عادی
     #: هیچ عددی وارد نمی‌کند و هیچ اختلافی نمی‌سازد.
     agreed_unit_value: Decimal | None = None
@@ -182,6 +197,11 @@ class PurchaseReturnLineOut(BaseModel):
     purchase_invoice_line_id: UUID | None = None
     warehouse_receipt_line_id: UUID | None = None
     qty: Decimal
+    base_qty: Decimal | None = None
+    entered_qty: Decimal | None = None
+    entered_unit_id: UUID | None = None
+    base_unit_id: UUID | None = None
+    unit_conversion_snapshot: dict | None = None
     #: «فی» و «فی تمام‌شده» هر دو — یکی نیستند.
     unit_cost: Decimal
     freight_share: Decimal = Decimal(0)
@@ -279,3 +299,4 @@ class ReceiptReturnableLineOut(BaseModel):
     unit_cost: Decimal
     landed_unit_cost: Decimal
     return_status: str
+    return_unit_options: list[HistoricalReturnUnitOut] = []

@@ -237,7 +237,6 @@ export const LIST_MENUS: Record<string, ListMenuItem[]> = {
     { key: 'crm', section: 'tiers', label: 'سطوح باشگاه', icon: Medal, category: 'باشگاه مشتریان' },
     { key: 'crm', section: 'rewards', label: 'جوایز', icon: Ticket, category: 'باشگاه مشتریان' },
     { key: 'crm', section: 'birthdays', label: 'تولدها', icon: Cake, category: 'باشگاه مشتریان' },
-    { key: 'commissionrulelist', label: 'قواعد پورسانت', icon: Wallet, category: 'پورسانت و گمرک' },
     { key: 'commissionrunlist', label: 'محاسبه‌های پورسانت', icon: Calculator, category: 'پورسانت و گمرک' },
     { key: 'customslist', label: 'اظهارنامه‌های گمرکی', icon: Ship, category: 'پورسانت و گمرک' },
     { key: 'saletypelist', label: 'انواع فروش', icon: Tags, category: DEFINITIONS_SECTION },
@@ -326,7 +325,6 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
   quotationlist: 'مشتریان و فروش',
   returnlist: 'مشتریان و فروش',
   notelist: 'مشتریان و فروش',
-  commissionrulelist: 'مشتریان و فروش',
   commissionrunlist: 'مشتریان و فروش',
   customslist: 'مشتریان و فروش',
   saletypelist: 'مشتریان و فروش',
@@ -401,6 +399,15 @@ export const LIST_PAGE_GROUP: Partial<Record<PageKey, string>> = {
 export type OpsListTarget = PageKey | readonly PageKey[] | 'state' | 'view' | 'none'
 
 export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
+  repair: 'repair',
+  repairintake: 'repairintake',
+  repairmine: 'repairmine',
+  repairservices: 'repairservices',
+  repairharvest: 'repairharvest',
+  repairreports: 'repairreports',
+  repairexchange: 'repairexchange',
+  repairsettings: 'repairsettings',
+
   automation: 'view',
   letternew: 'letterlist',
   ownertxn: 'ownertxnlist', //: ثبت ↔ دفتر — الگوی «فروش اقساطی»
@@ -500,8 +507,8 @@ export const OPS_LIST_MAP: Record<string, OpsListTarget> = {
   invoiceclose: 'state', //: فاکتور را قفل می‌کند، رکوردِ تازه نمی‌سازد
   creditnote: 'notelist',
   contactstatement: 'view', //: خودش گزارش است
-  commission: 'commissionrulelist',
-  commissioncalc: 'commissionrunlist',
+  //: قاعده‌ها برگه‌ی کاملِ خودشان‌اند؛ محاسبه رکورد می‌سازد و دفترش «محاسبه‌های پورسانت» است.
+  commissions: 'commissionrunlist',
   customs: 'customslist',
   saletype: 'saletypelist',
   //: مِسترِ کوچکی که دفترش خودِ همان صفحه است — فرمِ ساخت و جدولِ علت‌ها کنارِ
@@ -855,6 +862,10 @@ export const SECTION_LIST_MAP: Record<string, readonly ListTarget[]> = {
   'checks/payable': ['checkoplist'],
   'checks/return': ['checkoplist'],
   'checks/search': [],
+
+  // ── «پورسانت»: برگه‌ی قاعده‌ها دفترِ خودش است؛ محاسبه به «محاسبه‌های پورسانت» ──
+  'commissions/rules': [],
+  'commissions/calc': ['commissionrunlist'],
 
   // ── ماژول‌هایی که دفتری ندارند ──
   'integration/build': [],

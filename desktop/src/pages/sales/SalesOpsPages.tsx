@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { salesQuantityText } from '../../lib/salesQuantityDisplay'
 import {
   BadgePercent,
   Boxes,
-  Calculator,
   ClipboardList,
   FileSpreadsheet,
   Layers,
@@ -29,8 +29,6 @@ import {
   type ChartAccount,
   type SaleTypeAccounts,
   createBundle,
-  createCommissionRule,
-  createCommissionRun,
   createCustoms,
   createDiscountGroup,
   createNote,
@@ -44,15 +42,12 @@ import {
   createPricingFactor,
   createSaleType,
   createSalesReturnReason,
-  fetchCommissionPreview,
-  fetchCommissionRules,
   fetchContactGroups,
   fetchContacts,
   fetchCurrencies,
   fetchDiscountGroups,
   fetchItemsLive,
   fetchJournalEntriesFiltered,
-  fetchMembers,
   fetchPricingSuggestion,
   fetchSalesInvoices,
   fetchSalesReturnReasons,
@@ -1948,237 +1943,6 @@ export function ProductBundlePage({ token }: { token: string }) {
   )
 }
 
-// ═════════════════ ۵) پورسانت — قاعده‌ها ═════════════════
-
-export function CommissionPage({ token }: { token: string }) {
-  const { msg, submitting, reloadKey, run } = useSubmit()
-  const rules = useAsync(() => fetchCommissionRules(token), [token, reloadKey])
-  const [people, setPeople] = useState<{ id: string; name: string }[]>([])
-  const [salespersonId, setSalespersonId] = useState('')
-  const [rate, setRate] = useState('')
-  const [basis, setBasis] = useState<'net' | 'profit'>('net')
-
-  useEffect(() => {
-    fetchMembers(token)
-      .then((r) => setPeople(r.members.map((m) => ({ id: m.user_id, name: m.name || m.email }))))
-      .catch(() => setPeople([]))
-  }, [token])
-
-  const rows = rules.data ?? []
-  return (
-    <OpsPage
-      icon={Wallet}
-      title="پورسانت"
-      description="نرخِ پورسانتِ هر فروشنده. هر فروشنده یک قاعده دارد؛ محاسبه در منوی «محاسبه پورسانت» انجام می‌شود."
-    >
-      <FormCard
-        icon={Wallet}
-        title="قاعده‌ی تازه"
-        description="مبنا یا خالصِ فاکتور است یا سودِ ناخالص — انتخابش اثرِ بزرگی روی عدد دارد."
-        msg={msg}
-        submitting={submitting}
-        disabled={!salespersonId || !Number(rate)}
-        onSubmit={() =>
-          void run(async () => {
-            await createCommissionRule(token, {
-              salesperson_id: salespersonId,
-              rate: Number(rate),
-              basis,
-              is_active: true,
-              description: '',
-            })
-            setSalespersonId('')
-            setRate('')
-          }, 'قاعده‌ی پورسانت ثبت شد.')
-        }
-      >
-        <label>
-          فروشنده
-          <SearchSelect value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)}>
-            <option value="">— انتخاب کنید —</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </SearchSelect>
-        </label>
-        <label>
-          نرخ (درصد)
-          <NumberInput value={rate} onChange={setRate} allowDecimal />
-        </label>
-        <label>
-          مبنا
-          <SearchSelect value={basis} onChange={(e) => setBasis(e.target.value as 'net' | 'profit')}>
-            <option value="net">خالصِ فاکتور</option>
-            <option value="profit">سودِ ناخالص</option>
-          </SearchSelect>
-        </label>
-      </FormCard>
-
-      <SectionCard icon={Users} title="قاعده‌های ثبت‌شده" description={`${faInt(rows.length)} فروشنده`}>
-        <AsyncBlock
-          loading={rules.loading}
-          error={rules.error}
-          empty={rows.length === 0}
-          emptyText="هنوز قاعده‌ای ثبت نشده. بالا یک فروشنده و نرخش را اضافه کنید."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>فروشنده</th>
-                  <th>نرخ</th>
-                  <th>مبنا</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td className="card-title" data-label="فروشنده">
-                      {r.salesperson_name}
-                    </td>
-                    <td className="num" data-label="نرخ">
-                      {fa(r.rate)}٪
-                    </td>
-                    <td data-label="مبنا">{r.basis === 'profit' ? 'سودِ ناخالص' : 'خالصِ فاکتور'}</td>
-                    <td data-label="وضعیت">
-                      <span className={`status-badge ${r.is_active ? 'tone-success' : 'tone-default'}`}>
-                        {r.is_active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
-// ═════════════════ ۶) محاسبه پورسانت ═════════════════
-
-export function CommissionCalcPage({ token }: { token: string }) {
-  const range = useRange('month')
-  const { msg, submitting, reloadKey, run } = useSubmit()
-  const [note, setNote] = useState('')
-
-  const preview = useAsync(
-    () =>
-      range.from && range.to
-        ? fetchCommissionPreview(token, range.from, range.to)
-        : Promise.resolve({ date_from: '', date_to: '', total_amount: '0', rows: [] }),
-    [token, range.from, range.to, reloadKey],
-  )
-  const rows = preview.data?.rows ?? []
-
-  return (
-    <OpsPage
-      icon={Calculator}
-      title="محاسبه پورسانت"
-      description="پورسانتِ بازه را حساب و ذخیره می‌کند. ذخیره‌شده دیگر عوض نمی‌شود — حتی اگر فاکتوری بعداً باطل شود."
-      head={
-        <div className="cc-head">
-          <RangeBar range={range} />
-          <div className="cc-summary">
-            <Metric icon={<Users size={14} />} label="فروشنده" value={faInt(rows.length)} />
-            <Metric
-              icon={<Wallet size={14} />}
-              label="جمعِ پورسانت"
-              value={faAmount(preview.data?.total_amount ?? 0)}
-              tone="out"
-            />
-          </div>
-        </div>
-      }
-    >
-      <SectionCard
-        icon={Calculator}
-        title="پیش‌نمایشِ محاسبه"
-        description="تا وقتی ذخیره نکنید، چیزی ثبت نمی‌شود."
-        actions={
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={submitting || rows.length === 0 || !range.from || !range.to}
-            onClick={() =>
-              void run(async () => {
-                await createCommissionRun(token, {
-                  date_from: range.from as string,
-                  date_to: range.to as string,
-                  note,
-                })
-                setNote('')
-              }, 'محاسبه ذخیره شد.')
-            }
-          >
-            <Calculator size={14} /> ذخیره‌ی محاسبه
-          </button>
-        }
-      >
-        <Note msg={msg} />
-        <div className="acc-filters">
-          <label className="acc-inline-field">
-            توضیحِ این محاسبه
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="مثلاً «تیرِ ۱۴۰۵»"
-            />
-          </label>
-        </div>
-        <AsyncBlock
-          loading={preview.loading}
-          error={preview.error}
-          empty={rows.length === 0}
-          emptyText="در این بازه پورسانتی نیست — یا فاکتوری با فروشنده ثبت نشده، یا قاعده‌ای تعریف نشده."
-        >
-          <div className="table-scroll">
-            <table className="cards-on-mobile acc-table">
-              <thead>
-                <tr>
-                  <th>فروشنده</th>
-                  <th>تعداد فاکتور</th>
-                  <th>مبنا</th>
-                  <th>مبلغِ مبنا</th>
-                  <th>نرخ</th>
-                  <th>پورسانت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.salesperson_id}>
-                    <td className="card-title" data-label="فروشنده">
-                      {r.salesperson_name}
-                    </td>
-                    <td className="num" data-label="تعداد فاکتور">
-                      {faInt(r.invoice_count)}
-                    </td>
-                    <td data-label="مبنا">{r.basis === 'profit' ? 'سودِ ناخالص' : 'خالص'}</td>
-                    <td className="num" data-label="مبلغِ مبنا">
-                      {faAmount(r.base_amount)}
-                    </td>
-                    <td className="num" data-label="نرخ">
-                      {fa(r.rate)}٪
-                    </td>
-                    <td className="num" data-label="پورسانت">
-                      {faAmount(r.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </AsyncBlock>
-      </SectionCard>
-    </OpsPage>
-  )
-}
-
 // ═════════════════ ۷) اظهارنامه گمرکی ═════════════════
 
 export function CustomsPage({ token }: { token: string }) {
@@ -2323,13 +2087,13 @@ export function SalesBrowsePage({ token }: { token: string }) {
               <Metric
                 icon={<Boxes size={14} />}
                 label="فروخته / خارج‌شده"
-                value={`${fa(sum.sold_qty)} / ${fa(sum.issued_qty)}`}
+                value={`${salesQuantityText(sum, 'sold_qty')} / ${salesQuantityText(sum, 'issued_qty')}`}
               />
-              {Number(sum.unissued_qty) !== 0 && (
+              {(sum.quantity_totals?.some((group) => Number(group.unissued_qty) !== 0) || (!sum.quantity_totals && Number(sum.unissued_qty) !== 0)) && (
                 <Metric
                   icon={<Ship size={14} />}
                   label="فروخته و نرفته"
-                  value={fa(sum.unissued_qty)}
+                  value={salesQuantityText(sum, 'unissued_qty')}
                   tone="out"
                 />
               )}
@@ -2373,7 +2137,7 @@ type ViewProps = { token: string; scope: SalesReviewScope; cacheKey: string }
 function GapCell({ value }: { value: string }) {
   const n = Number(value || 0)
   if (n === 0) return <>—</>
-  return <span className={n > 0 ? 'stock-over' : undefined}>{fa(value)}</span>
+  return <span className={n > 0 ? 'stock-over' : undefined}>{toFaDigits(value)}</span>
 }
 
 function SalesItemsView({ token, scope, cacheKey }: ViewProps) {
@@ -2415,16 +2179,16 @@ function SalesItemsView({ token, scope, cacheKey }: ViewProps) {
                 </td>
                 <td data-label="واحد">{r.unit_name || '—'}</td>
                 <td className="num" data-label="فروخته">
-                  {fa(r.sold_qty)}
+                  {salesQuantityText(r, 'sold_qty')}
                   {r.sold_qty_secondary != null && (
                     <span className="field-hint">
                       {fa(r.sold_qty_secondary)} {r.secondary_unit_name}
                     </span>
                   )}
                 </td>
-                <td className="num" data-label="برگشت">{fa(r.returned_qty)}</td>
+                <td className="num" data-label="برگشت">{salesQuantityText(r, 'returned_qty')}</td>
                 <td className="num" data-label="خارج‌شده">
-                  {r.is_service ? '—' : fa(r.issued_qty)}
+                  {r.is_service ? '—' : salesQuantityText(r, 'issued_qty')}
                 </td>
                 <td className="num" data-label="فروخته و نرفته">
                   {r.is_service ? '—' : <GapCell value={r.unissued_qty} />}
@@ -2486,8 +2250,8 @@ function SalesCustomersView({ token, scope, cacheKey }: ViewProps) {
                 <td className="card-title" data-label="مشتری">{r.contact_name}</td>
                 <td data-label="گروه">{r.group_name || '—'}</td>
                 <td className="num" data-label="فاکتور">{faInt(r.invoice_count)}</td>
-                <td className="num" data-label="فروخته">{fa(r.sold_qty)}</td>
-                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="فروخته">{salesQuantityText(r, 'sold_qty')}</td>
+                <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
                 <td className="num" data-label="ناخالص">{faAmount(r.gross_amount)}</td>
                 <td className="num" data-label="تخفیف">{faAmount(r.discount)}</td>
                 <td className="num" data-label="برگشت">{faAmount(r.return_amount)}</td>
@@ -2540,8 +2304,8 @@ function DocumentsTable({ rows, cacheKey, voided }: { rows: SalesReviewDocument[
               <td data-label="مشتری">{r.contact_name}</td>
               <td data-label="نوع فروش">{r.sale_type_name || '—'}</td>
               <td className="num" data-label="ردیف">{faInt(r.line_count)}</td>
-              <td className="num" data-label="فروخته">{fa(r.sold_qty)}</td>
-              <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+              <td className="num" data-label="فروخته">{salesQuantityText(r, 'sold_qty')}</td>
+              <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
               <td className="num" data-label="ناخالص">{faAmount(r.gross_amount)}</td>
               <td className="num" data-label="تخفیف">{faAmount(r.discount)}</td>
               <td className="num" data-label="مالیات">{faAmount(r.tax)}</td>
@@ -2641,14 +2405,14 @@ function SalesLinesView({ token, scope, cacheKey }: ViewProps) {
                   {r.warehouse_names.length ? r.warehouse_names.join('، ') : '—'}
                 </td>
                 <td className="num" data-label="فروخته">
-                  {fa(r.sold_qty)}
+                  {salesQuantityText(r, 'sold_qty')}
                   {r.sold_qty_secondary != null && (
                     <span className="field-hint">{fa(r.sold_qty_secondary)}</span>
                   )}
                 </td>
-                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
-                <td className="num" data-label="برگشت">{fa(r.returned_qty)}</td>
-                <td className="num" data-label="فی">{faAmount(r.unit_price)}</td>
+                <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
+                <td className="num" data-label="برگشت">{salesQuantityText(r, 'returned_qty')}</td>
+                <td className="num" data-label="فی">{faAmount(r.unit_price)}{'entered_unit_price' in r && r.entered_qty != null && <span className="field-hint">{toFaDigits(r.entered_qty)} {r.entered_unit_name} × {faAmount(r.entered_unit_price)}</span>}</td>
                 <td className="num" data-label="خالص">{faAmount(r.net_sales)}</td>
               </tr>
             ))}
@@ -2691,7 +2455,7 @@ function SalesWarehousesView({ token, scope, cacheKey }: ViewProps) {
                 <td className="card-title" data-label="انبار">{r.warehouse_name}</td>
                 <td className="num" data-label="سندِ خروج">{faInt(r.issue_count)}</td>
                 <td className="num" data-label="فاکتور">{faInt(r.invoice_count)}</td>
-                <td className="num" data-label="مقدارِ خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="مقدارِ خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
                 <td className="num" data-label="بهای تمام‌شده">{faAmount(r.issued_cost)}</td>
               </tr>
             ))}
@@ -2744,9 +2508,9 @@ function PreinvoiceProgressView({ token, scope, cacheKey }: ViewProps) {
                   <span className="status-badge tone-default">{r.status}</span>
                 </td>
                 <td className="card-wide" data-label="کالا/خدمت">{r.item_name}</td>
-                <td className="num" data-label="پیشنهادشده">{fa(r.quoted_qty)}</td>
-                <td className="num" data-label="فاکتورشده">{fa(r.invoiced_qty)}</td>
-                <td className="num" data-label="خارج‌شده">{fa(r.issued_qty)}</td>
+                <td className="num" data-label="پیشنهادشده">{toFaDigits(r.quoted_qty)} {r.unit_name}</td>
+                <td className="num" data-label="فاکتورشده">{toFaDigits(r.invoiced_qty)} {r.unit_name}</td>
+                <td className="num" data-label="خارج‌شده">{salesQuantityText(r, 'issued_qty')}</td>
                 <td className="num" data-label="ماندهٔ فاکتورشدنی">
                   <GapCell value={r.remaining_invoiceable} />
                 </td>

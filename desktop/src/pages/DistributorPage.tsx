@@ -36,6 +36,9 @@ import { useListingDraft } from '../lib/listingDraft'
 import { formatJalali } from '../lib/jalali'
 import { useGuidedForms } from '../lib/experienceMode'
 import { SearchSelect } from '../components/SearchSelect'
+import { EnterpriseMarketCatalogCard } from '../components/EnterpriseMarketCatalogCard'
+import { EnterpriseMarketStatus } from '../components/EnterpriseMarketStatus'
+import { TransactionUnitPicker } from '../components/TransactionUnitPicker'
 
 const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }> = {
   pending: { label: 'در انتظارِ تأیید', tone: 'tone-warning' },
@@ -46,6 +49,7 @@ const CONN_BADGE: Record<MpConnection['status'], { label: string; tone: string }
 
 export const ORDER_BADGE: Record<MpOrder['status'], { label: string; tone: string }> = {
   placed: { label: 'ثبت‌شده', tone: 'tone-warning' },
+  sync_pending: { label: 'در انتظار همگام‌سازی مالی', tone: 'tone-warning' },
   confirmed: { label: 'تأییدشده', tone: 'tone-success' },
   delivered: { label: 'تحویل‌شده', tone: 'tone-success' },
   rejected: { label: 'ردشده', tone: 'tone-danger' },
@@ -60,7 +64,9 @@ const faPeriod = (p: string) =>
   p.replace('-', '/').replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
 
 /** ماژولِ «پخشِ من» — کاتالوگ (تکی/پک) + تنظیماتِ تسویه. فقط حسابِ distributor. */
-export function DistributorPage({ token, items }: { token: string; items: ItemCache[] }) {
+export function DistributorPage({ token, items, enterprise = false, isOwner = false }: {
+  token: string; items: ItemCache[]; enterprise?: boolean; isOwner?: boolean
+}) {
   const nav = useNavSection()
   // فعال‌بودنِ حضور در بازار — برای بنرِ هشدار. null=هنوز نمی‌دانیم (بنر نشان نده).
   const [active, setActive] = useState<boolean | null>(null)
@@ -76,6 +82,7 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
         description="محصولاتتان را (تکی یا در قالبِ پکِ چندمحصولی) در بازار منتشر کنید. با تأییدِ سفارشِ فروشگاه، کالا از انبارِ شما کم و به انبارِ او افزوده می‌شود."
       />
 
+      {enterprise && <EnterpriseMarketStatus token={token} side="seller" />}
       {active === false && (
         <div className="mp-inactive-banner">
           <AlertCircle size={20} />
@@ -93,6 +100,7 @@ export function DistributorPage({ token, items }: { token: string; items: ItemCa
         syncPage="distributor"
         tabs={[
           { key: 'catalog', label: 'کاتالوگ', icon: Package, content: <Catalog token={token} items={items} /> },
+          ...(enterprise && isOwner ? [{ key: 'enterprise-mapping', label: 'انتشار سازمانی', icon: Link2, content: <EnterpriseMarketCatalogCard token={token} /> }] : []),
           { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, content: <OrdersPanel token={token} /> },
           { key: 'returns', label: 'مرجوعی‌ها', icon: Undo2, content: <MpDistributorReturns token={token} /> },
           { key: 'connections', label: 'اتصال‌ها', icon: Link2, content: <ConnectionsPanel token={token} /> },
@@ -187,11 +195,10 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
         {form.kind === 'single' ? (
           <div className="field-row">
             <label>کالا (از انبارِ خودتان)
-              <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id })} />
+              <ItemPicker items={items} value={form.itemId} onChange={(id) => setForm({ ...form, itemId: id,unitId:undefined,observations:[],baseQtyPreview:undefined })} />
             </label>
-            <label>واحد
-              <input type="text" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-            </label>
+            <TransactionUnitPicker token={token} itemId={form.itemId} qty="1" unitId={form.unitId}
+              observations={form.observations} context="sale" onChange={patch=>setForm(previous=>({...previous,...patch,unit:patch.unitName || previous.unit}))} />
           </div>
         ) : (
           <div className="table-scroll">
@@ -200,7 +207,9 @@ function Catalog({ token, items }: { token: string; items: ItemCache[] }) {
               <tbody>
                 {form.components.map((r, i) => (
                   <tr key={i}>
-                    <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id })} /></td>
+                    <td data-label="کالا"><ItemPicker items={items} value={r.itemId} onChange={(id) => draft.setPackRow(i, { itemId: id,unitId:undefined,observations:[],baseQtyPreview:undefined })} />
+                      <TransactionUnitPicker token={token} itemId={r.itemId} qty={r.qty} unitId={r.unitId}
+                        observations={r.observations} context="sale" onChange={patch=>draft.setPackRow(i,patch)} /></td>
                     <td data-label="تعداد"><NumberInput allowDecimal value={r.qty} onChange={(v) => draft.setPackRow(i, { qty: v })} /></td>
                     <td className="card-actions"><button type="button" className="icon-btn-danger" onClick={() => draft.removePackRow(i)} disabled={form.components.length === 1} aria-label="حذف"><Trash2 size={14} /></button></td>
                   </tr>

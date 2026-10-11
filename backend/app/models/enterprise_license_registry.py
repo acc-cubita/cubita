@@ -58,6 +58,27 @@ class EnterpriseLicenseRecord(UUIDPKMixin, TimestampMixin, Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    #: paid | free — «free» از ثبت‌نامِ رایگانِ خودِ مشتری می‌آید (`services/enterprise_free.py`):
+    #: دائمی، با سقفِ کاربر و بی قابلیت‌های پولی. ارتقا یعنی مجوزِ پولیِ جدا، نه ویرایشِ این ردیف.
+    tier: Mapped[str] = mapped_column(String(16), nullable=False, default="paid", server_default="paid", index=True)
+
+
+class EnterpriseFreeCode(UUIDPKMixin, TimestampMixin, Base):
+    """کدِ پیامکیِ ثبت‌نامِ رایگان — پیش از وجودِ هر مجوز یا کاربری در ابر.
+
+    هم‌شکلِ `email_verification_codes`: کلید خودِ شماره است، فقط هشِ نمک‌خورده ذخیره
+    می‌شود و سقفِ تلاش دارد. کد به **همان نصب** هم گره می‌خورد (`install_id` در نمک)، تا کدی
+    که برای یک سرور فرستاده شده مجوزِ سرورِ دیگری را نسازد.
+    """
+
+    __tablename__ = "enterprise_free_codes"
+
+    #: موبایلِ نرمال‌شده (۰۹xxxxxxxxx).
+    phone: Mapped[str] = mapped_column(String(20), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
 
 class EnterpriseLicenseEvent(Base):
     """تاریخچه‌ی یک مجوز: ساخت، فعال‌سازی، صدورِ آفلاین، انتقال، ابطال، ردِ فعال‌سازی.

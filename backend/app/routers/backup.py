@@ -75,6 +75,10 @@ def _skip_tables() -> set[str]:
         for fk in table.foreign_keys:
             if is_tenant_table(fk.column.table.name):
                 skip.add(fk.column.table.name)
+    # The existing cloud broker policy preserves items. Preserve their unit
+    # registry together with them; replacing only units breaks the retained FK.
+    if "items" in skip:
+        skip.update({"units_of_measure", "item_units", "item_unit_conversions", "batch_unit_conversions"})
     return skip
 
 
@@ -313,6 +317,8 @@ def import_backup(
     if not isinstance(tables_data, dict):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "فایلِ پشتیبان محتوای معتبری ندارد.")
 
+    from app.services.units import normalize_backup_item_units
+    tables_data = normalize_backup_item_units(tables_data)
     ordered = _tenant_tables_in_order()
     tenant_id = principal.tenant_id
 
@@ -358,7 +364,18 @@ def import_backup(
                 if row.get(c) is not None:
                     row[c] = user_map.get(row[c], row[c])
             params.append(row)
-        db.execute(table.insert(), params)
+        # Old backups and newly normalized units can have different column sets.
+        # Let server defaults fill omitted columns instead of inventing timestamps.
+        batches = []
+        columns = None
+        for row in params:
+            row_columns = tuple(sorted(row))
+            if row_columns != columns:
+                batches.append([])
+                columns = row_columns
+            batches[-1].append(row)
+        for batch in batches:
+            db.execute(table.insert(), batch)
         restored[table.name] = len(params)
 
     return {"restored": True, "tables": restored, "total_rows": sum(restored.values())}

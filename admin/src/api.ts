@@ -374,6 +374,8 @@ export interface EnterpriseLicense {
   note: string | null
   created_by_email: string | null
   created_at: string
+  /** free = ثبت‌نامِ رایگانِ خودِ مشتری (دائمی، سه کاربر، بی‌مؤدیان) */
+  tier: 'paid' | 'free'
 }
 
 export interface EnterpriseLicenseEvent {
@@ -396,6 +398,8 @@ export interface EnterpriseLicenseInput {
   grace_days?: number
   feat?: string[] | null
   note?: string | null
+  /** free: سقف/مدت/قابلیت‌ها را سرور از سیاستِ رایگان می‌گذارد و فیلدهای بالا نادیده‌اند */
+  tier?: 'paid' | 'free'
 }
 
 export interface EnterpriseLicenseUpdate {

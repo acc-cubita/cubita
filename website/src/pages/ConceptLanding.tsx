@@ -1,5 +1,3 @@
-import { useState } from 'react'
-import { MotionConfig, motion } from 'framer-motion'
 import {
   BarChart3,
   ReceiptText,
@@ -25,7 +23,6 @@ import {
   MousePointerClick,
   Settings2,
   Rocket,
-  ChevronDown,
   DatabaseZap,
   Users,
   Download,
@@ -34,25 +31,22 @@ import {
   MessagesSquare,
   PhoneCall,
 } from 'lucide-react'
-import { ContactSection, openContact } from '../concept/ContactSection'
-import {
-  ANDROID_APK_URL,
-  APP_URL,
-  DOWNLOAD_URL,
-  ENTERPRISE_DOWNLOAD_URL,
-  SiteFooter,
-  SiteHeader,
-  TRIAL_URL,
-} from '../concept/SiteChrome'
+import { ContactSection } from '../concept/ContactSection'
+import { FaqList } from '../concept/FaqList'
+import { FinalCta } from '../concept/FinalCta'
+import { PageLayout } from '../concept/PageLayout'
 import { BRAND_CELLS } from '../concept/brand'
-import '../concept/concept.css'
+import { HOME_FAQS } from '../content/home'
+import { ANDROID_APK_URL, APP_URL, DOWNLOAD_URL, ENTERPRISE_DOWNLOAD_URL, TRIAL_URL } from '../content/links'
+import type { PageMeta } from '../seo/meta'
+import { HOME_META } from '../seo/pages'
 
 //: چهار واقعیتِ پایه‌ای که کنارِ متنِ هیرو می‌نشینند — جایگزینِ خوشه‌ی کارت‌های شناور، به
 //: خواستِ کاربر («سایت ساده، اداری و شیک باشد»).
 const FACTS = [
-  { icon: DatabaseZap, value: 'داده‌ی ایزوله', label: 'اطلاعاتِ هر کسب‌وکار در پایگاه‌داده‌ی جدا' },
+  { icon: DatabaseZap, value: 'داده‌ی ایزوله', label: 'جداسازیِ داده‌ی هر کسب‌وکار در سطحِ پایگاه‌داده' },
   { icon: MonitorSmartphone, value: 'وب، ویندوز، اندروید', label: 'یک حساب، سه نسخه‌ی هم‌گام' },
-  { icon: Building2, value: 'نسخه‌ی سازمانی', label: 'سرور در خودِ شرکت، حسابدارها روی شبکه‌ی داخلی' },
+  { icon: Building2, value: 'سازمانیِ رایگان', label: 'سرور در خودِ شرکت، تا سه کاربر رایگان' },
   { icon: Users, value: 'چندکاربره', label: 'نقش‌های مدیر، حسابدار، فروشنده، انباردار' },
 ]
 
@@ -82,10 +76,9 @@ const PLATFORMS = [
     icon: Building2,
     title: 'کوبیتا سازمانی',
     desc: 'برای شرکت‌ها و سازمان‌ها: یک رایانه‌ی شرکت سرور می‌شود و حسابدارها از شبکه‌ی داخلی وصل می‌شوند — داده از شرکت بیرون نمی‌رود.',
-    points: ['سرور و کلاینت روی شبکه‌ی داخلی', 'داده‌ی کاملاً درون‌سازمانی', 'فعال‌سازی با کدِ مجوز'],
-    action: { href: ENTERPRISE_DOWNLOAD_URL, label: 'دانلودِ نصاب', download: true },
-    //: نصاب ۳۰ روز آزمایشی کار می‌کند؛ برای کارِ واقعی کدِ مجوز لازم است — از همان فرمِ خرید.
-    contact: 'enterprise' as const,
+    points: ['رایگان و همیشگی تا سه کاربر', 'سرور و کلاینت روی شبکه‌ی داخلی', 'داده‌ی کاملاً درون‌سازمانی'],
+    action: { href: ENTERPRISE_DOWNLOAD_URL, label: 'دانلودِ رایگان', download: true },
+    more: { href: '/enterprise', label: 'معرفی و مقایسه' },
   },
 ]
 
@@ -101,13 +94,14 @@ const INDUSTRIES = [
   { icon: ShoppingCart, label: 'فروشگاه اینترنتی' },
 ]
 
+//: هر کارت به صفحه‌ی امکاناتِ خودش می‌رود (`/features/...`) — پیوندِ داخلی با متنِ کلیدواژه.
 const FEATURES = [
-  { icon: ReceiptText, title: 'فروش و فاکتور', desc: 'صدورِ فاکتور، پیش‌فاکتور و رسید در چند ثانیه — با ثبتِ خودکارِ سندِ حسابداری.' },
-  { icon: BarChart3, title: 'گزارش‌های زنده', desc: 'ترازنامه، سود و زیان و دفترِ کل، همیشه به‌روز و مستقیم از دلِ دفاتر.' },
-  { icon: Calculator, title: 'حسابداریِ دوطرفه', desc: 'دفترِ کل، سندِ دستی و خودکار، و بستنِ دوره — دقیق و استاندارد.' },
-  { icon: CreditCard, title: 'صندوق و پرداخت', desc: 'صندوقِ فروشگاهی، کارت‌خوان و مدیریتِ دریافت و پرداختِ روزانه.' },
-  { icon: Landmark, title: 'چک و بانک', desc: 'دفترِ چک، مغایرت‌گیریِ بانکی و سررسیدها — بدونِ دفترچه و اکسل.' },
-  { icon: BookOpen, title: 'انبار و کاردکس', desc: 'کاردکس، قیمتِ تمام‌شده و موجودیِ لحظه‌ای، گره‌خورده با حسابداری.' },
+  { icon: ReceiptText, title: 'فروش و فاکتور', desc: 'صدورِ فاکتور، پیش‌فاکتور و رسید در چند ثانیه — با ثبتِ خودکارِ سندِ حسابداری.', slug: 'sales-invoice' },
+  { icon: BarChart3, title: 'گزارش‌های زنده', desc: 'ترازنامه، سود و زیان و دفترِ کل، همیشه به‌روز و مستقیم از دلِ دفاتر.', slug: 'accounting' },
+  { icon: Calculator, title: 'حسابداریِ دوطرفه', desc: 'دفترِ کل، سندِ دستی و خودکار، و بستنِ دوره — دقیق و استاندارد.', slug: 'accounting' },
+  { icon: CreditCard, title: 'صندوق و پرداخت', desc: 'صندوقِ فروشگاهی، کارت‌خوان و مدیریتِ دریافت و پرداختِ روزانه.', slug: 'pos' },
+  { icon: Landmark, title: 'چک و بانک', desc: 'دفترِ چک، مغایرت‌گیریِ بانکی و سررسیدها — بدونِ دفترچه و اکسل.', slug: 'cheque-bank' },
+  { icon: BookOpen, title: 'انبار و کاردکس', desc: 'کاردکس، قیمتِ تمام‌شده و موجودیِ لحظه‌ای، گره‌خورده با حسابداری.', slug: 'inventory' },
 ]
 
 const STEPS = [
@@ -122,25 +116,6 @@ const WHY = [
   { icon: Layers, title: 'آنلاین و آفلاین', desc: 'یک حساب، هم روی مرورگر و هم روی نسخه‌ی آفلاینِ ویندوز — همیشه هم‌گام.' },
   { icon: ShieldCheck, title: 'داده‌ی ایزوله و امن', desc: 'اطلاعاتِ هر کسب‌وکار در سطحِ پایگاه‌داده جدا و محافظت‌شده است.' },
 ]
-
-const FAQS = [
-  { q: 'آیا داده‌های کسب‌وکار من امن است؟', a: 'بله. هر مشتری روی یک نسخه‌ی کاملاً ایزوله (دیتابیس، سرویس و آدرس اختصاصی) اجرا می‌شود؛ داده‌ی هیچ کسب‌وکاری با دیگری در یک دیتابیس مشترک نیست. اتصال هم همیشه از طریق HTTPS رمزنگاری‌شده است.' },
-  { q: 'نسخه‌ی آزمایشیِ رایگان چطور کار می‌کند؟', a: 'ثبت‌نام می‌کنید و ۱۴ روز کاملِ رایگان همه‌ی امکاناتِ اصلی را دارید. اگر خرید کنید، همه‌ی اطلاعاتِ دوره‌ی آزمایشی حفظ می‌شود.' },
-  { q: 'اگر اینترنت قطع شود چه اتفاقی می‌افتد؟', a: 'نسخه‌ی ویندوز کاملاً آفلاین کار می‌کند: فاکتور، سندِ حسابداری و بقیه‌ی عملیات محلی ذخیره می‌شوند و با اتصالِ دوباره، خودکار با سرورِ مرکزی هم‌گام می‌شوند.' },
-  { q: 'چند نفر می‌توانند هم‌زمان استفاده کنند؟', a: 'به اندازه‌ی نیازتان — هر کاربر با نقشِ مشخص (مدیر، حسابدار، فروشنده، انباردار، مسئولِ حقوق) و دسترسیِ محدود به همان بخش. تعدادِ کاربر را در فرمِ «خرید و مشاوره» بنویسید.' },
-  { q: 'چطور بخرم؟', a: 'فرمِ «خرید و مشاوره» پایینِ همین صفحه را پر کنید. کارشناسِ فروش در ساعاتِ کاری تماس می‌گیرد، بر اساسِ کسب‌وکار و تعدادِ کاربرتان نسخه‌ی مناسب را پیشنهاد می‌کند و قیمت را می‌گوید.' },
-  { q: 'کوبیتا سازمانی چه فرقی دارد؟', a: 'کوبیتا سازمانی روی سرورِ خودِ شرکت نصب می‌شود و حسابدارها از رایانه‌های شبکه‌ی داخلی وصل می‌شوند؛ داده هیچ‌وقت از شرکت بیرون نمی‌رود و به اینترنت هم نیازی نیست. نصاب را دانلود کنید — ۳۰ روز آزمایشی کار می‌کند — و برای کدِ مجوز با ما تماس بگیرید.' },
-  { q: 'امکانِ اتصال به سامانه‌ی مؤدیان هست؟', a: 'بله. صورتحساب‌های الکترونیکی مطابق با الزاماتِ سازمانِ امورِ مالیاتی ارسال می‌شوند؛ شرایطش را کارشناسِ فروش برای نسخه‌ی شما می‌گوید.' },
-]
-
-//: ورودِ آرام و کوتاه — سایتِ اداری جای حرکتِ نمایشی نیست. `MotionConfig` بالای صفحه
-//: همین را برای کاربری که «کاهشِ حرکت» را روشن کرده کاملاً خاموش می‌کند.
-const reveal = {
-  initial: { opacity: 0, y: 14 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, margin: '-60px' },
-  transition: { duration: 0.45, ease: 'easeOut' },
-} as const
 
 /**
  * بنرِ تمام‌عرضِ زیرِ منو — به خواستِ کاربر. پیامِ کوتاهِ دعوت است، نه تکرارِ هیرو: هیرو
@@ -160,18 +135,20 @@ function HomeBanner() {
             <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
               شروعِ رایگان <ArrowLeft size={16} />
             </a>
-            <a className="cc-btn cc-btn-on-dark" href="#cc-platforms">
+            <a className="cc-btn cc-btn-on-dark" href="/download">
               <Download size={16} /> دانلودِ نسخه‌ها
             </a>
           </div>
         </div>
-        {/* خانه‌های نشان در اندازه‌ی بزرگ، یکی‌یکی می‌نشینند (CSS: cc-cell-in)؛ آخرین، خانه‌ی فعالِ بنفش. */}
+        {/* خانه‌های نشان در اندازه‌ی بزرگ، یکی‌یکی می‌نشینند (CSS: cc-cell-in و تأخیرِ nth-of-type)؛ آخرین،
+            خانه‌ی فعالِ بنفش. تأخیر در CSS است نه `style`: CSPِ سایت `style`ِ درون‌خطی را در HTMLِ
+            پیش‌رندرشده نمی‌پذیرد. */}
         <div className="cc-banner-art" aria-hidden="true">
           <svg viewBox="20 20 80 80">
-            {BRAND_CELLS.map(([x, y], i) => (
-              <rect key={`${x}-${y}`} className="cc-cell" x={x} y={y} width="20" height="20" rx="5" style={{ animationDelay: `${i * 70}ms` }} />
+            {BRAND_CELLS.map(([x, y]) => (
+              <rect key={`${x}-${y}`} className="cc-cell" x={x} y={y} width="20" height="20" rx="5" />
             ))}
-            <rect className="cc-cell cc-cell-active" x="76" y="24" width="20" height="20" rx="5" style={{ animationDelay: '480ms' }} />
+            <rect className="cc-cell cc-cell-active" x="76" y="24" width="20" height="20" rx="5" />
           </svg>
         </div>
       </div>
@@ -183,15 +160,10 @@ function Hero() {
   return (
     <section className="cc-hero">
       <div className="cc-hero-inner">
-        <motion.div
-          className="cc-hero-copy"
-          initial={reveal.initial}
-          animate={{ opacity: 1, y: 0 }}
-          transition={reveal.transition}
-        >
+        <div className="cc-hero-copy cc-rise">
           <span className="cc-eyebrow">نرم‌افزارِ حسابداریِ ابری و آفلاین</span>
           <h1 className="cc-hero-title">
-            حسابداریِ کسب‌وکار، <span className="cc-accent-text">ساده و دقیق</span>
+            نرم‌افزار حسابداری کسب‌وکار، <span className="cc-accent-text">ساده و دقیق</span>
           </h1>
           <p className="cc-hero-sub">
             فروش، خرید و انبار، حسابداریِ دوطرفه، چک و بانک و حقوق و دستمزد — همه در یک سامانه‌ی یکپارچه که سندِ
@@ -216,17 +188,17 @@ function Hero() {
               <Check size={15} /> ارسال به سامانه‌ی مؤدیان
             </li>
           </ul>
-        </motion.div>
+        </div>
 
         <div className="cc-facts">
-          {FACTS.map((f, i) => (
-            <motion.div className="cc-fact" key={f.value} {...reveal} transition={{ ...reveal.transition, delay: i * 0.05 }}>
+          {FACTS.map((f) => (
+            <div className="cc-fact" key={f.value}>
               <span className="cc-icon">
                 <f.icon size={20} />
               </span>
               <b>{f.value}</b>
               <span>{f.label}</span>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
@@ -236,11 +208,11 @@ function Hero() {
 
 function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: string }) {
   return (
-    <motion.div className="cc-section-head" {...reveal}>
+    <div className="cc-section-head">
       <span className="cc-eyebrow">{eyebrow}</span>
       <h2>{title}</h2>
       {sub && <p>{sub}</p>}
-    </motion.div>
+    </div>
   )
 }
 
@@ -250,11 +222,11 @@ function Platforms() {
       <SectionHead
         eyebrow="نسخه‌ها"
         title="وب، ویندوز، اندروید — و نسخه‌ی سازمانی"
-        sub="یک حسابِ ابری روی هر سه نسخه، همیشه هم‌گام؛ و برای شرکت‌هایی که داده باید در خودِ شرکت بماند، کوبیتا سازمانی."
+        sub="یک حسابِ ابری روی هر سه نسخه، همیشه هم‌گام؛ و برای شرکت‌هایی که داده باید در خودِ شرکت بماند، کوبیتا سازمانی — رایگان تا سه کاربر."
       />
       <div className="cc-grid cc-grid-4 cc-platform-grid">
         {PLATFORMS.map((p) => (
-          <motion.div key={p.title} className="cc-card cc-platform" {...reveal}>
+          <div key={p.title} className="cc-card cc-platform">
             <span className="cc-icon cc-icon-lg">
               <p.icon size={24} />
             </span>
@@ -276,14 +248,40 @@ function Platforms() {
               >
                 {p.action.label}
               </a>
-              {'contact' in p && p.contact && (
-                <button type="button" className="cc-btn cc-btn-primary" onClick={() => openContact(p.contact)}>
-                  درخواستِ مجوز
-                </button>
+              {'more' in p && p.more && (
+                <a className="cc-btn cc-btn-primary" href={p.more.href}>
+                  {p.more.label}
+                </a>
               )}
             </div>
-          </motion.div>
+          </div>
         ))}
+      </div>
+    </section>
+  )
+}
+
+/** نوارِ «سازمانیِ رایگان» — پیوندِ داخلیِ اصلی به `/enterprise` با همان عبارتی که جست‌وجو می‌شود. */
+function EnterpriseBand() {
+  return (
+    <section className="cc-section cc-ent-band" aria-labelledby="cc-ent-band-title">
+      <div className="cc-ent-band-in">
+        <div>
+          <span className="cc-eyebrow">کوبیتا سازمانی</span>
+          <h2 id="cc-ent-band-title">نرم‌افزار حسابداری تحت شبکه، رایگان تا سه کاربر</h2>
+          <p>
+            سرور در خودِ شرکت، حسابدارها روی شبکه‌ی داخلی و داده‌ای که از شرکت بیرون نمی‌رود. فقط یک‌بار با نام و شماره‌ی همراه
+            ثبت‌نام کنید؛ برای همیشه رایگان است.
+          </p>
+        </div>
+        <div className="cc-ent-band-cta">
+          <a className="cc-btn cc-btn-primary" href={ENTERPRISE_DOWNLOAD_URL} download>
+            <Download size={16} /> دانلودِ رایگان
+          </a>
+          <a className="cc-btn cc-btn-outline" href="/enterprise">
+            معرفی و مقایسه‌ی رایگان و تجاری
+          </a>
+        </div>
       </div>
     </section>
   )
@@ -295,15 +293,24 @@ function Features() {
       <SectionHead eyebrow="امکانات" title="همه‌ی ابزارِ حسابداری، در یک نرم‌افزار" sub="از فروش و انبار تا چک و بانک و گزارش‌ها — هر بخش با بخش‌های دیگر یکپارچه است و سندِ خودش را خودکار ثبت می‌کند." />
       <div className="cc-grid cc-grid-3">
         {FEATURES.map((f) => (
-          <motion.div key={f.title} className="cc-card" {...reveal}>
+          <div key={f.title} className="cc-card cc-feature-card">
             <span className="cc-icon cc-icon-lg">
               <f.icon size={24} />
             </span>
-            <h3>{f.title}</h3>
+            <h3>
+              <a href={`/features/${f.slug}`} className="cc-stretch">
+                {f.title}
+              </a>
+            </h3>
             <p>{f.desc}</p>
-          </motion.div>
+          </div>
         ))}
       </div>
+      <p className="cc-center cc-section-more">
+        <a className="cc-btn cc-btn-outline" href="/features">
+          همه‌ی امکانات <ArrowLeft size={16} />
+        </a>
+      </p>
     </section>
   )
 }
@@ -314,12 +321,12 @@ function Industries() {
       <SectionHead eyebrow="صنایع" title="از یک فروشگاه تا یک شرکتِ پخش" sub="کوبیتا با نیازِ کسب‌وکارهای مختلف هماهنگ می‌شود." />
       <div className="cc-grid cc-grid-3 cc-ind-grid">
         {INDUSTRIES.map((it) => (
-          <motion.div key={it.label} className="cc-ind" {...reveal}>
+          <div key={it.label} className="cc-ind">
             <span className="cc-icon">
               <it.icon size={19} />
             </span>
             <span>{it.label}</span>
-          </motion.div>
+          </div>
         ))}
       </div>
     </section>
@@ -332,11 +339,11 @@ function HowItWorks() {
       <SectionHead eyebrow="شروعِ کار" title="در چهار قدم شروع کنید" sub="از اولین امتحان تا ثبتِ اولین فاکتور — بی‌آنکه چیزی را از دست بدهید." />
       <ol className="cc-grid cc-grid-4 cc-steps">
         {STEPS.map((s, i) => (
-          <motion.li key={s.title} className="cc-card cc-step" {...reveal}>
+          <li key={s.title} className="cc-card cc-step">
             <span className="cc-step-no">{(i + 1).toLocaleString('fa-IR')}</span>
             <h3>{s.title}</h3>
             <p>{s.desc}</p>
-          </motion.li>
+          </li>
         ))}
       </ol>
     </section>
@@ -349,7 +356,7 @@ function WhySection() {
       <SectionHead eyebrow="چرا کوبیتا" title="ساخته‌شده برای کسب‌وکارهای ایرانی" sub="فارسی، ابری و آفلاین، با پشتیبانی و قیمتِ داخلی — بدونِ پیچیدگیِ نرم‌افزارهای بزرگ." />
       <div className="cc-grid cc-grid-3">
         {WHY.map((w) => (
-          <motion.div key={w.title} className="cc-card cc-why-item" {...reveal}>
+          <div key={w.title} className="cc-card cc-why-item">
             <span className="cc-icon">
               <w.icon size={20} />
             </span>
@@ -357,7 +364,7 @@ function WhySection() {
               <h3>{w.title}</h3>
               <p>{w.desc}</p>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
     </section>
@@ -365,73 +372,28 @@ function WhySection() {
 }
 
 function FaqSection() {
-  const [open, setOpen] = useState<number | null>(0)
   return (
     <section className="cc-section cc-section-alt" id="cc-faq">
       <SectionHead eyebrow="سوالاتِ متداول" title="پاسخِ پرسش‌های رایج" />
-      <div className="cc-faq-list">
-        {FAQS.map((item, idx) => {
-          const isOpen = open === idx
-          return (
-            <div className={`cc-faq${isOpen ? ' cc-faq-open' : ''}`} key={item.q}>
-              <button
-                type="button"
-                className="cc-faq-q"
-                aria-expanded={isOpen}
-                onClick={() => setOpen(isOpen ? null : idx)}
-              >
-                {item.q}
-                <ChevronDown size={18} className="cc-faq-chev" />
-              </button>
-              {isOpen && <p className="cc-faq-a">{item.a}</p>}
-            </div>
-          )
-        })}
-      </div>
+      <FaqList items={HOME_FAQS} idPrefix="home-faq" />
     </section>
   )
 }
 
-function FinalCta() {
+export function ConceptLanding({ meta = HOME_META }: { meta?: PageMeta }) {
   return (
-    <section className="cc-final-cta">
-      <div className="cc-final-cta-in">
-        <div>
-          <h2>همین امروز، رایگان شروع کنید</h2>
-          <p>۱۴ روز کاملِ رایگان. اگر پسندیدید، با کارشناسِ فروش تماس بگیرید — همه‌ی اطلاعاتتان حفظ می‌شود.</p>
-        </div>
-        <div className="cc-final-cta-btns">
-          <a className="cc-btn cc-btn-primary" href={TRIAL_URL}>
-            شروعِ ۱۴ روز رایگان
-          </a>
-          <a className="cc-btn cc-btn-on-dark" href="#cc-contact">
-            <PhoneCall size={16} /> تماس برای خرید
-          </a>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-export function ConceptLanding() {
-  return (
-    <MotionConfig reducedMotion="user">
-      <div className="cc-root" dir="rtl">
-        <SiteHeader />
-        <main>
-          <HomeBanner />
-          <Hero />
-          <Platforms />
-          <Features />
-          <Industries />
-          <HowItWorks />
-          <ContactSection />
-          <WhySection />
-          <FaqSection />
-          <FinalCta />
-        </main>
-        <SiteFooter />
-      </div>
-    </MotionConfig>
+    <PageLayout meta={meta}>
+      <HomeBanner />
+      <Hero />
+      <Platforms />
+      <EnterpriseBand />
+      <Features />
+      <Industries />
+      <HowItWorks />
+      <ContactSection />
+      <WhySection />
+      <FaqSection />
+      <FinalCta contactHref="#cc-contact" />
+    </PageLayout>
   )
 }

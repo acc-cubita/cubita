@@ -16,7 +16,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import CommercialQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
@@ -106,10 +109,12 @@ class SalesReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base)
     )
 
 
-class SalesReturnLine(TenantMixin, UUIDPKMixin, Base):
+class SalesReturnLine(CommercialQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "sales_return_lines"
 
     __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_sales_return_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_sales_return_lines_base_unit_id"),
         CheckConstraint(f"return_condition IN {RETURN_CONDITIONS}", name="ck_sales_return_lines_condition"),
     )
 
@@ -135,7 +140,7 @@ class SalesReturnLine(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("sales_invoice_lines.id"), nullable=True, index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     unit_price: Mapped[float] = mapped_column(Numeric(18, 0))
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
     #: علتِ برگشت — **جدا از `description`**. یکی بُعدِ گزارش است و دیگری یادداشتِ
@@ -266,8 +271,12 @@ class PurchaseReturn(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Ba
         return sum((Decimal(line.agreed_amount) for line in self.lines), Decimal(0))
 
 
-class PurchaseReturnLine(TenantMixin, UUIDPKMixin, Base):
+class PurchaseReturnLine(CommercialQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     __tablename__ = "purchase_return_lines"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_purchase_return_lines_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_purchase_return_lines_base_unit_id"),
+    )
 
     return_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("purchase_returns.id"))
     #: شماره‌ی ردیف در همین سند (از ۱). صفر یعنی «ردیفِ پیش از مهاجرتِ ۰۱۳۲».
@@ -284,7 +293,7 @@ class PurchaseReturnLine(TenantMixin, UUIDPKMixin, Base):
         UUID(as_uuid=True), ForeignKey("warehouse_receipt_lines.id"), nullable=True, index=True
     )
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: «فی» — بهای خریدِ واحد، پیش از حمل.
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))
     #: سهمِ حملی که با این کالا برمی‌گردد (از سهمِ همان ردیفِ رسید، به نسبتِ مقدار).

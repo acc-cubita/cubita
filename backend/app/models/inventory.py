@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from datetime import date as date_
 
 from sqlalchemy import (
@@ -8,6 +9,7 @@ from sqlalchemy import (
     Date,
     case,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     Index,
     Numeric,
@@ -21,7 +23,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from sqlalchemy import ForeignKeyConstraint
+
 from app.database import Base
+from app.models.quantity_snapshot import EnteredQuantityMixin
 from app.models.base import TimestampMixin, UUIDPKMixin, VoidableMixin
 from app.models.tenant import TenantMixin
 
@@ -135,6 +140,7 @@ class UnitOfMeasure(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "units_of_measure"
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_units_of_measure_tenant_name"),
+        UniqueConstraint("tenant_id", "id", name="uq_units_tenant_id"),
     )
 
     name: Mapped[str] = mapped_column(String(20))
@@ -157,6 +163,7 @@ class Contact(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     __tablename__ = "contacts"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_contacts_tenant_id"),
         CheckConstraint(f"credit_action IN {CREDIT_ACTIONS}", name="ck_contacts_credit_action"),
         CheckConstraint(
             "discount_rate >= 0 AND discount_rate <= 100 "
@@ -385,6 +392,10 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "sku", name="uq_items_tenant_sku"),
+        UniqueConstraint("tenant_id", "id", name="uq_items_tenant_id"),
+        ForeignKeyConstraint(["tenant_id", "id", "primary_unit_id"],
+            ["item_units.tenant_id", "item_units.item_id", "item_units.unit_id"],
+            name="fk_items_base_membership", deferrable=True, initially="DEFERRED", use_alter=True),
         # بارکد در سطحِ مستأجر یکتاست — دو کالا نباید بارکدِ یکسان بگیرند، وگرنه اسکن
         # مبهم می‌شود و «آخرین کالای ذخیره‌شده» را می‌آورد. ایندکسِ جزئی چون بارکدِ
         # خالی NULL است و چند کالای بی‌بارکد مجازند (فقط ردیف‌های دارای بارکد یکتا).
@@ -471,7 +482,7 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: نقطه‌ی سفارشِ مجدد (حداقلِ موجودی). وقتی موجودیِ کلِ کالا ≤ این عدد باشد، در
     #: «نیازمندِ سفارش» هشدار داده می‌شود. صفر = بدونِ هشدار (پیش‌فرض). فقط برای کالا
     #: معنا دارد، نه خدمت. اعشاری‌پذیر چون واحد می‌تواند متر/کیلوگرم باشد.
-    reorder_point: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    reorder_point: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
 
     #: وضعیتِ مالیات بر ارزش افزوده: `taxable` (مشمول) یا `exempt` (معاف).
     #:
@@ -517,15 +528,16 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: هر بار که واحد عوض شود آن را هم‌گام می‌کند. نگه‌داشتنش عمدی است — ردیفِ
     #: فاکتور، بسته‌ی مؤدیان، بازار و فروشگاه همه `unit_snapshot`/`unit` را
     #: می‌خوانند و شکستنِ همه‌شان ارزشی اضافه نمی‌کرد.
-    primary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
+    primary_unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=False
     )
+    primary_unit: Mapped["UnitOfMeasure"] = relationship(foreign_keys=[primary_unit_id])
     secondary_unit_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("units_of_measure.id"), nullable=True
     )
     #: §۲۱ — «۱ کارتن = ۲۴ عدد». صفر یعنی نسبت هنوز تعریف نشده.
-    conversion_factor: Mapped[float] = mapped_column(
-        Numeric(18, 6), default=0, server_default="0"
+    conversion_factor: Mapped[Decimal] = mapped_column(
+        Numeric(30, 12), default=0, server_default="0"
     )
     conversion_mode: Mapped[str] = mapped_column(
         String(10), default="fixed", server_default="fixed"
@@ -553,8 +565,8 @@ class Item(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: §۲۸ می‌گوید انبارمحور یا سراسری‌بودنشان را **فرض نکن**. پس عددِ این‌جا
     #: سراسری است (همان رفتارِ امروزِ `reorder_point`) و ردیفِ `item_warehouses`
     #: می‌تواند برای یک انبارِ خاص override بگذارد. هیچ‌کدام تحمیل نشده.
-    min_stock: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
-    max_stock: Mapped[float] = mapped_column(Numeric(18, 3), default=0, server_default="0")
+    min_stock: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
+    max_stock: Mapped[Decimal] = mapped_column(Numeric(24, 8), default=0, server_default="0")
 
     #: **معینِ هزینه‌ی خرید (§۱۵).** برای خدمت: «مشاوره حقوقی» هنگام خرید به یک
     #: حسابِ هزینه می‌نشیند، نه به موجودیِ کالا.
@@ -679,16 +691,20 @@ class ItemWarehouse(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     #: override‌های انبارمحورِ کنترلِ موجودی (§۲۸). `NULL` = «همان عددِ کالا».
     #: فصل تصمیم نمی‌گیرد که کنترل سراسری باشد یا انبارمحور؛ این ساختار هر دو را
     #: می‌پذیرد بی‌آنکه یکی را تحمیل کند.
-    min_stock: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
-    max_stock: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
+    min_stock: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
+    max_stock: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
 
     warehouse: Mapped["Warehouse"] = relationship()
 
 
-class StockLedger(TenantMixin, UUIDPKMixin, Base):
+class StockLedger(EnteredQuantityMixin, TenantMixin, UUIDPKMixin, Base):
     """دفتر موجودی: هر رکورد یک حرکت ورود(+)/خروج(-) است. موجودی فعلی = SUM(qty) به تفکیک کالا/انبار."""
 
     __tablename__ = "stock_ledger"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_ledger_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_ledger_base_unit_id"),
+    )
 
     #: ترتیب قطعیِ ثبت. کلید اصلی UUID تصادفی است و مرتب کردن بر اساسش بی‌معناست،
     #: و `entry_date` فقط روز را دارد — پس چند حرکت در یک روز هیچ ترتیب مشخصی
@@ -705,7 +721,7 @@ class StockLedger(TenantMixin, UUIDPKMixin, Base):
 
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"), index=True)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), index=True)
-    qty: Mapped[float] = mapped_column(Numeric(18, 3))
+    qty: Mapped[Decimal] = mapped_column(Numeric(24, 8))
     #: بهای تمام‌شده‌ی واحد — چهار رقم اعشار، به همان دلیلِ `Item.average_cost`:
     #: `recompute_average_cost` میانگین را از همین ستون بازمی‌سازد، پس گِردکردنش
     #: مستقیماً به ارزش‌گذاری سرایت می‌کرد.
@@ -740,7 +756,7 @@ class StockLedger(TenantMixin, UUIDPKMixin, Base):
     warehouse: Mapped["Warehouse"] = relationship()
 
 
-class StockAdjustment(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
+class StockAdjustment(EnteredQuantityMixin, TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, Base):
     """انبارگردانی/تعدیل موجودی دستی (کسری یا اضافی) با سند حسابداری خودکار متناظر.
 
     **ابطال‌پذیر است، و دیرتر از بقیه شد.** تعدیلِ انبار سندی است که کارش اصلاحِ
@@ -750,10 +766,14 @@ class StockAdjustment(TenantMixin, VoidableMixin, UUIDPKMixin, TimestampMixin, B
     """
 
     __tablename__ = "stock_adjustments"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "entered_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_adjustments_entered_unit_id"),
+        ForeignKeyConstraint(["tenant_id", "base_unit_id"], ["units_of_measure.tenant_id", "units_of_measure.id"], name="fk_stock_adjustments_base_unit_id"),
+    )
 
     item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("items.id"))
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"))
-    qty_diff: Mapped[float] = mapped_column(Numeric(18, 3))  # مثبت = اضافه‌شدن به موجودی، منفی = کسری
+    qty_diff: Mapped[Decimal] = mapped_column(Numeric(24, 8))  # مثبت = اضافه‌شدن به موجودی، منفی = کسری
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 0))  # از average_cost کالا در لحظه‌ی ثبت snapshot می‌شود
     reason: Mapped[str] = mapped_column(Text, default="")
     adjustment_date: Mapped[date_] = mapped_column(Date, default=date_.today)
