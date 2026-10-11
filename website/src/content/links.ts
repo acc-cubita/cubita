@@ -8,3 +8,6 @@ export const DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
 export const ANDROID_APK_URL = 'https://acc.cubita.ir/updates/android/cubita-latest.apk'
 // نصابِ «کوبیتا سازمانی» (سرور و کلاینتِ شبکه‌ی داخلی) — نامِ پایدارِ کانالِ امضاشده‌ی سازمانی.
 export const ENTERPRISE_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/enterprise/Cubita-Enterprise-Setup.exe'
+// Set only after the complete server/client package passes target-OS QA and is published.
+const windows81Url = import.meta.env.VITE_ENTERPRISE_WINDOWS81_DOWNLOAD_URL?.trim() ?? ''
+export const ENTERPRISE_WINDOWS81_DOWNLOAD_URL = /^https:\/\//.test(windows81Url) ? windows81Url : null

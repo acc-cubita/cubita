@@ -2,6 +2,7 @@
 import { autoUpdater } from 'electron-updater'
 import { app, type BrowserWindow } from 'electron'
 import fs from 'node:fs'
+import {LEGACY_WINDOWS} from './runtimeCompatibility.js'
 import { updateProblem, type UpdateStatus } from '../src/lib/updateStatus.js'
 export type { UpdateStatus } from '../src/lib/updateStatus.js'
 
@@ -38,6 +39,7 @@ function failed(error: unknown) {
 export function currentUpdateStatus(): UpdateStatus { return lastStatus }
 
 export async function checkForUpdatesNow(): Promise<UpdateStatus> {
+  if (LEGACY_WINDOWS) return {state:'error',message:'این نسخه ویژهٔ ویندوز ۸٫۱ است؛ ارتقا را با نصاب مخصوص ویندوز ۸٫۱ انجام دهید.'}
   if (!app.isPackaged || !configured) {
     return { state: 'error', message: 'بررسی آپدیت در نسخه نصب‌شده و پس از اتصال به سرور در دسترس است.' }
   }
@@ -65,6 +67,13 @@ export function setupAutoUpdate(window: () => BrowserWindow | null, logger: (mes
   getWindow = window
   log = logger
   if (!app.isPackaged) { log('auto-update: غیرفعال (بسته‌بندی‌نشده)'); return }
+  if (LEGACY_WINDOWS) {
+    configured = false
+    autoUpdater.autoDownload = false
+    autoUpdater.autoInstallOnAppQuit = false
+    send({state:'error',message:'برای این نسخه، نصاب مخصوص ویندوز ۸٫۱ لازم است.'})
+    return
+  }
   generation += 1
   options = next
   configured = true

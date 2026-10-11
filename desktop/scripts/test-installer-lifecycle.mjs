@@ -12,8 +12,9 @@ const scripts = path.dirname(fileURLToPath(import.meta.url))
 const cache = path.join(process.env.LOCALAPPDATA, 'electron-builder', 'Cache', 'nsis-3.0.4.1')
 const compiler = process.env.CUBITA_QA_MAKENSIS ?? path.join(cache, fs.readdirSync(cache).find(name => name.startsWith('nsis-')), 'makensis.exe')
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'CubitaInstallerMockQa-'))
+const profileFlags = process.env.CUBITA_QA_WINDOWS81 === '1' ? ['/DQA_WINDOWS81'] : []
 const compiled = spawnSync(compiler, [
-  '/V2', `/DQA_OUTPUT=${output}`,
+  '/V2', ...profileFlags, `/DQA_OUTPUT=${output}`,
   `/DCUBITA_INSTALLER_GUARD=${path.join(scripts, 'fixtures', 'installer-mock-guard.ps1')}`,
   path.join(scripts, 'fixtures', 'installer-lifecycle.nsi'),
 ], { encoding: 'utf8', windowsHide: true })
@@ -55,7 +56,7 @@ for (const [scenario, exitCode, expected] of cases) {
 }
 // Compile and exercise the uninstaller hook: close only the GUI, do not prepare an upgrade.
 const uninstaller = spawnSync(compiler, [
-  '/V2', '/DBUILD_UNINSTALLER', `/DQA_OUTPUT=${output}`,
+  '/V2', ...profileFlags, '/DBUILD_UNINSTALLER', `/DQA_OUTPUT=${output}`,
   `/DCUBITA_INSTALLER_GUARD=${path.join(scripts, 'fixtures', 'installer-mock-guard.ps1')}`,
   path.join(scripts, 'fixtures', 'installer-lifecycle.nsi'),
 ], { encoding: 'utf8', windowsHide: true })

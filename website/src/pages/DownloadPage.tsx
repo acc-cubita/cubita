@@ -3,7 +3,7 @@ import { FaqList } from '../concept/FaqList'
 import { FinalCta } from '../concept/FinalCta'
 import { PageLayout } from '../concept/PageLayout'
 import { DOWNLOAD_FAQS } from '../content/download'
-import { ANDROID_APK_URL, APP_URL, DOWNLOAD_URL, ENTERPRISE_DOWNLOAD_URL, TRIAL_URL } from '../content/links'
+import { ANDROID_APK_URL, APP_URL, DOWNLOAD_URL, ENTERPRISE_DOWNLOAD_URL, ENTERPRISE_WINDOWS81_DOWNLOAD_URL, TRIAL_URL } from '../content/links'
 import { DOWNLOAD_META } from '../seo/pages'
 
 //: چهار نسخه به ترتیبِ پرسشِ «کدام را بگیرم؟»: سازمانیِ رایگان (بی‌حسابِ ابری کار می‌کند) اول،
@@ -11,11 +11,11 @@ import { DOWNLOAD_META } from '../seo/pages'
 const PRODUCTS = [
   {
     icon: Building2,
-    title: 'کوبیتا سازمانی',
+    title: 'کوبیتا سازمانی — ویندوز ۱۰ و ۱۱',
     badge: 'رایگان تا ۳ کاربر',
     desc: 'برای شرکت‌ها: سرور در خودِ شرکت و حسابدارها روی شبکه‌ی داخلی. حسابِ ابری لازم ندارد.',
     points: ['ویندوز ۱۰ و ۱۱ (۶۴ بیتی)', 'یک نصاب برای سرور و کلاینت', 'داده‌ی کاملاً درون‌سازمانی'],
-    primary: { href: ENTERPRISE_DOWNLOAD_URL, label: 'دانلودِ نصاب', download: true },
+    primary: { href: ENTERPRISE_DOWNLOAD_URL, label: 'دانلود برای ویندوز ۱۰ و ۱۱', download: true },
     more: { href: '/enterprise', label: 'معرفی و مقایسه' },
   },
   {
@@ -94,6 +94,23 @@ export function DownloadPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="cc-section cc-section-alt" aria-labelledby="legacy-windows-title">
+        <div className="cc-section-head">
+          <h2 id="legacy-windows-title">کوبیتا سازمانی برای ویندوز قدیمی</h2>
+          <p>نسخهٔ سازگار نیز انتخاب نصب سرور یا کلاینت دارد. فایل مناسب نسخهٔ ویندوز خود را دریافت کنید.</p>
+        </div>
+        <div className="cc-card">
+          <h3 className="cc-card-title">ویندوز ۸٫۱ — ۶۴ بیتی</h3>
+          <p>نصاب مستقل با پیش‌نیازهای همراه، انتخاب سرور یا کلاینت و گزارش نصب؛ ارتقا از مسیر همین نسخه انجام می‌شود.</p>
+          {ENTERPRISE_WINDOWS81_DOWNLOAD_URL ? (
+            <a className="cc-btn cc-btn-primary" href={ENTERPRISE_WINDOWS81_DOWNLOAD_URL} download>
+              <Download size={16} /> دانلود برای ویندوز ۸٫۱
+            </a>
+          ) : <p role="status">در حال آماده‌سازی و آزمون؛ دانلود هنوز منتشر نشده است.</p>}
+          <p>ویندوز ۷ و ۸: بستهٔ تأییدشده هنوز آماده نیست. سازگاری نسخهٔ ۸٫۱ به معنی سازگاری با ۷ و ۸ نیست.</p>
+        </div>
       </section>
 
       <section className="cc-section cc-section-alt" id="faq">

@@ -5,9 +5,17 @@ RequestExecutionLevel user
 SilentInstall silent
 !include FileFunc.nsh
 !define CUBITA_HAS_SERVER
+!ifdef QA_WINDOWS81
+!define CUBITA_WINDOWS81_COMPAT
+!define CUBITA_MIN_WINDOWS_BUILD 9600
+!endif
 !define APP_EXECUTABLE_FILENAME "Cubita Enterprise.exe"
 !define INSTALL_REGISTRY_KEY "Software\CubitaInstallerQa\UnusedReadOnly"
 !define CUBITA_REG_KEY "Software\CubitaInstallerQa\UnusedReadOnly"
+; Never install a real system runtime in lifecycle QA.
+!macro cubitaPrerequisites
+  !insertmacro cubitaInstallLog "prerequisites mocked; before service guard"
+!macroend
 !include "..\..\build\installer-enterprise.nsh"
 !insertmacro customHeader
 Name "Cubita installer QA - MOCK SERVICES ONLY"

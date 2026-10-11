@@ -8,7 +8,8 @@ param(
                  'network-state', 'pause-network', 'resume-network',
                  'maintenance-begin', 'maintenance-end')]
     [string]$Action = 'api-state',
-    [string]$AppPath
+    [string]$AppPath,
+    [string]$LogPath
 )
 
 Set-StrictMode -Version Latest
@@ -37,9 +38,7 @@ function Get-CubitaInstallerTask {
         Where-Object { $_.TaskName -eq 'CubitaEnterpriseNetwork' -and $_.TaskPath -eq '\' }
 }
 
-# `[Type]::new()` below needs PowerShell 5+. Windows 8/8.1 ship PowerShell 3/4 and failed here with the
-# misleading "recovery could not be paused" message; installer-os.nsh now refuses Windows < 10 before any
-# guard runs, and every Windows 10/11 has PowerShell 5.x.
+# Constructor syntax must also parse on PowerShell 4 shipped with Windows 8.1.
 function Set-CubitaRecoveryBlocked([bool]$Blocked) {
     $name = 'Global\CubitaEnterpriseServiceOperation'
     $rights = [System.Security.AccessControl.MutexRights]1048577
@@ -48,10 +47,10 @@ function Set-CubitaRecoveryBlocked([bool]$Blocked) {
     try {
         try { $mutex = [System.Threading.Mutex]::OpenExisting($name, $rights) }
         catch [System.Threading.WaitHandleCannotBeOpenedException] {
-            $acl = [System.Security.AccessControl.MutexSecurity]::new()
+            $acl = New-Object System.Security.AccessControl.MutexSecurity
             $acl.SetSecurityDescriptorSddlForm('D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x00100001;;;BU)')
             $created = $false
-            try { $mutex = [System.Threading.Mutex]::new($false,$name,[ref]$created,$acl) }
+            try { $mutex = New-Object System.Threading.Mutex -ArgumentList @($false,$name,[ref]$created,$acl) }
             catch [UnauthorizedAccessException] { $mutex = [System.Threading.Mutex]::OpenExisting($name,$rights) }
         }
         try { $held = $mutex.WaitOne([TimeSpan]::FromSeconds(70)) }
@@ -156,9 +155,17 @@ function Invoke-CubitaInstallerAction([string]$Operation, [string]$ExpectedAppPa
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    try { exit (Invoke-CubitaInstallerAction $Action $AppPath) }
+    try {
+        if ($LogPath) { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date).ToUniversalTime().ToString('o') + ' guard start=' + $Action + '; PowerShell=' + $PSVersionTable.PSVersion) }
+        $result = Invoke-CubitaInstallerAction $Action $AppPath
+        if ($LogPath) { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date).ToUniversalTime().ToString('o') + ' guard completed=' + $Action + '; exit=' + $result) }
+        exit $result
+    }
     catch {
-        # OS errors can contain paths or configuration; the installer shows a safe, actionable error.
+        # Keep the exception locally, never credentials, environment dumps or database content.
+        if ($LogPath) {
+            try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ((Get-Date).ToUniversalTime().ToString('o') + ' guard FAILED=' + $Action + '; ' + $_.Exception.ToString() + '; ' + $_.ScriptStackTrace) } catch {}
+        }
         [Console]::Error.WriteLine('عملیات نصاب انجام نشد؛ وضعیت سرویس‌ها و مجوز مدیر را بررسی کنید.')
         exit 1
     }

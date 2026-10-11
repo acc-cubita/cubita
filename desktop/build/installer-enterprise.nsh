@@ -1,4 +1,4 @@
-; نصابِ «کوبیتا سازمانی» — صفحه‌ی نقش (سرور/کلاینت) و نصبِ سرور (ENTERPRISE_PLAN.md، M4).
+﻿; نصابِ «کوبیتا سازمانی» — صفحه‌ی نقش (سرور/کلاینت) و نصبِ سرور (ENTERPRISE_PLAN.md، M4).
 ;
 ; همه‌ی کارِ واقعی در `cubita-server.exe` است (پایتونِ تست‌پذیر، `backend/app/onprem/`)؛ این
 ; فایل فقط می‌پرسد و همان exe را صدا می‌زند. `scripts/dist-enterprise.mjs` وقتی بسته‌ی سرور
@@ -17,6 +17,7 @@
 
 !define /ifndef CUBITA_REG_KEY "Software\Cubita Enterprise"
 !define CUBITA_DEFAULT_URL "http://localhost:8420"
+!define /ifndef CUBITA_INSTALLER_PAYLOAD_DIR "${__FILEDIR__}"
 !define /ifndef CUBITA_INSTALLER_GUARD "${__FILEDIR__}\installer-service-guard.ps1"
 
 Var CubitaRole
@@ -30,12 +31,50 @@ Var CubitaExistingDirectory
 Var CubitaFilesTouched
 Var CubitaRecoveryPaused
 Var CubitaRecoveryWasBlocked
+Var CubitaInstallLog
+
+!macro cubitaInstallLog MESSAGE
+  Push $8
+  FileOpen $8 "$CubitaInstallLog" a
+  FileWrite $8 "${MESSAGE}$\r$\n"
+  FileClose $8
+  Pop $8
+!macroend
+
+!ifmacrondef cubitaPrerequisites
+!macro cubitaPrerequisites
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\cubita-prerequisites.ps1 "${CUBITA_INSTALLER_PAYLOAD_DIR}\installer-prerequisites.ps1"
+  File /oname=$PLUGINSDIR\vc_redist.x64.exe "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\vc_redist.x64.exe"
+  File /oname=$PLUGINSDIR\runtime.json "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\runtime.json"
+  !ifdef CUBITA_HAS_SERVER
+  File /oname=$PLUGINSDIR\dotnet48.exe "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\dotnet48.exe"
+  File /oname=$PLUGINSDIR\dotnet.json "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\dotnet.json"
+  !endif
+  DetailPrint "بررسی و نصب پیش‌نیازهای کوبیتا…"
+  !insertmacro cubitaInstallLog "prerequisites begin"
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-prerequisites.ps1" -PayloadDirectory "$PLUGINSDIR" -LogPath "$CubitaInstallLog" -Role "$CubitaRole"'
+  Pop $0
+  !insertmacro cubitaInstallLog "prerequisites exit=$0"
+  ${If} $0 == "3010"
+    MessageBox MB_ICONINFORMATION|MB_OK "پیش‌نیاز نصب شد و به راه‌اندازی مجدد ویندوز نیاز دارد. رایانه را راه‌اندازی مجدد کنید و سپس همین نصاب را اجرا کنید؛ فایل‌های کوبیتا هنوز تغییر نکرده‌اند.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
+    SetErrorLevel 3010
+    Quit
+  ${ElseIf} $0 != "0"
+    MessageBox MB_ICONSTOP|MB_OK "نصب پیش‌نیاز کامل نشد (کد $0). فایل‌های کوبیتا هنوز تغییر نکرده‌اند. برای بررسی، این گزارش را ارسال کنید:$\r$\n$CubitaInstallLog" /SD IDOK
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+!macroend
+!endif
 
 !macro cubitaRunGuard ACTION RESULT
   InitPluginsDir
   File /oname=$PLUGINSDIR\cubita-installer-guard.ps1 "${CUBITA_INSTALLER_GUARD}"
-  nsExec::Exec /TIMEOUT=75000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-installer-guard.ps1" -Action "${ACTION}" -AppPath "$INSTDIR\${APP_EXECUTABLE_FILENAME}"'
+  !insertmacro cubitaInstallLog "guard action=${ACTION} begin"
+  nsExec::ExecToLog /TIMEOUT=75000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-installer-guard.ps1" -Action "${ACTION}" -AppPath "$INSTDIR\${APP_EXECUTABLE_FILENAME}" -LogPath "$CubitaInstallLog"'
   Pop ${RESULT}
+  !insertmacro cubitaInstallLog "guard action=${ACTION} exit=${RESULT}"
 !macroend
 
 !macro customHeader
@@ -110,6 +149,21 @@ Var CubitaRecoveryWasBlocked
 !macroend
 
 !macro customInit
+  System::Call 'kernel32::GetCurrentProcessId() i .r0'
+  System::Call 'kernel32::GetTickCount() i .r1'
+  SetShellVarContext all
+  CreateDirectory "$APPDATA\Cubita\logs"
+  StrCpy $CubitaInstallLog "$APPDATA\Cubita\logs\install-$0-$1.log"
+  ClearErrors
+  FileOpen $2 "$CubitaInstallLog" w
+  ${If} ${Errors}
+    StrCpy $CubitaInstallLog "$TEMP\Cubita-install-$0-$1.log"
+    FileOpen $2 "$CubitaInstallLog" w
+  ${EndIf}
+  FileWrite $2 "Cubita Enterprise installer; session=$0-$1$\r$\n"
+  FileClose $2
+  ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion" "CurrentBuildNumber"
+  !insertmacro cubitaInstallLog "OS build=$0; minimum=${CUBITA_MIN_WINDOWS_BUILD}; architecture=x64"
   ; پیش از هر چیز: روی ویندوز ۷/۸/۸٫۱ برنامه اجرا نمی‌شود، پس نه نقش پرسیده می‌شود نه سرویسی لمس.
   !insertmacro cubitaRequireWindows10
   !insertmacro cubitaReadRole
@@ -133,6 +187,9 @@ Var CubitaRecoveryWasBlocked
 
 !macro customCheckAppRunning
   ; این hook در section نصب است؛ در آغاز جادوگر اجرا نمی‌شود.
+  !ifndef BUILD_UNINSTALLER
+    !insertmacro cubitaPrerequisites
+  !endif
   !insertmacro cubitaRunGuard "app-running" $0
   ${If} $0 == "7"
     MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "پیش از نصب، کارها را ذخیره کنید. برای بستن برنامه و ادامهٔ نصب تأیید کنید." /SD IDOK IDOK +2
@@ -158,7 +215,7 @@ Var CubitaRecoveryWasBlocked
     !insertmacro cubitaRunGuard "maintenance-begin" $CubitaRecoveryWasBlocked
     ${If} $CubitaRecoveryWasBlocked != "0"
     ${AndIf} $CubitaRecoveryWasBlocked != "7"
-      MessageBox MB_ICONSTOP|MB_OK "بازیابی خودکار برای نصب متوقف نشد؛ هیچ فایل یا سرویسی تغییر نکرد. دوباره نصب را اجرا کنید." /SD IDOK
+      MessageBox MB_ICONSTOP|MB_OK "آماده‌سازی نصب متوقف شد (مرحله maintenance-begin، کد $CubitaRecoveryWasBlocked). فایل‌های برنامه جایگزین نشده‌اند. جزئیات علت در گزارش نصب است؛ آن را برای پشتیبانی ارسال کنید:$\r$\n$CubitaInstallLog" /SD IDOK
       SetErrorLevel 2
       Quit
     ${EndIf}
@@ -282,14 +339,21 @@ Var CubitaRecoveryWasBlocked
 !macroend
 !endif
 
+!macro cubitaServerCommand ACTION
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\cubita-server-command.ps1 "${CUBITA_INSTALLER_PAYLOAD_DIR}\installer-server-command.ps1"
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-server-command.ps1" -ServerPath "$INSTDIR\resources\server\cubita-server.exe" -Action "${ACTION}" -LogPath "$CubitaInstallLog"'
+!macroend
+
 !macro customInstall
+  !insertmacro cubitaInstallLog "application files copied; role=$CubitaRole; directory=$INSTDIR"
   !ifdef CUBITA_HAS_SERVER
   ${If} $CubitaRole == "server"
     DetailPrint "راه‌اندازیِ سرورِ کوبیتا سازمانی…"
-    nsExec::ExecToLog '"$INSTDIR\resources\server\cubita-server.exe" install'
+    !insertmacro cubitaServerCommand "install"
     Pop $0
     ${If} $0 != 0
-      MessageBox MB_ICONSTOP|MB_OK "نصبِ سرور کامل نشد (کد $0). سرویس سرور ممکن است خاموش باشد؛ جزئیات در C:\ProgramData\Cubita\logs است. نصب را با نقش و مسیر قبلی کامل کنید؛ پوشهٔ داده را حذف نکنید." /SD IDOK
+      MessageBox MB_ICONSTOP|MB_OK "نصبِ سرور کامل نشد (کد $0). سرویس سرور ممکن است خاموش باشد؛ گزارش دقیق: $CubitaInstallLog. نصب را با نقش و مسیر قبلی کامل کنید؛ پوشهٔ داده را حذف نکنید." /SD IDOK
       StrCpy $CubitaApiRestart "0"
       StrCpy $CubitaPgRestart "0"
       SetErrorLevel 2
@@ -309,7 +373,7 @@ Var CubitaRecoveryWasBlocked
   StrCpy $CubitaApiRestart "0"
   StrCpy $CubitaPgRestart "0"
   ; مسیر exeِ task پس از جابه‌جایی/آپدیت هم دوباره به نصبِ معتبر گره بخورد.
-  nsExec::ExecToLog '"$INSTDIR\resources\server\cubita-server.exe" network-resume'
+  !insertmacro cubitaServerCommand "network-resume"
   Pop $0
   ${If} $0 != "0"
     MessageBox MB_ICONSTOP|MB_OK "بازثبت نگهداری شبکه انجام نشد؛ تنظیم شبکه را در برنامه بررسی کنید." /SD IDOK
