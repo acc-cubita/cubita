@@ -37,6 +37,9 @@ function Get-CubitaInstallerTask {
         Where-Object { $_.TaskName -eq 'CubitaEnterpriseNetwork' -and $_.TaskPath -eq '\' }
 }
 
+# `[Type]::new()` below needs PowerShell 5+. Windows 8/8.1 ship PowerShell 3/4 and failed here with the
+# misleading "recovery could not be paused" message; installer-os.nsh now refuses Windows < 10 before any
+# guard runs, and every Windows 10/11 has PowerShell 5.x.
 function Set-CubitaRecoveryBlocked([bool]$Blocked) {
     $name = 'Global\CubitaEnterpriseServiceOperation'
     $rights = [System.Security.AccessControl.MutexRights]1048577
