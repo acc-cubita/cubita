@@ -106,6 +106,8 @@ export interface LicenseInfo {
   mods: string[] | null
   feat: string[] | null
   license_id: string | null
+  //: paid | free؛ null یعنی هنوز مجوزی نصب نشده (آزمایشی).
+  tier?: 'paid' | 'free' | null
 }
 
 //: صفحه‌ی پلن‌ها و خرید روی سایتِ تجاری. خریدِ کاربرِ آزمایشی با همین ایمیل، حسابش را
@@ -498,6 +500,14 @@ export async function downloadDiagnostics(token: string): Promise<{ filename: st
 /** کوبیتا سازمانی: فعال‌سازیِ یک‌کلیکی با کدِ فعال‌سازی — سرور خودش با ابر حرف می‌زند (فقط مالک). */
 export const activateLicenseOnline = (token: string, code: string) =>
   authedSend<LicenseInfo>(token, 'POST', '/api/license/activate', { code })
+/** کوبیتا سازمانی: ثبت‌نامِ رایگان، قدمِ اول — کدِ پیامکی به شماره‌ی همراهِ مالک (سرور با ابر حرف می‌زند). */
+export const sendFreeLicenseCode = (token: string, phone: string) =>
+  authedSend<{ phone: string; expires_in: number }>(token, 'POST', '/api/license/free/send-code', { phone })
+/** کوبیتا سازمانی: ثبت‌نامِ رایگان، قدمِ دوم — کدِ پیامکی → مجوزِ رایگانِ دائمی (تا سه کاربر). */
+export const activateFreeLicense = (token: string, phone: string, code: string, org: string) =>
+  authedSend<LicenseInfo>(token, 'POST', '/api/license/free/activate', { phone, code, org: org || null })
+//: صفحه‌ی «کوبیتا سازمانی» روی سایت: مقایسه‌ی رایگان و تجاری و درخواستِ مجوزِ تجاری.
+export const ENTERPRISE_PLANS_URL = 'https://cubita.ir/enterprise#pricing'
 
 export const fetchSubscription = (token: string) => authedGet<SubscriptionStatus>(token, '/api/subscription')
 
