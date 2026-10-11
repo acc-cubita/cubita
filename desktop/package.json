@@ -98,6 +98,7 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "license": "build/license.rtf",
+      "include": "build/installer.nsh",
       "warningsAsErrors": false
     }
   }
