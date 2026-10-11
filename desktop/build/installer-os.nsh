@@ -1,9 +1,6 @@
-; شرطِ ویندوزِ مشترکِ هر دو نصاب (ابری و سازمانی): ویندوز ۱۰ یا جدیدتر.
-;
-; Electron از نسخه‌ی ۲۳ روی ویندوز ۷، ۸ و ۸٫۱ اجرا نمی‌شود (Chromium 110) و کوبیتا روی Electron 42 است؛ پس
-; روی ویندوزِ قدیمی برنامه اصلاً باز نمی‌شود. بدونِ این شرط، نصابِ سازمانی روی ویندوز ۸ وسطِ کار با پیامِ
-; گمراه‌کننده‌ی «بازیابی خودکار … متوقف نشد؛ دوباره نصب را اجرا کنید» می‌ایستاد (PowerShell 3/4ِ ویندوز ۸
-; `::new()`ِ اسکریپتِ گارد را نمی‌شناسد) — و دوباره اجرا کردن هیچ‌وقت درستش نمی‌کرد (۱۴۰۵/۰۷/۱۸).
+﻿; Minimum Windows build is frozen per installer profile.
+; Modern Electron requires Windows 10/11; the separate Electron 22 edition targets 8.1.
+; PowerShell 4-compatible service guard is shared by both profiles.
 ;
 ; **شماره‌ی ساخت از رجیستری، نه `WinVer.nsh`:** آن با `GetVersionEx` می‌خواند که بی اعلامِ ویندوز ۱۰ در
 ; manifestِ نصاب، ویندوز ۱۰ را «۸» گزارش می‌کند — و آن‌وقت این گارد مشتریِ واقعی را بیرون می‌گذاشت.
@@ -12,7 +9,7 @@
 
 !include LogicLib.nsh
 
-!define CUBITA_MIN_WINDOWS_BUILD 10240
+!define /ifndef CUBITA_MIN_WINDOWS_BUILD 10240
 
 ;; RESULT = "1" اگر شماره‌ی ساختِ BUILD (رشته‌ی رجیستری) کمتر از ویندوز ۱۰ است، وگرنه "0". جدا تا آزمون‌پذیر باشد.
 !macro cubitaWindowsTooOld BUILD RESULT
@@ -34,7 +31,16 @@
   ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion" "CurrentBuildNumber"
   !insertmacro cubitaWindowsTooOld $0 $1
   ${If} $1 == "1"
+    !ifmacrodef cubitaInstallLog
+      !insertmacro cubitaInstallLog "BLOCKED unsupported Windows build=$0; no prerequisites or application installed"
+      !ifdef CUBITA_WINDOWS81_COMPAT
+        MessageBox MB_ICONSTOP|MB_OK "این کلاینت به ویندوز ۸٫۱ نسخهٔ ۶۴ بیتی یا جدیدتر نیاز دارد. هیچ برنامه یا پیش‌نیازی نصب نشد.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
+      !else
+      MessageBox MB_ICONSTOP|MB_OK "این ویندوز با نسخهٔ فعلی کوبیتا سازگار نیست. ویندوز ۱۰ یا ۱۱ نسخهٔ ۶۴ بیتی لازم است؛ نصب پیش‌نیاز، ویندوز ۸٫۱ را سازگار نمی‌کند.$\r$\nهیچ برنامه یا پیش‌نیازی نصب نشد.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
+      !endif
+    !else
     MessageBox MB_ICONSTOP|MB_OK "کوبیتا فقط روی ویندوز ۱۰ یا ۱۱ (۶۴ بیتی) اجرا می‌شود و این رایانه ویندوزِ قدیمی‌تری دارد (۷، ۸ یا ۸٫۱).$\r$\n$\r$\nچیزی نصب یا تغییر نکرد. کوبیتا را روی رایانه‌ای با ویندوز ۱۰ یا ۱۱ نصب کنید." /SD IDOK
+    !endif
     Pop $1
     Pop $0
     SetErrorLevel 2

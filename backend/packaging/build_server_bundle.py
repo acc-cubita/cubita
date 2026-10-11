@@ -74,6 +74,21 @@ def copy_postgres(pg_dir: Path, dest: Path) -> None:
             raise SystemExit(f"{exe}.exe در بسته‌ی PostgreSQL نیست.")
 
 
+def validate_compatibility(profile: str, python_version: tuple[int, ...], pg_version: str) -> int:
+    """Do not confuse a working build host with the intended Windows runtime."""
+    import re
+    match = re.search(r"PostgreSQL\)?\s+(\d+)", pg_version)
+    if not match:
+        raise SystemExit("PostgreSQL version could not be verified.")
+    major = int(match.group(1))
+    if profile == "windows81":
+        if python_version[:2] != (3, 12):
+            raise SystemExit("Windows 8.1 server must be frozen with Python 3.12; do not reuse the modern server.")
+        if major != 17:
+            raise SystemExit("Windows 8.1 profile must preserve PostgreSQL 17; changing the data engine requires a separate migration.")
+    return major
+
+
 def main() -> int:
     #: خروجیِ هدایت‌شده به فایل روی ویندوز cp1252 است و پیامِ فارسی را نمی‌تواند چاپ کند —
     #: بیلد وسطِ کار با UnicodeEncodeError می‌افتاد و بسته‌ی کهنه سرِ جایش می‌ماند (۱۴۰۵/۰۷/۰۳).
@@ -86,36 +101,54 @@ def main() -> int:
     parser.add_argument("--pg-dir", required=True, help="ریشه‌ی نصبِ PostgreSQL (حاویِ bin/lib/share)")
     parser.add_argument("--winsw", help="WinSW-x64.exe محلی (وگرنه دانلود با هشِ پین‌شده)")
     parser.add_argument("--skip-pyinstaller", action="store_true", help="از dist/cubita-server موجود استفاده کن")
+    parser.add_argument("--profile", choices=("modern", "windows81"), default="modern")
+    parser.add_argument("--version", help="نسخهٔ انتشار؛ پیش‌فرض نسخهٔ desktop")
     args = parser.parse_args()
+
+    pg_dir = Path(args.pg_dir).resolve()
+    pg_version = subprocess.check_output([str(pg_dir / "bin" / "postgres.exe"), "--version"], text=True).strip()
+    pg_major = validate_compatibility(args.profile, tuple(sys.version_info), pg_version)
+    frozen_dist = DIST if args.profile == "modern" else DIST / "windows81"
+    bundle = BUNDLE if args.profile == "modern" else DIST / "server-bundle-windows81"
 
     if not args.skip_pyinstaller:
         print("PyInstaller…")
         subprocess.run(
-            [sys.executable, "-m", "PyInstaller", "--noconfirm", "--distpath", str(DIST),
-             "--workpath", str(BACKEND / "build"), str(BACKEND / "packaging" / "cubita-server.spec")],
+            [sys.executable, "-m", "PyInstaller", "--noconfirm", "--distpath", str(frozen_dist),
+             "--workpath", str(BACKEND / "build" / args.profile), str(BACKEND / "packaging" / "cubita-server.spec")],
             cwd=BACKEND,
             check=True,
         )
 
-    frozen = DIST / "cubita-server"
+    frozen = frozen_dist / "cubita-server"
     if not (frozen / "cubita-server.exe").exists():
         raise SystemExit("dist/cubita-server/cubita-server.exe نیست؛ PyInstaller اجرا نشده.")
+    if args.profile == "windows81" and not (frozen / "_internal" / "python312.dll").exists():
+        raise SystemExit("Frozen Windows 8.1 server does not contain Python 3.12.")
 
     print("چیدنِ بسته…")
-    shutil.rmtree(BUNDLE, ignore_errors=True)
-    shutil.copytree(frozen, BUNDLE)
-    copy_postgres(Path(args.pg_dir), BUNDLE / "pgsql")
+    if bundle.resolve().parent != DIST.resolve():
+        raise SystemExit("Bundle destination escaped the packaging directory.")
+    shutil.rmtree(bundle, ignore_errors=True)
+    shutil.copytree(frozen, bundle)
+    copy_postgres(pg_dir, bundle / "pgsql")
     #: نسخه‌ی سرور = نسخه‌ی دسکتاپ (یک انتشار). سرور با این تعیین می‌کند کدام نصاب را به
     #: کلاینت‌ها بدهد (`app/version.py`).
-    version = json.loads((BACKEND.parent / "desktop" / "package.json").read_text(encoding="utf-8"))["version"]
-    (BUNDLE / "version.txt").write_text(version, encoding="utf-8")
-    fetch_winsw(BUNDLE / "winsw" / "WinSW-x64.exe", args.winsw)
+    version = args.version or json.loads((BACKEND.parent / "desktop" / "package.json").read_text(encoding="utf-8"))["version"]
+    (bundle / "version.txt").write_text(version, encoding="utf-8")
+    fetch_winsw(bundle / "winsw" / "WinSW-x64.exe", args.winsw)
 
     print("selftest…")
-    subprocess.run([str(BUNDLE / "cubita-server.exe"), "selftest"], check=True)
+    subprocess.run([str(bundle / "cubita-server.exe"), "selftest"], check=True)
+    (bundle / "compatibility.json").write_text(json.dumps({
+        "profile": args.profile, "python": sys.version.split()[0],
+        "postgresMajor": pg_major, "postgresVersion": pg_version, "version": version,
+        "serverSha256": sha256(bundle / "cubita-server.exe"),
+        "targetOsVerified": False,
+    }, indent=2), encoding="utf-8")
 
-    size = sum(p.stat().st_size for p in BUNDLE.rglob("*") if p.is_file())
-    print(f"بسته‌ی سرور آماده است: {BUNDLE} ({size / 1_048_576:.0f} MB)")
+    size = sum(p.stat().st_size for p in bundle.rglob("*") if p.is_file())
+    print(f"بسته‌ی سرور آماده است: {bundle} ({size / 1_048_576:.0f} MB)")
     return 0
 
 

@@ -36,8 +36,8 @@ fs.mkdirSync(path.join(root, OUT_DIR), { recursive: true })
 const nshPath = path.join(root, OUT_DIR, 'installer-enterprise.nsh')
 fs.writeFileSync(
   nshPath,
-  (hasServer ? '!define CUBITA_HAS_SERVER\n' : '') +
-    fs.readFileSync(path.join(root, 'build', 'installer-enterprise.nsh'), 'utf8'),
+  '\uFEFF' + (hasServer ? '!define CUBITA_HAS_SERVER\n' : '') +
+    fs.readFileSync(path.join(root, 'build', 'installer-enterprise.nsh'), 'utf8').replace(/^\uFEFF/, ''),
   'utf8',
 )
 // The include resolves this embedded guard relative to its own generated location.
@@ -47,6 +47,10 @@ fs.copyFileSync(
 )
 //: شرطِ ویندوز ۱۰ (مشترک با نصابِ ابری) — همان‌جا که `installer-enterprise.nsh`ِ ساخته‌شده `!include`اش می‌کند.
 fs.copyFileSync(path.join(root, 'build', 'installer-os.nsh'), path.join(root, OUT_DIR, 'installer-os.nsh'))
+execSync('pwsh.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/prepare-installer-runtime.ps1', { cwd: root, stdio: 'inherit', windowsHide: true })
+fs.copyFileSync(path.join(root, 'build', 'installer-prerequisites.ps1'), path.join(root, OUT_DIR, 'installer-prerequisites.ps1'))
+fs.copyFileSync(path.join(root, 'build', 'installer-server-command.ps1'), path.join(root, OUT_DIR, 'installer-server-command.ps1'))
+fs.cpSync(path.join(root, 'build', 'prerequisites'), path.join(root, OUT_DIR, 'prerequisites'), { recursive: true })
 
 const config = {
   ...pkg.build,

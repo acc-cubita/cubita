@@ -1,3 +1,4 @@
+import './runtimeCompatibility.js'
 import { app, BrowserWindow, ipcMain, Menu, MenuItem, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'

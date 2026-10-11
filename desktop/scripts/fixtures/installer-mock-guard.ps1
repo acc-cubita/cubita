@@ -1,5 +1,5 @@
-# Embedded ONLY into the NSIS test fixture. Does not invoke any OS command.
-param([string]$Action, [string]$AppPath)
+﻿# Embedded ONLY into the NSIS test fixture. Does not invoke any OS command.
+param([string]$Action, [string]$AppPath, [string]$LogPath)
 $ErrorActionPreference = 'Stop'
 $directory = [IO.Path]::GetDirectoryName($AppPath)
 $scenario = [IO.Path]::GetFileName($directory)
