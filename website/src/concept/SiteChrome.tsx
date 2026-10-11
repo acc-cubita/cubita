@@ -1,34 +1,34 @@
 import { useEffect, useState } from 'react'
 import { Menu, X } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import { FEATURES } from '../content/features'
+import { ANDROID_APK_URL, APP_URL, DOWNLOAD_URL, ENTERPRISE_DOWNLOAD_URL, TRIAL_URL } from '../content/links'
 import { BRAND_CELLS } from './brand'
 
 /**
- * سرصفحه و پاصفحه‌ی مشترکِ سایت — صفحه‌ی اصلی، شرایطِ استفاده، حریمِ خصوصی و نتیجه‌ی
- * پرداخت همه همین را دارند، تا کاربری که از پاصفحه به «حریمِ خصوصی» می‌رود به سایتِ
- * دیگری نرسد.
+ * سرصفحه و پاصفحه‌ی مشترکِ سایت — همه‌ی صفحه‌ها همین را دارند، تا کاربری که از پاصفحه به
+ * «حریمِ خصوصی» می‌رود به سایتِ دیگری نرسد. پاصفحه پیوندِ همه‌ی صفحه‌های محتوایی را دارد: برای
+ * خزنده همان «نقشهٔ داخلی» است که هر صفحه را از هر صفحه‌ی دیگر در دو کلیک می‌رساند.
  */
 
-// ورودِ ترایال روی prod متمرکز است: acc.cubita.ir با ?signup مستقیم روی صفحه‌ی ثبت‌نام
-// باز می‌شود. (قبلاً به demo.cubita.ir می‌رفت که دیتابیسِ جدا داشت و ورود را خراب می‌کرد.)
-export const TRIAL_URL = 'https://acc.cubita.ir/?signup'
-export const APP_URL = 'https://acc.cubita.ir'
-// لینکِ پایدارِ دانلودِ نسخه‌ی دسکتاپِ ویندوز (فایلِ سرور روی هر انتشار به‌روز می‌شود).
-export const DOWNLOAD_URL = 'https://acc.cubita.ir/updates/Cubita-Setup.exe'
-// همان الگو برای اپ اندروید: cubita-latest.apk روی هر انتشار به آخرین نسخه اشاره می‌کند.
-export const ANDROID_APK_URL = 'https://acc.cubita.ir/updates/android/cubita-latest.apk'
-// نصابِ «کوبیتا سازمانی» (سرور و کلاینتِ شبکه‌ی داخلی) — نامِ پایدارِ کانالِ امضاشده‌ی سازمانی.
-export const ENTERPRISE_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/enterprise/Cubita-Enterprise-Setup.exe'
+//: نشانی‌ها در `content/links.ts` زندگی می‌کنند (فرادادهٔ سئو هم از همان‌جا می‌خواند)؛ این‌جا برای
+//: واردکننده‌های قدیمی دوباره صادر می‌شوند.
+export { ANDROID_APK_URL, APP_URL, DOWNLOAD_URL, ENTERPRISE_DOWNLOAD_URL, TRIAL_URL }
 
-//: با `/` شروع می‌شوند تا از صفحه‌های حقوقی هم به بخشِ درستِ صفحه‌ی اصلی برسند؛ روی
-//: خودِ صفحه‌ی اصلی فقط هش عوض می‌شود و صفحه دوباره بار نمی‌شود.
+//: صفحه‌های محتوایی مسیرِ خودشان را دارند (برای جست‌وجو)؛ پرسش‌ها و فرمِ خرید بخشِ صفحه‌ی
+//: اصلی‌اند و با `/` شروع می‌شوند تا از هر صفحه‌ای به همان‌جا برسند.
 const NAV = [
-  { href: '/#cc-features', label: 'امکانات' },
-  { href: '/#cc-platforms', label: 'نسخه‌ها' },
-  { href: '/#cc-industries', label: 'صنایع' },
+  { href: '/features', label: 'امکانات' },
+  { href: '/enterprise', label: 'سازمانیِ رایگان' },
+  { href: '/download', label: 'دانلود' },
   { href: '/#cc-faq', label: 'سوالات متداول' },
   //: پلن‌های قیمت‌دار برداشته شدند (۱۴۰۵/۰۷/۰۳) — خرید از راهِ گفت‌وگو با کارشناس است.
   { href: '/#cc-contact', label: 'خرید و مشاوره' },
 ]
+
+//: پیوندِ صفحه‌ی جاری `aria-current` می‌گیرد؛ زیرصفحه‌های امکانات هم «امکانات» را روشن می‌کنند.
+const isCurrent = (pathname: string, href: string) =>
+  !href.includes('#') && (pathname === href || pathname.startsWith(`${href}/`))
 
 export function BrandMark({ onDark = false }: { onDark?: boolean }) {
   return (
@@ -49,6 +49,7 @@ export function BrandMark({ onDark = false }: { onDark?: boolean }) {
 }
 
 export function SiteHeader() {
+  const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
@@ -67,7 +68,7 @@ export function SiteHeader() {
         </a>
         <nav className="cc-nav" aria-label="منوی اصلی">
           {NAV.map((l) => (
-            <a href={l.href} key={l.href}>
+            <a href={l.href} key={l.href} aria-current={isCurrent(pathname, l.href) ? 'page' : undefined}>
               {l.label}
             </a>
           ))}
@@ -93,7 +94,7 @@ export function SiteHeader() {
       {open && (
         <nav className="cc-nav-mobile" aria-label="منوی موبایل" onClick={() => setOpen(false)}>
           {NAV.map((l) => (
-            <a href={l.href} key={l.href}>
+            <a href={l.href} key={l.href} aria-current={isCurrent(pathname, l.href) ? 'page' : undefined}>
               {l.label}
             </a>
           ))}
@@ -119,7 +120,7 @@ export function SiteFooter() {
           <a href="/" className="cc-brand">
             <BrandMark onDark /> کوبیتا
           </a>
-          <p>نرم‌افزارِ حسابداریِ ابری و آفلاین برای کسب‌وکارهای ایرانی؛ روی وب، ویندوز و اندروید، و نسخه‌ی سازمانی روی سرورِ خودِ شرکت.</p>
+          <p>نرم‌افزارِ حسابداریِ ابری و آفلاین برای کسب‌وکارهای ایرانی؛ روی وب، ویندوز و اندروید، و نسخه‌ی سازمانیِ رایگان روی سرورِ خودِ شرکت.</p>
           <a
             className="cc-enamad"
             referrerPolicy="origin"
@@ -137,10 +138,19 @@ export function SiteFooter() {
         </div>
         <div className="cc-footer-col">
           <h4>محصول</h4>
-          <a href="/#cc-features">امکانات</a>
-          <a href="/#cc-platforms">نسخه‌ها</a>
+          <a href="/features">امکانات</a>
+          <a href="/enterprise">کوبیتا سازمانیِ رایگان</a>
+          <a href="/download">دانلود</a>
           <a href="/#cc-contact">خرید و مشاوره</a>
           <a href={TRIAL_URL}>شروعِ رایگان</a>
+        </div>
+        <div className="cc-footer-col">
+          <h4>امکانات</h4>
+          {FEATURES.map((f) => (
+            <a key={f.slug} href={`/features/${f.slug}`}>
+              {f.name}
+            </a>
+          ))}
         </div>
         <div className="cc-footer-col">
           <h4>دانلود</h4>
@@ -149,7 +159,7 @@ export function SiteFooter() {
           </a>
           <a href={ANDROID_APK_URL}>اپ اندروید</a>
           <a href={ENTERPRISE_DOWNLOAD_URL} download>
-            کوبیتا سازمانی
+            کوبیتا سازمانی (رایگان)
           </a>
           <a href={APP_URL} target="_blank" rel="noreferrer">
             نسخه‌ی وب
@@ -166,7 +176,8 @@ export function SiteFooter() {
           <a href="/privacy">حریمِ خصوصی</a>
         </div>
       </div>
-      <div className="cc-footer-bottom">
+      {/* سالِ شمسی در پیش‌رندر و دوباره در مرورگر حساب می‌شود؛ شبِ تحویلِ سال نباید خطای هیدریشن بدهد. */}
+      <div className="cc-footer-bottom" suppressHydrationWarning>
         © {new Intl.DateTimeFormat('fa-IR', { year: 'numeric' }).format(new Date())} کوبیتا — تمامِ حقوق محفوظ است.
       </div>
     </footer>

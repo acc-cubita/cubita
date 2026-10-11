@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /checkout-result
 
 Sitemap: https://cubita.ir/sitemap.xml

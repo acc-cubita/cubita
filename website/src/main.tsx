@@ -1,22 +1,20 @@
 import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { createRoot, hydrateRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import './index.css'
-import { CheckoutResultPage } from './pages/CheckoutResultPage.tsx'
-import { TermsPage } from './pages/TermsPage.tsx'
-import { PrivacyPage } from './pages/PrivacyPage.tsx'
-import { ConceptLanding } from './pages/ConceptLanding.tsx'
+import { AppRoutes } from './routes'
 
-createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root')!
+const app = (
   <StrictMode>
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<ConceptLanding />} />
-        <Route path="/concept" element={<ConceptLanding />} />
-        <Route path="/checkout-result" element={<CheckoutResultPage />} />
-        <Route path="/terms" element={<TermsPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-      </Routes>
+      <AppRoutes />
     </BrowserRouter>
-  </StrictMode>,
+  </StrictMode>
 )
+
+//: در تولید هر صفحه پیش‌رندر شده (`scripts/prerender.mjs`) و فقط هیدریت می‌شود؛ در `vite dev`
+//: ریشه خالی است و همان رندرِ معمولیِ مرورگر.
+//: `firstElementChild` نه `hasChildNodes`: قالبِ توسعه یک کامنتِ `<!--app-html-->` در ریشه دارد.
+if (root.firstElementChild) hydrateRoot(root, app)
+else createRoot(root).render(app)

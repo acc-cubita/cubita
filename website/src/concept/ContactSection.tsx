@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { motion } from 'framer-motion'
 import { CheckCircle2, Mail, PhoneCall, Send } from 'lucide-react'
 import { submitSalesInquiry, type SalesProduct } from '../api'
 
@@ -27,18 +26,11 @@ export function openContact(product: SalesProduct) {
   document.getElementById('cc-contact')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-const reveal = {
-  initial: { opacity: 0, y: 14 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, margin: '-60px' },
-  transition: { duration: 0.45, ease: 'easeOut' },
-} as const
-
 const EMPTY = { name: '', company: '', phone: '', email: '', seats: '', message: '', website: '' }
 
-export function ContactSection() {
+export function ContactSection({ defaultProduct = 'cloud' }: { defaultProduct?: SalesProduct }) {
   const [form, setForm] = useState(EMPTY)
-  const [product, setProduct] = useState<SalesProduct>('cloud')
+  const [product, setProduct] = useState<SalesProduct>(defaultProduct)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
@@ -83,16 +75,16 @@ export function ContactSection() {
 
   return (
     <section className="cc-section" id="cc-contact">
-      <motion.div className="cc-section-head" {...reveal}>
+      <div className="cc-section-head">
         <span className="cc-eyebrow">خرید و مشاوره</span>
         <h2>برای خرید با ما در تماس باشید</h2>
         <p>
           بگویید کدام نسخه را می‌خواهید و چند نفر با آن کار می‌کنند؛ کارشناسِ فروش در ساعاتِ کاری با شما تماس می‌گیرد،
           نسخه‌ی مناسب را پیشنهاد می‌کند و قیمت را می‌گوید.
         </p>
-      </motion.div>
+      </div>
 
-      <motion.div className="cc-contact" {...reveal}>
+      <div className="cc-contact">
         <aside className="cc-contact-side">
           <h3>چه چیزی را پیشنهاد می‌کنیم؟</h3>
           <ul className="cc-checklist">
@@ -101,6 +93,7 @@ export function ContactSection() {
             </li>
             <li>
               <b>کوبیتا سازمانی</b> — برای شرکت‌ها و سازمان‌ها؛ سرور در خودِ شرکت و حسابدارها روی شبکه‌ی داخلی.
+              تا سه کاربر رایگان؛ برای کاربرِ بیشتر و سامانه‌ی مؤدیان مجوزِ تجاری.
             </li>
           </ul>
           <p className="cc-contact-alt">
@@ -188,7 +181,7 @@ export function ContactSection() {
             </p>
           </form>
         )}
-      </motion.div>
+      </div>
     </section>
   )
 }
