@@ -7265,6 +7265,12 @@ tr.kardex-voided td { color: var(--text-muted); }
   word-break: break-all;
   resize: vertical;
 }
+/* ثبت‌نامِ رایگان: برچسب بالای فیلد، کدِ پیامکی درشت، دو دکمه کنارِ هم */
+.lic-field { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: var(--fs-sm); color: var(--text-muted); }
+.lic-field input { width: 100%; box-sizing: border-box; font-size: var(--fs-base); }
+.lic-otp { max-width: 220px; font-size: 20px; letter-spacing: 6px; text-align: center; }
+.lic-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lic-error { margin: 0; }
 
 /* کدِ دعوت/بازنشانیِ سازمانی — درشت و خوانا، چون از روی صفحه خوانده و تایپ می‌شود */
 .access-code {
@@ -7300,6 +7306,8 @@ tr.kardex-voided td { color: var(--text-muted); }
   .license-banner__cta { width: 100%; }
   .lic-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .lic-facts dd { margin-bottom: 10px; }
+  .lic-otp { max-width: none; }
+  .lic-actions > * { flex: 1 1 100%; justify-content: center; }
   .access-code__value { font-size: 17px; letter-spacing: 1px; width: 100%; box-sizing: border-box; text-align: center; }
   .access-code .btn-primary { width: 100%; justify-content: center; }
   .srv-backup-actions button { width: 100%; justify-content: center; }

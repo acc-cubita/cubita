@@ -17,7 +17,7 @@ export function LicenseBanner({ license, onOpen }: { license: LicenseInfo; onOpe
   const text =
     license.message ??
     (license.mode === 'trial'
-      ? `نسخه‌ی آزمایشیِ کوبیتا سازمانی — ${fa(license.days_left ?? 0)} روز مانده.`
+      ? `نسخه‌ی آزمایشیِ کوبیتا سازمانی — ${fa(license.days_left ?? 0)} روز مانده. با ثبت‌نامِ رایگان برای همیشه رایگان کار کنید.`
       : `مجوزِ کوبیتا سازمانی ${fa(license.days_left ?? 0)} روزِ دیگر منقضی می‌شود.`)
 
   return (
@@ -25,7 +25,7 @@ export function LicenseBanner({ license, onOpen }: { license: LicenseInfo; onOpe
       {tone === 'err' ? <AlertTriangle size={16} /> : <BadgeCheck size={16} />}
       <span className="license-banner__text">{text}</span>
       <button type="button" className="license-banner__cta" onClick={onOpen}>
-        {license.mode === 'trial' || license.mode === 'trial_expired' ? 'فعال‌سازی' : 'مجوز نرم‌افزار'}
+        {license.mode === 'trial' || license.mode === 'trial_expired' ? 'ثبت‌نامِ رایگان' : 'مجوز نرم‌افزار'}
       </button>
     </div>
   )

@@ -1,6 +1,7 @@
 """شِمای پنلِ ستاد برای مجوزهای کوبیتا سازمانی و فعال‌سازیِ آنلاین."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -26,6 +27,8 @@ class LicenseRecordOut(BaseModel):
     note: str | None
     created_by_email: str | None
     created_at: datetime
+    #: paid | free
+    tier: str = "paid"
 
     @classmethod
     def of(cls, r) -> "LicenseRecordOut":
@@ -49,6 +52,7 @@ class LicenseRecordOut(BaseModel):
             note=r.note,
             created_by_email=r.created_by_email,
             created_at=r.created_at,
+            tier=r.tier or "paid",
         )
 
 
@@ -85,6 +89,9 @@ class LicenseCreateIn(BaseModel):
     mods: list[str] | None = None
     feat: list[str] | None = None
     note: str | None = Field(default=None, max_length=2000)
+    #: «free» برای سرورِ بی‌اینترنتی که ثبت‌نامِ رایگان را از پشتیبانی می‌خواهد: سقف، مدت و
+    #: قابلیت‌ها از `services/enterprise_free.py` می‌آیند و فیلدهای بالا نادیده گرفته می‌شوند.
+    tier: Literal["paid", "free"] = "paid"
 
     _mods = field_validator("mods", "feat")(_clean_list)
 
@@ -114,6 +121,26 @@ class LicenseIssueIn(BaseModel):
 
 class LicenseTokenOut(BaseModel):
     token: str
+
+
+class FreeSendCodeIn(BaseModel):
+    """ثبت‌نامِ رایگان، قدمِ اول — سرورِ سازمانی می‌فرستد، نه کاربر."""
+
+    phone: str = Field(min_length=10, max_length=32)
+    request_code: str = Field(min_length=10, max_length=4000)
+
+
+class FreeCodeSentOut(BaseModel):
+    #: شماره‌ی پوشیده (۰۹۱۲****۵۶۷) — برای «کد به … فرستاده شد».
+    phone: str
+    expires_in: int
+
+
+class FreeActivateIn(BaseModel):
+    phone: str = Field(min_length=10, max_length=32)
+    code: str = Field(min_length=4, max_length=12)
+    request_code: str = Field(min_length=10, max_length=4000)
+    org: str | None = Field(default=None, max_length=200)
 
 
 class ActivationCodeOut(BaseModel):

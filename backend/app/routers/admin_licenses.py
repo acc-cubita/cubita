@@ -9,6 +9,7 @@
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -32,6 +33,7 @@ from app.schemas.enterprise_admin import (
     LicenseTokenOut,
     LicenseUpdateIn,
 )
+from app.services import enterprise_free as free
 from app.services import enterprise_licenses as svc
 from app.services import staff_audit
 
@@ -63,10 +65,13 @@ def _detail(db: Session, record: EnterpriseLicenseRecord) -> LicenseDetailOut:
 @router.get("", response_model=list[LicenseRecordOut])
 def list_licenses(
     q: str | None = Query(default=None, max_length=100),
+    tier: Literal["paid", "free"] | None = Query(default=None),
     db: Session = Depends(get_db),
     _: StaffPrincipal = Depends(require_staff("licenses", "view")),
 ):
     query = db.query(EnterpriseLicenseRecord)
+    if tier:
+        query = query.filter(EnterpriseLicenseRecord.tier == tier)
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.filter(
@@ -87,27 +92,34 @@ def create_license(
     db: Session = Depends(get_db),
     staff: StaffPrincipal = Depends(require_staff("licenses", "create")),
 ):
-    record, code = svc.create(
-        db,
-        org_name=data.org_name,
-        contact=data.contact,
-        seats=data.seats,
-        days=data.days,
-        grace_days=data.grace_days,
-        mods=data.mods,
-        feat=data.feat,
-        note=data.note,
-        actor=staff.email,
-    )
+    if data.tier == "free":
+        #: سرورِ بی‌اینترنت: پشتیبانی همان مجوزِ رایگانی را می‌سازد که ثبت‌نامِ پیامکی می‌ساخت؛
+        #: کدِ فعال‌سازی‌اش هم برمی‌گردد (کسی که اینترنت پیدا کرد، با آن آنلاین فعال کند).
+        record, code = free.create_record(
+            db, org_name=data.org_name, contact=data.contact, note=data.note, actor=staff.email
+        )
+    else:
+        record, code = svc.create(
+            db,
+            org_name=data.org_name,
+            contact=data.contact,
+            seats=data.seats,
+            days=data.days,
+            grace_days=data.grace_days,
+            mods=data.mods,
+            feat=data.feat,
+            note=data.note,
+            actor=staff.email,
+        )
     staff_audit.record(
         db,
         staff,
         "license_create",
-        summary=f"صدورِ مجوزِ سازمانی برای «{record.org_name}»",
+        summary=f"صدورِ مجوزِ {'رایگانِ ' if record.tier == 'free' else ''}سازمانی برای «{record.org_name}»",
         target_type="enterprise_license",
         target_id=record.id,
         target_label=record.lic_id,
-        details={"seats": data.seats, "days": data.days, "feat": data.feat},
+        details={"tier": record.tier, "seats": record.seats, "days": data.days if record.tier != "free" else None, "feat": record.feat},
     )
     return LicenseCreatedOut(license=LicenseRecordOut.of(record), activation_code=code)
 

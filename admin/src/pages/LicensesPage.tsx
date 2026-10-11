@@ -5,6 +5,10 @@
  * - **کدِ فعال‌سازی فقط یک‌بار دیده می‌شود** (در دیتابیس فقط هشش هست). گم شد → کدِ تازه.
  * - **ابطال سرورِ آفلاینِ مشتری را خاموش نمی‌کند.** توکنی که آنجا نشسته خودکفاست و تا
  *   انقضا کار می‌کند؛ ابطال فقط جلوی صدورِ تازه را می‌گیرد.
+ *
+ * **رایگان و تجاری در یک دفتر.** مجوزِ رایگان (ثبت‌نامِ پیامکیِ خودِ مشتری) همین‌جا با شماره‌اش
+ * دیده می‌شود — این فهرست، فهرستِ مشتریانِ بالقوه‌ی ارتقاست. برای سرورِ بی‌اینترنت «مجوزِ تازه» با
+ * نوعِ «رایگان» همان مجوز را دستی می‌سازد.
  */
 import { useMemo, useState } from 'react'
 import { ClipboardCopy, KeyRound, Plus, RefreshCw, Search } from 'lucide-react'
@@ -56,6 +60,20 @@ const DAY = 86_400_000
 function isExpired(l: EnterpriseLicense): boolean {
   return !!l.expires_at && Date.parse(l.expires_at) + l.grace_days * DAY < Date.now()
 }
+
+function tierChip(l: EnterpriseLicense) {
+  return l.tier === 'free' ? <Chip text="رایگان" tone="mute" /> : <Chip text="تجاری" tone="ok" />
+}
+
+type TierFilter = 'all' | 'free' | 'paid'
+const TIER_FILTERS: { key: TierFilter; label: string }[] = [
+  { key: 'all', label: 'همه' },
+  { key: 'free', label: 'رایگان' },
+  { key: 'paid', label: 'تجاری' },
+]
+
+//: «گیرنده‌ی» رویداد: کارمندِ ستاد، یا خودِ مشتری (کدِ فعال‌سازی / ثبت‌نامِ رایگان).
+const ACTOR_LABEL: Record<string, string> = { online: 'خودِ مشتری', free: 'ثبت‌نامِ رایگانِ مشتری' }
 
 function statusChip(l: EnterpriseLicense) {
   if (l.status === 'revoked') return <Chip text="باطل" tone="bad" />
@@ -118,6 +136,7 @@ function CreateDialog({
   onCreated: (code: string, lic: EnterpriseLicense) => void
   onUnauthorized: (e: unknown) => void
 }) {
+  const [tier, setTier] = useState<'paid' | 'free'>('paid')
   const [org, setOrg] = useState('')
   const [contact, setContact] = useState('')
   const [seats, setSeats] = useState('5')
@@ -132,14 +151,20 @@ function CreateDialog({
     setBusy(true)
     setError(null)
     try {
-      const out = await createLicense(token, {
-        org_name: org.trim(),
-        contact: contact.trim() || null,
-        seats: seats ? Number(seats) : null,
-        days: perpetual ? null : Number(days),
-        feat: moadian ? ['moadian'] : [],
-        note: note.trim() || null,
-      })
+      const out = await createLicense(
+        token,
+        tier === 'free'
+          ? { tier, org_name: org.trim(), contact: contact.trim() || null, note: note.trim() || null }
+          : {
+              tier,
+              org_name: org.trim(),
+              contact: contact.trim() || null,
+              seats: seats ? Number(seats) : null,
+              days: perpetual ? null : Number(days),
+              feat: moadian ? ['moadian'] : [],
+              note: note.trim() || null,
+            },
+      )
       onCreated(out.activation_code, out.license)
     } catch (e) {
       onUnauthorized(e)
@@ -159,28 +184,54 @@ function CreateDialog({
         </button>
       }
     >
+      <div className="ad-segments" role="group" aria-label="نوعِ مجوز">
+        {(['paid', 'free'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            className={`ad-segment${tier === t ? ' active' : ''}`}
+            onClick={() => setTier(t)}
+          >
+            {t === 'paid' ? 'تجاری' : 'رایگان'}
+          </button>
+        ))}
+      </div>
+      {tier === 'free' ? (
+        <p className="ad-muted">
+          برای سروری که اینترنت ندارد و نمی‌تواند خودش ثبت‌نامِ رایگان کند: دائمی، تا سه کاربر، بی‌مؤدیان. بعد از
+          ساخت، از «جزئیات» با کدِ درخواستِ مشتری صادرش کنید.
+        </p>
+      ) : null}
       <FieldGrid>
         <Field label="نامِ سازمان">
           <input value={org} onChange={(e) => setOrg(e.target.value)} autoFocus />
         </Field>
-        <Field label="تماسِ خریدار" hint="تلفن یا ایمیل — برای پشتیبانی.">
+        <Field label={tier === 'free' ? 'شماره‌ی همراهِ مشتری' : 'تماسِ خریدار'} hint="تلفن یا ایمیل — برای پشتیبانی.">
           <input value={contact} onChange={(e) => setContact(e.target.value)} />
         </Field>
-        <Field label="تعدادِ کاربر" hint="خالی = بی‌سقف.">
-          <input type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />
-        </Field>
-        <Field label="مدت (روز)" hint="از امروز. پس از انقضا ۱۴ روز مهلت دارد.">
-          <input type="number" min={1} value={days} disabled={perpetual} onChange={(e) => setDays(e.target.value)} />
-        </Field>
+        {tier === 'paid' ? (
+          <>
+            <Field label="تعدادِ کاربر" hint="خالی = بی‌سقف.">
+              <input type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} />
+            </Field>
+            <Field label="مدت (روز)" hint="از امروز. پس از انقضا ۱۴ روز مهلت دارد.">
+              <input type="number" min={1} value={days} disabled={perpetual} onChange={(e) => setDays(e.target.value)} />
+            </Field>
+          </>
+        ) : null}
       </FieldGrid>
-      <label className="ad-check">
-        <input type="checkbox" checked={perpetual} onChange={(e) => setPerpetual(e.target.checked)} />
-        دائمی (بدونِ انقضا)
-      </label>
-      <label className="ad-check">
-        <input type="checkbox" checked={moadian} onChange={(e) => setMoadian(e.target.checked)} />
-        شاملِ سامانه‌ی مؤدیان
-      </label>
+      {tier === 'paid' ? (
+        <>
+          <label className="ad-check">
+            <input type="checkbox" checked={perpetual} onChange={(e) => setPerpetual(e.target.checked)} />
+            دائمی (بدونِ انقضا)
+          </label>
+          <label className="ad-check">
+            <input type="checkbox" checked={moadian} onChange={(e) => setMoadian(e.target.checked)} />
+            شاملِ سامانه‌ی مؤدیان
+          </label>
+        </>
+      ) : null}
       <Field label="یادداشت">
         <input value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
@@ -242,6 +293,8 @@ function DetailDialog({
               <dd dir="ltr" className="ad-mono">{l.lic_id}</dd>
               <dt>وضعیت</dt>
               <dd>{statusChip(l)}</dd>
+              <dt>نوع</dt>
+              <dd>{tierChip(l)}</dd>
               <dt>کاربران</dt>
               <dd>{l.seats != null ? faInt(l.seats) : 'بی‌سقف'}</dd>
               <dt>انقضا</dt>
@@ -377,7 +430,7 @@ function DetailDialog({
                         : ''}
                       <span className="ad-muted">
                         {' '}
-                        · {formatJalali(e.created_at)} · {e.actor === 'online' ? 'خودِ مشتری' : e.actor}
+                        · {formatJalali(e.created_at)} · {ACTOR_LABEL[e.actor] ?? e.actor}
                       </span>
                     </li>
                   ))}
@@ -402,15 +455,22 @@ export default function LicensesPage({
 }) {
   const list = useAsync(() => fetchLicenses(token), [token])
   const [q, setQ] = useState('')
+  const [tier, setTier] = useState<TierFilter>('all')
   const [creating, setCreating] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   const [created, setCreated] = useState<{ code: string; org: string } | null>(null)
 
   const rows = list.data ?? []
   const shown = useMemo(
-    () => rows.filter((r) => textMatches(`${r.org_name} ${r.lic_id} ${r.contact ?? ''} ${r.code_hint}`, q)),
-    [rows, q],
+    () =>
+      rows.filter(
+        (r) =>
+          (tier === 'all' || r.tier === tier) &&
+          textMatches(`${r.org_name} ${r.lic_id} ${r.contact ?? ''} ${r.code_hint}`, q),
+      ),
+    [rows, q, tier],
   )
+  const freeCount = rows.filter((r) => r.tier === 'free').length
   const soon = rows.filter(
     (r) => r.status === 'active' && r.expires_at && !isExpired(r) && Date.parse(r.expires_at) - Date.now() < 30 * DAY,
   ).length
@@ -420,7 +480,7 @@ export default function LicensesPage({
       <PageHeader
         icon={KeyRound}
         title="مجوزهای سازمانی"
-        description="مجوزهای «کوبیتا سازمانی»: صدور، فعال‌سازیِ آفلاین، تمدید، انتقال و ابطال."
+        description="مجوزهای «کوبیتا سازمانی»، رایگان و تجاری: صدور، فعال‌سازیِ آفلاین، تمدید، انتقال و ابطال."
         actions={
           <>
             {can(me, 'create') ? (
@@ -437,6 +497,7 @@ export default function LicensesPage({
 
       <section className="ad-stats">
         <Stat label="کلِ مجوزها" value={faInt(rows.length)} />
+        <Stat label="ثبت‌نامِ رایگان" value={faInt(freeCount)} />
         <Stat label="فعال روی دستگاه" value={faInt(rows.filter((r) => r.status === 'active' && r.bound).length)} tone="ok" />
         <Stat
           label="منتظرِ فعال‌سازی"
@@ -466,6 +527,18 @@ export default function LicensesPage({
               aria-label="جست‌وجو"
             />
           </div>
+          <div className="ad-segments">
+            {TIER_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`ad-segment${tier === f.key ? ' active' : ''}`}
+                onClick={() => setTier(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
           <span className="ad-count">{faInt(shown.length)} مجوز</span>
         </div>
 
@@ -476,6 +549,7 @@ export default function LicensesPage({
                 <tr>
                   <th>سازمان</th>
                   <th>شناسه</th>
+                  <th>نوع</th>
                   <th>کاربران</th>
                   <th>انقضا</th>
                   <th>وضعیت</th>
@@ -491,6 +565,7 @@ export default function LicensesPage({
                     <td data-label="شناسه" dir="ltr" className="ad-mono">
                       {r.lic_id}
                     </td>
+                    <td data-label="نوع">{tierChip(r)}</td>
                     <td className="num" data-label="کاربران">
                       {r.seats != null ? faInt(r.seats) : 'بی‌سقف'}
                     </td>
