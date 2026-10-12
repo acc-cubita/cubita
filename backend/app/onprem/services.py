@@ -152,15 +152,15 @@ $ErrorActionPreference='Stop'
 $raw=& "$env:SystemRoot\\System32\\sc.exe" sdshow '{name}'
 if($LASTEXITCODE -ne 0) {{ throw 'Service DACL query failed' }}
 $sddl=($raw | Where-Object {{ $_ -match '^[OGDS]:' }} | Select-Object -First 1).Trim()
-$sd=[System.Security.AccessControl.RawSecurityDescriptor]::new($sddl)
+$sd=New-Object System.Security.AccessControl.RawSecurityDescriptor -ArgumentList $sddl
 if($null -eq $sd.DiscretionaryAcl) {{ throw 'Service DACL is missing' }}
-$sid=[System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-545')
+$sid=New-Object System.Security.Principal.SecurityIdentifier -ArgumentList 'S-1-5-32-545'
 $allowed=0
 foreach($ace in $sd.DiscretionaryAcl) {{
   if($ace -is [System.Security.AccessControl.CommonAce] -and $ace.SecurityIdentifier -eq $sid -and $ace.AceQualifier -eq 'AccessAllowed') {{ $allowed=$allowed -bor $ace.AccessMask }}
 }}
 if(($allowed -band 20) -ne 20) {{
-  $ace=[System.Security.AccessControl.CommonAce]::new(0,0,20,$sid,$false,$null)
+  $ace=New-Object System.Security.AccessControl.CommonAce -ArgumentList 0,0,20,$sid,$false,$null
   $index=0
   while($index -lt $sd.DiscretionaryAcl.Count -and $sd.DiscretionaryAcl[$index] -is [System.Security.AccessControl.QualifiedAce] -and $sd.DiscretionaryAcl[$index].AceQualifier -eq 'AccessDenied') {{ $index++ }}
   $sd.DiscretionaryAcl.InsertAce($index,$ace)

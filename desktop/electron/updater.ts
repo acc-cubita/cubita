@@ -39,7 +39,7 @@ function failed(error: unknown) {
 export function currentUpdateStatus(): UpdateStatus { return lastStatus }
 
 export async function checkForUpdatesNow(): Promise<UpdateStatus> {
-  if (LEGACY_WINDOWS) return {state:'error',message:'این نسخه ویژهٔ ویندوز ۸٫۱ است؛ ارتقا را با نصاب مخصوص ویندوز ۸٫۱ انجام دهید.'}
+  if (LEGACY_WINDOWS) return {state:'error',message:'این نسخه از کانال سازگار ویندوز است؛ در صفحهٔ دانلود، نصاب مناسب ویندوز و معماری سیستم خود را برای ارتقا انتخاب کنید.'}
   if (!app.isPackaged || !configured) {
     return { state: 'error', message: 'بررسی آپدیت در نسخه نصب‌شده و پس از اتصال به سرور در دسترس است.' }
   }

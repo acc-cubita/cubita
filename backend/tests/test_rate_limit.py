@@ -60,6 +60,27 @@ def test_window_slides_and_frees_capacity():
     limiter.check("k")  # پنجره‌ی صفر یعنی رویداد قبلی بلافاصله منقضی است
 
 
+def test_window_expires_at_exact_boundary(monkeypatch):
+    from fastapi import HTTPException
+
+    clock = [100.0]
+    monkeypatch.setattr("app.rate_limit.time.monotonic", lambda: clock[0])
+    limiter = SlidingWindowLimiter(max_events=1, window_seconds=60)
+    limiter.check("k")
+    clock[0] = 159.999
+    with pytest.raises(HTTPException):
+        limiter.check("k")
+    clock[0] = 160.0
+    limiter.check("k")
+
+
+def test_zero_window_with_unchanged_clock(monkeypatch):
+    monkeypatch.setattr("app.rate_limit.time.monotonic", lambda: 100.0)
+    limiter = SlidingWindowLimiter(max_events=1, window_seconds=0)
+    limiter.check("k")
+    limiter.check("k")
+
+
 # --- اندپوینت‌ها ------------------------------------------------------------------
 
 

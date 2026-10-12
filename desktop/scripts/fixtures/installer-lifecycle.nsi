@@ -9,6 +9,13 @@ SilentInstall silent
 !define CUBITA_WINDOWS81_COMPAT
 !define CUBITA_MIN_WINDOWS_BUILD 9600
 !endif
+!ifdef QA_WINDOWS_LEGACY
+!define CUBITA_WINDOWS_LEGACY
+!define CUBITA_MIN_WINDOWS_BUILD 7601
+!ifdef QA_LEGACY_X86
+!define CUBITA_LEGACY_X86
+!endif
+!endif
 !define APP_EXECUTABLE_FILENAME "Cubita Enterprise.exe"
 !define INSTALL_REGISTRY_KEY "Software\CubitaInstallerQa\UnusedReadOnly"
 !define CUBITA_REG_KEY "Software\CubitaInstallerQa\UnusedReadOnly"

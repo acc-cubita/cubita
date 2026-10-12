@@ -6,10 +6,11 @@ param(
     [ValidateSet('app-running', 'close-app', 'api-state', 'stop-api', 'start-api',
                  'pg-state', 'stop-pg', 'start-pg',
                  'network-state', 'pause-network', 'resume-network',
-                 'maintenance-begin', 'maintenance-end')]
+                 'maintenance-begin', 'maintenance-end', 'architecture-check')]
     [string]$Action = 'api-state',
     [string]$AppPath,
-    [string]$LogPath
+    [string]$LogPath,
+    [ValidateSet('x86','x64')][string]$Architecture='x64'
 )
 
 Set-StrictMode -Version Latest
@@ -34,8 +35,36 @@ function Get-CubitaInstallerService([string]$ServiceName) {
 }
 
 function Get-CubitaInstallerTask {
-    Get-ScheduledTask -ErrorAction Stop |
-        Where-Object { $_.TaskName -eq 'CubitaEnterpriseNetwork' -and $_.TaskPath -eq '\' }
+    if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
+        Get-ScheduledTask -ErrorAction Stop |
+            Where-Object { $_.TaskName -eq 'CubitaEnterpriseNetwork' -and $_.TaskPath -eq '\' }
+        return
+    }
+    # Windows7 has Task Scheduler2, but does not provide the ScheduledTasks cmdlets.
+    $scheduler = New-Object -ComObject 'Schedule.Service'
+    $scheduler.Connect()
+    foreach ($task in $scheduler.GetFolder('\').GetTasks(1)) {
+        if ($task.Path -eq '\CubitaEnterpriseNetwork') {
+            return [pscustomobject]@{ NativeTask=$task; Settings=[pscustomobject]@{Enabled=$task.Enabled} }
+        }
+    }
+}
+
+function Test-CubitaServerArchitecture([string]$ExpectedAppPath,[string]$ExpectedArchitecture) {
+    if ([IO.Path]::GetFileName($ExpectedAppPath) -ne 'Cubita Enterprise.exe') { throw 'مسیر برنامه برای کنترل معماری معتبر نیست.' }
+    $server = Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($ExpectedAppPath))) 'resources\server\cubita-server.exe'
+    if (-not [IO.File]::Exists($server)) { return }
+    $stream=[IO.File]::OpenRead($server);$reader=New-Object IO.BinaryReader($stream)
+    try {
+        if ($stream.Length -lt 88 -or $reader.ReadUInt16() -ne 23117) {throw 'فایل سرور قبلی معتبر نیست؛ نصب قبلی را با همان نسخه تعمیر کنید.'}
+        $stream.Position=60;$offset=$reader.ReadUInt32()
+        if ($offset -gt ($stream.Length-6)) {throw 'ساختار فایل سرور قبلی معتبر نیست.'}
+        $stream.Position=$offset
+        if ($reader.ReadUInt32() -ne 17744) {throw 'امضای فایل سرور قبلی معتبر نیست.'}
+        $machine=$reader.ReadUInt16()
+        $expected=if ($ExpectedArchitecture -eq 'x86') {332}else{34404}
+        if ($machine -ne $expected) {throw 'معماری سرور نصب‌شده با این نصاب متفاوت است. برای حفظ پایگاه، نصاب هم‌معماری را اجرا کنید؛ انتقال معماری نیاز به پشتیبان و بازیابی جدا دارد.'}
+    } finally {$reader.Close();$stream.Close()}
 }
 
 # Constructor syntax must also parse on PowerShell 4 shipped with Windows 8.1.
@@ -74,6 +103,7 @@ function Set-CubitaRecoveryBlocked([bool]$Blocked) {
 
 function Invoke-CubitaInstallerAction([string]$Operation, [string]$ExpectedAppPath) {
     switch ($Operation) {
+        'architecture-check' { Test-CubitaServerArchitecture $ExpectedAppPath $Architecture }
         'maintenance-begin' {
             if((Set-CubitaRecoveryBlocked $true) -ne 0) { return 7 }
         }
@@ -141,13 +171,18 @@ function Invoke-CubitaInstallerAction([string]$Operation, [string]$ExpectedAppPa
         'pause-network' {
             $task = Get-CubitaInstallerTask
             if ($task) {
-                $task | Disable-ScheduledTask | Out-Null
-                $task | Stop-ScheduledTask
+                if ($task.PSObject.Properties['NativeTask']) {
+                    $task.NativeTask.Enabled = $false
+                    $task.NativeTask.Stop(0)
+                } else {
+                    $task | Disable-ScheduledTask | Out-Null
+                    $task | Stop-ScheduledTask
+                }
             }
         }
         'resume-network' {
             $task = Get-CubitaInstallerTask
-            if ($task) { $task | Enable-ScheduledTask | Out-Null }
+            if ($task) { if ($task.PSObject.Properties['NativeTask']) { $task.NativeTask.Enabled = $true } else { $task | Enable-ScheduledTask | Out-Null } }
         }
         default { throw 'عملیات نصاب شناخته‌شده نیست.' }
     }

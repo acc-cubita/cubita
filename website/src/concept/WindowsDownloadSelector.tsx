@@ -45,12 +45,13 @@ export function WindowsDownloadSelector() {
           </label>
         </div>
         <p className="cc-windows-result" role="status" aria-live="polite">{pkg.message}</p>
-        {pkg.href && <a className="cc-btn cc-btn-primary" href={pkg.href} download><Download size={16} /> دانلود نصاب سازمانی {version === '8.1' ? 'ویندوز ۸٫۱' : 'ویندوز ۱۰ و ۱۱'} — ۶۴ بیتی</a>}
+        {pkg.href && <a className="cc-btn cc-btn-primary" href={pkg.href} download><Download size={16} /> دانلود نصاب سازمانی {version === '7' ? 'ویندوز ۷ SP1' : version === '8' ? 'ویندوز ۸' : version === '8.1' ? 'ویندوز ۸٫۱' : bits === '32' ? 'ویندوز ۱۰' : 'ویندوز ۱۰ و ۱۱'} — {bits === '32' ? '۳۲' : '۶۴'} بیتی</a>}
         <details className="cc-windows-help"><summary>از کجا بفهمم ویندوزم چند بیتی است؟</summary>
           <p>در تنظیمات ویندوز، بخش System و سپس About یا در Control Panel بخش System، مقدار «System type» را ببینید. 32-bit یعنی ۳۲ بیتی و64-bit یعنی ۶۴ بیتی. معماری مرورگر ممکن است با معماری ویندوز متفاوت باشد.</p>
           <p>نسخهٔ فعلی برای پردازنده‌های x86/x64 است؛ پشتیبانی از ARM تأیید نشده است.</p>
         </details>
         <p>پیش‌نیازهای لازم در نصاب بررسی و در صورت نیاز نصب می‌شوند. گزارش خطاهای نصب در پوشهٔ <bdi dir="ltr">C:\ProgramData\Cubita\logs</bdi> ثبت می‌شود؛ مسیر دقیق در پیام خطا نمایش داده می‌شود.</p>
+        {(version === '7' || version === '8' || bits === '32') && <p>در ویندوز ۷ ممکن است پس از نصب پیش‌نیازها، راه‌اندازی دوباره و اجرای مجدد نصاب لازم باشد. ارتقای سرور بین ۳۲ و ۶۴ بیتی با نصب روی دادهٔ قبلی انجام نمی‌شود؛ انتقال با پشتیبان و بازیابی لازم است. در ویندوز ۷، تنظیم خودکار شبکهٔ بدون مودم در دسترس نیست؛ اتصال کلاینت با IP شبکه انجام می‌شود.</p>}
       </div>
     </section>
   )

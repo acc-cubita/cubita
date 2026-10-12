@@ -18,10 +18,13 @@ const betterSqlite3Dir = path.join(
   'better-sqlite3',
 )
 
+const arch = process.env.CUBITA_ELECTRON_ARCH ?? 'x64'
+if (!['x64', 'ia32'].includes(arch)) throw new Error('Unsupported Electron architecture')
+
 console.log(`در حال دریافت باینری better-sqlite3 برای Electron ${electronVersion}...`)
 execFileSync(
   'npx',
-  ['prebuild-install', '--runtime=electron', `--target=${electronVersion}`, '--arch=x64', '--platform=win32'],
+  ['prebuild-install', '--runtime=electron', `--target=${electronVersion}`, `--arch=${arch}`, '--platform=win32'],
   { cwd: betterSqlite3Dir, stdio: 'inherit', shell: true },
 )
 console.log('انجام شد.')

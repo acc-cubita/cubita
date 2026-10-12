@@ -27,7 +27,7 @@ class SlidingWindowLimiter:
         now = time.monotonic()
         with self._lock:
             hits = self._hits[key]
-            while hits and now - hits[0] > self.window:
+            while hits and now - hits[0] >= self.window:
                 hits.popleft()
             if len(hits) >= self.max_events:
                 retry_after = int(self.window - (now - hits[0])) + 1
