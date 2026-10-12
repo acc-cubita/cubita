@@ -103,13 +103,15 @@ export function DownloadPage() {
         </div>
         <div className="cc-card">
           <h3 className="cc-card-title">ویندوز ۸٫۱ — ۶۴ بیتی</h3>
+          <span className="cc-badge">نسخهٔ سازگار ۱٫۹٫۱۶ — سرور و کلاینت</span>
           <p>نصاب مستقل با پیش‌نیازهای همراه، انتخاب سرور یا کلاینت و گزارش نصب؛ ارتقا از مسیر همین نسخه انجام می‌شود.</p>
+          <p role="note">این بسته منتشر شده، اما آزمون نصب و اجرای واقعی روی ویندوز ۸٫۱ هنوز تکمیل نشده است.</p>
           {ENTERPRISE_WINDOWS81_DOWNLOAD_URL ? (
             <a className="cc-btn cc-btn-primary" href={ENTERPRISE_WINDOWS81_DOWNLOAD_URL} download>
               <Download size={16} /> دانلود برای ویندوز ۸٫۱
             </a>
           ) : <p role="status">در حال آماده‌سازی و آزمون؛ دانلود هنوز منتشر نشده است.</p>}
-          <p>ویندوز ۷ و ۸: بستهٔ تأییدشده هنوز آماده نیست. سازگاری نسخهٔ ۸٫۱ به معنی سازگاری با ۷ و ۸ نیست.</p>
+          <p>ویندوز ۷ و ۸: نصاب پشتیبانی‌شده برای این دو نسخه در دسترس نیست؛ این فایل برای ویندوز ۸٫۱ ارائه شده است.</p>
         </div>
       </section>
 
