@@ -714,3 +714,14 @@ body:has(.cc-root) { background: #ffffff; color-scheme: light; }
   .cc-ind:hover,
   .cc-btn-primary:hover { transform: none; }
 }
+
+/* The destination OS may differ from the browser computer. Keep both choices editable. */
+.cc-windows-selector { max-width: 850px; margin-inline: auto; }
+.cc-windows-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cc-windows-fields select { width: 100%; min-height: 48px; padding: 10px; border: 1px solid var(--cc-border-strong); border-radius: var(--cc-radius-sm); font: inherit; color: var(--cc-ink); background: #fff; }
+.cc-windows-fields select:focus-visible { outline: 3px solid var(--cc-focus); }
+.cc-windows-result { padding: 12px; border-radius: var(--cc-radius-sm); background: var(--cc-bg); }
+.cc-windows-help { margin-block: 18px; }
+.cc-windows-help summary { cursor: pointer; }
+#windows-download { scroll-margin-top: 90px; }
+@media (max-width: 600px) { .cc-windows-fields { grid-template-columns: 1fr; } .cc-windows-selector .cc-btn { width: 100%; white-space: normal; text-align: center; } }

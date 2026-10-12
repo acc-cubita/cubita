@@ -56,3 +56,8 @@ Electron22 از چرخهٔ پشتیبانی خارج شده است؛ این مح
 - https://www.electronjs.org/blog/windows-7-to-8-1-deprecation-notice
 - https://docs.python.org/3.12/using/windows.html
 - https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48
+
+
+## بررسی Windows7/8 در2026-10-12
+
+درخواست ساخت کامل سرور/کلاینت و انتشار دریافت شد. حل وابستگی برایPython3.8 واقعاً شکست خورد؛ شش وابستگی مستقیم نسخهٔ بالاتر می‌خواهند و کد سرور و bootstrap نیز backport لازم دارند. هیچ بستهٔ7/8 ساخته/منتشر نشد. شواهد، فرمان بازتولید، دامنهٔ تغییر و نتیجهٔ آزمون مجدد نصب در [WINDOWS78_COMPATIBILITY_ASSESSMENT.md](WINDOWS78_COMPATIBILITY_ASSESSMENT.md) ثبت شده‌اند.
