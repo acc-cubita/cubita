@@ -42,6 +42,12 @@ try {
     assert.deepEqual(errors, [])
     await section.screenshot({ path: `${output}/selector-${width}.png` })
     checks += 3
+    await windows.selectOption('7'); await bits.selectOption('32')
+    assert.match(await section.getByRole('status').innerText(), /آزمایشی.*Service Pack 1/)
+    assert.match(await section.getByRole('status').innerText(), /آزمون نصب و اجرای واقعی.*هنوز تکمیل نشده/)
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    await section.screenshot({ path: `${output}/legacy-x86-${width}.png` })
+    checks += 3
     await page.close()
   }
   for (const marker of ['WOW64', '', 'ARM64']) {

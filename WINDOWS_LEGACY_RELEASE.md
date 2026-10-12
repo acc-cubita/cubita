@@ -50,6 +50,7 @@ node desktop/scripts/dist-windows-legacy-enterprise.mjs
 
 ## حدود سازگاری و ارتقا
 
+- Windows7 SP1 باید به‌روزرسانی‌های loader و SHA-2 لازم را داشته باشد. Python3.8 به KB2533623 یا به‌روزرسانی جایگزین آن نیاز دارد؛ .NET4.6+ به پشتیبانی امضای SHA-2 نیاز دارد. این **به‌روزرسانی‌های خود ویندوز** در این نصاب خودکار نصب نمی‌شوند؛ آماده‌سازی VC/.NET/PowerShell با به‌روزرسانی سیستم‌عامل یکسان نیست. منابع: [Python3.8](https://docs.python.org/3.8/using/windows.html)، [Microsoft SHA-2](https://support.microsoft.com/en-us/topic/security-and-quality-rollup-for-net-framework-4-8-for-windows-7-sp1-and-windows-server-2008-r2-sp1-kb4600944-0bd4b1f1-57b1-f476-1208-4a17dec856c0).
 - آزمون واقعی روی Windows7/8/8.1 در دسترس نبوده است؛ انتشار با اجازهٔ صریح کاربر و عنوان **آزمایشی** انجام می‌شود. `targetOsVerified:false` در metadata باقی می‌ماند. ساخت و آزمون روی Windows11، تأیید سازگاری تمام درایورها یا patchهای ویندوز مقصد نیست.
 - تغییر معماری سرور با نصب روی فایل‌های دادهٔ موجود مسدود است. انتقال 32↔64 نیازمند dump/restore در نصب جداست؛ کپی pgdata مجاز نیست.
 - اتصال عادی کلاینت به IP سرور و فایروال private/domain حفظ می‌شود. ابزار پیشرفتهٔ تنظیم خودکار شبکهٔ بدون مودم از cmdletهای Windows8+ استفاده می‌کند و روی Windows7 هنوز قابل استفاده نیست.
@@ -65,11 +66,13 @@ node desktop/scripts/dist-windows-legacy-enterprise.mjs
 - هر دو frozen server: selftest با880 route و190 فایل migration؛ نصب تازه و setup مجدد، حفظ هش `.env`/`secrets.json`، head0192،252 جدول FORCE RLS، API سالم با edition enterprise/version1.9.17، gzip dump/restore با مقدار Decimal دقیق موفق. خطای آدرس health در harness از `/health` به مسیر واقعی `/api/health` اصلاح و آزمون دوباره اجرا شد.
 - Electron22 واقعی هر دو معماری: SQLite در حافظه، بارگذاری serialport و undici موفق؛ این آزمون راننده/پورت فیزیکی نیست.
 - bootstrap:13 سناریو؛ پیش‌نیازها:17؛ guard:40 assertion؛ lifecycle NSIS:19 سناریو در هر یک از چهار پروفایل modern/8.1/legacy-x86/legacy-x64. همهٔ تغییرات سیستم در این آزمون‌ها mock هستند؛ نصب سراسری روی میزبان اجرا نشد.
-- سایت: build و TypeScript موفق، lint بدون خطا با دو هشدار قبلی ContactSection،28 کنترل مرورگر در390/1440 موفق و تصاویر در `_deploy/windows-legacy-download-qa`. آزمون مرورگر روی Chromium میزبان است.
+- سایت: build و TypeScript موفق، lint بدون خطا با دو هشدار قبلی ContactSection،34 کنترل مرورگر در390/1440 موفق و تصاویر در `_deploy/windows-legacy-download-qa`. آزمون مرورگر روی Chromium میزبان است.
 
 | فایل نهایی | اندازه | SHA256 |
 |---|---:|---|
 | Cubita-Enterprise-Legacy-x86-Setup-1.9.17.exe | 363493920 | `cf53e5366740504ce6353c092ac3365e00c65300d939183c85ca1ea8abbbc282` |
 | Cubita-Enterprise-Legacy-x64-Setup-1.9.17.exe | 381947388 | `9743fc423e3be2c651c3d0e411563ea99a360b89b6b542ac3b598465bf8a8587` |
 
-انتقال به محل موقت در حال انجام است؛ فایل عمومی و سایت هنوز در این مرحله تغییر نکرده‌اند. نتیجهٔ انتشار و PR پس از تأیید هش عمومی اضافه می‌شود.
+انتشار عمومی آزمایشی با مجوز کاربر انجام شد. هر دو فایل پس از کنترل هش کامل روی سرور در `/updates/enterprise/legacy/` قرار گرفتند و انتخابگر [سایت](https://cubita.ir/download/#windows-download) فعال شد. source در [PR284](https://github.com/acc-cubita/cubita/pull/284) است. metadata عمومی `release.json` وضعیت آزمایشی و `targetOsVerified:false` را نگه می‌دارد.
+
+backup سایت: `/opt/cubita-marketing/dist.before-legacy-20261012T215426Z`؛ SHA256 آرشیو سایت `57c3274db981e39ab04cb0cb9353163307c32e5ec45bceebcd8574b597fcaa2d`. SHA256 نصاب اصلی و `latest.yml` پیش/پس از انتشار ثابت ماندند؛ نسخهٔ Windows81 1.9.16 بازنویسی نشد.34 کنترل مرورگر روی سایت زنده نیز موفق شدند؛ تصاویر در `_deploy/windows-legacy-download-live-qa` هستند. نتیجهٔ آخرین CI از PR قابل مشاهده است؛ کنترل HTTP کامل، جدا از کنترل هش سرور، در `_deploy/windows-legacy-public-http-verification.json` ثبت می‌شود.
