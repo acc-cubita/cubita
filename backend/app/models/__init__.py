@@ -163,6 +163,12 @@ from app.models.staff_audit import StaffAuditLog
 from app.models.user import Role, User
 
 from app.models.repair import RepairBranch, RepairBranchAccess, RepairDeviceType, RepairDevice, RepairCase, RepairEvent, RepairAttachment, RepairTask, RepairFault, RepairEstimate, RepairEstimateDecision
+from app.models.repair import RepairDeviceIdentityEvent
+from app.models.repair_completion import RepairIntakeEvidence
+from app.models.repair_completion import RepairConfirmation
+from app.models.repair_completion import RepairWarrantyTransfer
+from app.models.repair_completion import RepairTechnicalSummary
+from app.models.repair_completion import RepairRepresentativeAuthorization
 from app.models.repair import RepairPart, RepairPartMovement, RepairWork, RepairOutsource, RepairQualityCheck, RepairRemovedPart, RepairDeviceSecret
 from app.models.repair import RepairPurchaseRequest
 from app.models.repair import RepairDocument, RepairDelivery

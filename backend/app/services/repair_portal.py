@@ -88,6 +88,7 @@ def message(db,row,token,data):
 
 
 def projection(db,row):
+    from app.services.repair_summary import for_recipient
     from app.models.repair import RepairWarranty
     estimate=db.query(RepairEstimate).filter_by(case_id=row.id).order_by(RepairEstimate.version.desc()).first()
     decision=db.query(RepairEstimateDecision).filter_by(estimate_id=estimate.id).first() if estimate else None
@@ -103,7 +104,7 @@ def projection(db,row):
             'estimate':estimate_view,'results':[w.customer_result for w in db.query(RepairWork).filter_by(case_id=row.id).order_by(RepairWork.created_at) if w.customer_result],
             'attachments':[{'id':a.id,'filename':a.filename,'size':a.size} for a in db.query(RepairAttachment).filter_by(case_id=row.id,customer_visible=True).order_by(RepairAttachment.created_at)],
             'messages':[{'id':m.id,'kind':m.kind,'name':m.name,'body':m.body,'rating':m.rating,'created_at':m.created_at} for m in db.query(RepairCustomerMessage).filter_by(case_id=row.id).order_by(RepairCustomerMessage.created_at).all()],
-            **payment_status(db,row)}
+            'technical_summaries':for_recipient(db,row), **payment_status(db,row)}
 
 
 def payment_status(db,row):

@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Literal
+from typing import Literal, Annotated
 from uuid import UUID
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
@@ -34,7 +34,15 @@ class DeviceTypeIn(BranchIn):
         return self
 
 
-class DeviceIn(RepairInput):
+IndustryIdentifier = Literal['manufacturer_part_number','chassis_number','board_number','engine_number','asset_tag','mac_address']
+
+
+class DeviceProfileFields(RepairInput):
+    hardware_revision: str = Field(default='', max_length=120)
+    industry_identifiers: dict[IndustryIdentifier, Annotated[str, Field(min_length=1,max_length=120)]] = Field(default_factory=dict,max_length=6)
+
+
+class DeviceIn(DeviceProfileFields):
     type_id: UUID
     brand: str = Field(default="", max_length=120)
     model: str = Field(min_length=1, max_length=120)
@@ -279,6 +287,8 @@ class RepairDocumentLinkIn(VersionIn):
 
 
 class RepairDeliveryIn(VersionIn):
+    confirmation_id: UUID | None = None
+    representation_id: UUID | None = None
     receiver_name: str = Field(min_length=1,max_length=200)
     receiver_phone: str = Field(min_length=1,max_length=30)
     authorization: str = Field(min_length=1,max_length=3000)

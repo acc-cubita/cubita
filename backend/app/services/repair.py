@@ -82,9 +82,8 @@ def create(db: Session, p: Principal, data):
     if contact is None or not contact.is_active or contact.is_system:
         raise HTTPException(422, "مشتری فعال از فهرست اشخاص انتخاب کنید.")
     if data.device_id:
-        d = db.get(RepairDevice, data.device_id)
-        if d is None or not visible(db, p).filter(RepairCase.device_id == d.id).first():
-            raise HTTPException(404, "شناسنامه دستگاه در دسترس نیست.")
+        from app.services.repair_identity import device, canonical
+        d = canonical(db, p, device(db, p, data.device_id))
         t = device_type(db, d.type_id)
     else:
         t = device_type(db, data.device.type_id)
@@ -98,7 +97,7 @@ def create(db: Session, p: Principal, data):
     values = data.model_dump(exclude={"device_id", "device"})
     row = RepairCase(**values, device_id=d.id, number=next_document_number(db, "repair_admission"),
         owner_snapshot={"name": contact.name, "phone": contact.phone or ""},
-        device_snapshot={"type_id": str(d.type_id), "category": t.name, "brand": d.brand, "model": d.model, "serial": d.serial, "imei": d.imei, "attributes": d.attributes},
+        device_snapshot={"type_id": str(d.type_id), "category": t.name, "brand": d.brand, "model": d.model, "serial": d.serial, "imei": d.imei, "attributes": d.attributes, "hardware_revision":d.hardware_revision, "industry_identifiers":d.industry_identifiers},
         created_by_id=p.user.id)
     db.add(row)
     db.flush()

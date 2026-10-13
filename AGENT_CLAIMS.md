@@ -34,6 +34,8 @@
 
 | ایجنت | فایل‌ها | کار | از |
 |---|---|---|---|
+| Codex | backend/app/config.py | پرچم خاموشِ پیش‌فرض ارسال واقعی OTP تعمیرگاه | 2026-10-08 |
+| Codex | backend/app/{models,schemas,services,routers}/repair*؛ models/__init__.py؛ routing.py؛ registry/permissions؛ migration 0193؛ PROJECT_OVERVIEW.md؛ backend/tests/test_repair*؛ desktop/src/pages/repair/ و api.ts؛ desktop/scripts/verify-repair-professional.mjs و verify-repair-warranty-transfer.mjs و verify-repair-backend.mjs و verify-repair-roles.mjs؛ گزارش‌های تعمیرگاه و D:/New folder (2)؛ pytest و پایگاه‌های مستقل repair_professional و repair_professional_fresh؛ backend/scripts/build_repair_identity_migration.py؛ desktop/package.json و package-lock.json؛ backend/dist/server-bundle و desktop/release-enterprise؛ _deploy/repair-professional-qa | تکمیل و تحویل مرحلهٔ اول؛ هماهنگی master1d12a88 و مهاجرت0193؛ آزمون تک‌اجرای مستقل و حفظ دادهٔ قدیمی | 2026-10-08 |
 
 
 
@@ -292,3 +294,4 @@ PROJECT_OVERVIEW.md                   OPEN_DECISIONS.md
 - 2026-10-12 — Codex: انتخابگر ویندوز/32-64 و پیشنهاد محافظه‌کارانهٔ مرورگر ساخته/منتشر شد؛ 28 کنترل در390/1440 محلی و زنده موفق؛ source در fix/windows78-compatibility-assessment. بستهٔ32 یا7/8 ساخته نشده؛ خروجی‌ها و کانال قبلی ثابت‌اند.
 
 - 2026-10-12 — Codex: Legacy1.9.17 کامل x86/x64 سرور/کلاینت ساخته و با مجوز کاربر منتشر؛4806 بک‌اند/84 اصلاحات/32 مالیx86 موفق،setup+upgrade+gzip مستقل هر دو معماری تا0192،34 مرورگر محلی/زنده؛هش کانال اصلی ثابت. source PR284؛ Windows7/8/8.1 واقعی و OS updates7 خودکار انجام نشده. ادعاهای کد،آزمون و گزارش آزاد شدند.
+- 2026-10-08 — Codex: هر17 گزارش وضعیت در D:/New folder (2) بر پایه master d147c9f / نسخه1.9.15 / head0191 به‌روز شد؛ inventory کد/API/DB/UI، 2111 پیوند محلی و 75 پیوند گزارش سنجیده، 17 پشتیبان hash-identical و ممیز صفحات0/0؛ بدون تغییر کد محصول، اتصال DB یا انتشار. ادعا آزاد شد.

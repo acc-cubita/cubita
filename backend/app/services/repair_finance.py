@@ -179,7 +179,10 @@ def attach_document(db,p,row,data):
     return ref
 
 
-def delivery(db,p,row,data):
+def validate_delivery(db,p,row,data):
+    if data.representation_id:
+        from app.services.repair_representation import validate
+        validate(db,row,data.representation_id,'delivery',data.receiver_name,data.receiver_phone)
     from app.services.repair_custody import assert_present
     assert_present(db,row)
     core.check_version(row,data.version)
@@ -200,11 +203,22 @@ def delivery(db,p,row,data):
         if ref.work_version!=row.work_version: raise HTTPException(409,'کار پس از فاکتور تغییر کرده؛ ابتدا فاکتور را اصلاح کنید.')
     balance=Decimal(financial(db,row)['remaining_balance'])
     if balance>0 and (not data.credit_reason or not p.has_permission('repair_credit','approve')): raise HTTPException(403,'تحویل با بدهی به مجوز تحویل اعتباری و دلیل نیاز دارد.')
-    result=RepairDelivery(case_id=row.id,delivered_at=datetime.now(timezone.utc),outstanding_snapshot=balance,handed_by_id=p.user.id,**data.model_dump(exclude={'version'}))
+    return balance
+
+
+def delivery(db,p,row,data):
+    balance=validate_delivery(db,p,row,data)
+    from app.services.repair_confirmation import required
+    if required(db,row,'delivery') and not data.confirmation_id:
+        raise HTTPException(409,'این پرونده تأیید امن تحویل می‌خواهد؛ کد یا امضای جایگزین مجاز را ثبت کنید.')
+    if data.confirmation_id:
+        from app.services.repair_confirmation import consume_delivery
+        consume_delivery(db,p,row,data)
+    result=RepairDelivery(case_id=row.id,delivered_at=datetime.now(timezone.utc),outstanding_snapshot=balance,handed_by_id=p.user.id,**data.model_dump(exclude={'version','confirmation_id','representation_id'}))
     db.add(result);db.flush()
     db.query(RepairDeviceSecret).filter_by(case_id=row.id).delete(synchronize_session=False)
     row.status='delivered'
-    core.event(db,p,row,'device_delivered',{'delivery_id':str(result.id),'receiver_name':result.receiver_name,'credit_reason':data.credit_reason})
+    core.event(db,p,row,'device_delivered',{'delivery_id':str(result.id),'receiver_name':result.receiver_name,'credit_reason':data.credit_reason,'confirmation_id':str(data.confirmation_id) if data.confirmation_id else None,'representation_id':str(data.representation_id) if data.representation_id else None})
     return result
 
 

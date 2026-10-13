@@ -134,7 +134,7 @@ def send_pattern(to: str, args: list[str]) -> bool:
         logger.warning("ارسالِ الگو به %s ناموفق بود: %s", phone, data.get("status"))
         return False
     except Exception as exc:
-        logger.warning("ارسالِ الگو به %s خطا داد: %s", phone, exc)
+        logger.warning("ارسالِ الگو به %s خطا داد؛ نوع خطا: %s", phone, type(exc).__name__)
         return False
 
 

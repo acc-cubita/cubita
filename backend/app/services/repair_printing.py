@@ -19,6 +19,14 @@ def code_images(row):
     return linear.getvalue(),matrix.getvalue()
 
 
+def device_label_html(device):
+    import base64
+    image=BytesIO()
+    qrcode.make('cubita:repair-device:'+str(device.id),image_factory=SvgPathImage,border=4).save(image)
+    encoded=base64.b64encode(image.getvalue()).decode()
+    return f'<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><title>شناسنامه دستگاه</title><style>@page{{size:100mm 60mm;margin:4mm}}body{{font-family:Tahoma}}bdi{{overflow-wrap:anywhere}}</style><h3>{escape(device.brand)} {escape(device.model)}</h3><p><bdi>RD-{device.id}</bdi></p><img alt="QR شناسنامه داخلی دستگاه" width="140" height="140" src="data:image/svg+xml;base64,{encoded}"><p>اسکن فقط برای کارکنان مجاز؛ هیچ دسترسی مشتری همراه این برچسب نیست.</p></html>'
+
+
 def codes_html(row):
     import base64
     barcode,qr=code_images(row)
