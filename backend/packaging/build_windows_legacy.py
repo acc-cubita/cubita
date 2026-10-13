@@ -49,7 +49,10 @@ def build(args):
     probe=audit(bundle,args.architecture)
     (output/'native-audit.json').write_text(json.dumps(probe,indent=2),encoding='utf-8')
     if probe['issues']:raise ValueError('Frozen runtime native compatibility audit failed; artifact is not releasable')
-    subprocess.run([str(bundle/'cubita-server.exe'),'selftest'],cwd=output,env=env,check=True)
+    runtime_env = env.copy()
+    runtime_env['PATH'] = str(Path(os.environ['SystemRoot'])/'System32') + ';' + os.environ['SystemRoot']
+    runtime_env.pop('PSYCOPG_IMPL', None)
+    subprocess.run([str(bundle/'cubita-server.exe'),'selftest'],cwd=output,env=runtime_env,check=True)
     manifest={'profile':'windows-legacy','architecture':args.architecture,'python':'.'.join(map(str,info['python'])),'postgresMajor':17,'postgresVersion':pg_version,'version':args.version,'serverSha256':digest(bundle/'cubita-server.exe'),'targetOsVerified':False,'minimumWindowsBuild':7601,'minimumFrameworkRelease':378389,'nativeAuditSha256':digest(output/'native-audit.json'),'sourceManifestSha256':digest(source/'legacy-source.json')}
     (bundle/'compatibility.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
     print('Prepared experimental server bundle:',bundle)
