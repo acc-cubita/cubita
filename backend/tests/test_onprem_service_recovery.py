@@ -123,7 +123,7 @@ def test_installer_grants_only_start_query_preserving_dacl():
         assert config[:3] == ["sc", "config", name]
         assert failure == ["sc", "failure", name, "reset=", "3600", "actions=", "restart/10000/restart/30000/restart/60000"]
         script = base64.b64decode(acl[-1]).decode("utf-16le")
-        assert "CommonAce]::new(0,0,20,$sid,$false,$null)" in script
+        assert "CommonAce -ArgumentList 0,0,20,$sid,$false,$null" in script
         assert "RawSecurityDescriptor" in script and "sdshow" in script
         assert "DiscretionaryAcl.InsertAce" in script and "AccessDenied" in script
         assert "S-1-5-32-545" in script

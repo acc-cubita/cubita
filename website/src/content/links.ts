@@ -11,3 +11,5 @@ export const ENTERPRISE_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/enterprise
 // Published separately with explicit target-OS QA status; never use the modern update feed.
 const windows81Url = import.meta.env.VITE_ENTERPRISE_WINDOWS81_DOWNLOAD_URL?.trim() ?? 'https://acc.cubita.ir/updates/enterprise/windows81/Cubita-Enterprise-Windows81-Setup-1.9.16.exe'
 export const ENTERPRISE_WINDOWS81_DOWNLOAD_URL = /^https:\/\//.test(windows81Url) ? windows81Url : null
+export const ENTERPRISE_LEGACY_X86_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/enterprise/legacy/Cubita-Enterprise-Legacy-x86-Setup-1.9.17.exe'
+export const ENTERPRISE_LEGACY_X64_DOWNLOAD_URL = 'https://acc.cubita.ir/updates/enterprise/legacy/Cubita-Enterprise-Legacy-x64-Setup-1.9.17.exe'

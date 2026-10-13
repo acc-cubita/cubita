@@ -23,12 +23,16 @@ try {
       for (const arch of ['32', '64']) {
         await windows.selectOption(os); await bits.selectOption(arch)
         const link = section.locator('a[download]')
-        const available = arch === '64' && ['8.1', '10-11'].includes(os)
-        assert.equal(await link.count(), available ? 1 : 0)
-        if (available) {
+        assert.equal(await link.count(), 1)
+        {
           const href = await link.getAttribute('href')
-          assert.equal(href, os === '8.1' ? 'https://acc.cubita.ir/updates/enterprise/windows81/Cubita-Enterprise-Windows81-Setup-1.9.16.exe' : 'https://acc.cubita.ir/updates/enterprise/Cubita-Enterprise-Setup.exe')
-        } else assert.match(await section.getByRole('status').innerText(), /هنوز آماده و منتشر نشده/)
+          const expected = arch === '32' || os === '7' || os === '8'
+            ? `https://acc.cubita.ir/updates/enterprise/legacy/Cubita-Enterprise-Legacy-${arch === '32' ? 'x86' : 'x64'}-Setup-1.9.17.exe`
+            : os === '8.1' ? 'https://acc.cubita.ir/updates/enterprise/windows81/Cubita-Enterprise-Windows81-Setup-1.9.16.exe' : 'https://acc.cubita.ir/updates/enterprise/Cubita-Enterprise-Setup.exe'
+          assert.equal(href, expected)
+          assert.match(await link.innerText(), arch === '32' ? /۳۲ بیتی/ : /۶۴ بیتی/)
+          if (os === '10-11' && arch === '32') assert.match(await section.getByRole('status').innerText(), /ویندوز ۱۱ نسخهٔ ۳۲ بیتی ندارد/)
+        }
         checks++
       }
     }
@@ -37,6 +41,12 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
     assert.deepEqual(errors, [])
     await section.screenshot({ path: `${output}/selector-${width}.png` })
+    checks += 3
+    await windows.selectOption('7'); await bits.selectOption('32')
+    assert.match(await section.getByRole('status').innerText(), /آزمایشی.*Service Pack 1/)
+    assert.match(await section.getByRole('status').innerText(), /آزمون نصب و اجرای واقعی.*هنوز تکمیل نشده/)
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    await section.screenshot({ path: `${output}/legacy-x86-${width}.png` })
     checks += 3
     await page.close()
   }

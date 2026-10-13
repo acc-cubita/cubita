@@ -23,7 +23,7 @@ RULE = "CubitaEnterpriseNetworkLAN"
 PREAMBLE = r"""
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding -ArgumentList $false
 $taskName = 'CubitaEnterpriseNetwork'
 $ruleName = 'CubitaEnterpriseNetworkLAN'
 """

@@ -45,15 +45,47 @@ Var CubitaInstallLog
 !macro cubitaPrerequisites
   InitPluginsDir
   File /oname=$PLUGINSDIR\cubita-prerequisites.ps1 "${CUBITA_INSTALLER_PAYLOAD_DIR}\installer-prerequisites.ps1"
-  File /oname=$PLUGINSDIR\vc_redist.x64.exe "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\vc_redist.x64.exe"
+  !ifdef CUBITA_LEGACY_X86
+    File /oname=$PLUGINSDIR\vc_redist.x86.exe "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\vc_redist.x86.exe"
+  !else
+    File /oname=$PLUGINSDIR\vc_redist.x64.exe "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\vc_redist.x64.exe"
+  !endif
   File /oname=$PLUGINSDIR\runtime.json "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\runtime.json"
   !ifdef CUBITA_HAS_SERVER
   File /oname=$PLUGINSDIR\dotnet48.exe "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\dotnet48.exe"
   File /oname=$PLUGINSDIR\dotnet.json "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\dotnet.json"
   !endif
+  !ifdef CUBITA_WINDOWS_LEGACY
+    File /oname=$PLUGINSDIR\cubita-bootstrap.ps1 "${CUBITA_INSTALLER_PAYLOAD_DIR}\installer-legacy-bootstrap.ps1"
+    File /oname=$PLUGINSDIR\wmf-x64.msu "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\wmf-x64.msu"
+    File /oname=$PLUGINSDIR\wmf-x86.msu "${CUBITA_INSTALLER_PAYLOAD_DIR}\prerequisites\wmf-x86.msu"
+    !insertmacro cubitaInstallLog "Windows7 bootstrap begin"
+    nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-bootstrap.ps1" -PayloadDirectory "$PLUGINSDIR" -LogPath "$CubitaInstallLog" -DotNetSha256 "${CUBITA_LEGACY_DOTNET_SHA256}" -WmfX64Sha256 "${CUBITA_LEGACY_WMF64_SHA256}" -WmfX86Sha256 "${CUBITA_LEGACY_WMF32_SHA256}"'
+    Pop $0
+    !insertmacro cubitaInstallLog "Windows7 bootstrap exit=$0"
+    ${If} $0 == "3010"
+      MessageBox MB_ICONINFORMATION|MB_OK "پیش‌نیاز ویندوز ۷ نصب شد. ویندوز را راه‌اندازی مجدد کنید و همین نصاب را دوباره اجرا کنید؛ فایل‌ها و سرویس‌های کوبیتا هنوز تغییر نکرده‌اند.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
+      SetErrorLevel 3010
+      Quit
+    ${ElseIf} $0 != "0"
+      MessageBox MB_ICONSTOP|MB_OK "آماده‌سازی پیش‌نیاز ویندوز ۷ کامل نشد (کد $0). فایل‌های کوبیتا هنوز تغییر نکرده‌اند.$\r$\nگزارش دقیق: $CubitaInstallLog" /SD IDOK
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+  !endif
   DetailPrint "بررسی و نصب پیش‌نیازهای کوبیتا…"
   !insertmacro cubitaInstallLog "prerequisites begin"
-  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-prerequisites.ps1" -PayloadDirectory "$PLUGINSDIR" -LogPath "$CubitaInstallLog" -Role "$CubitaRole"'
+    !ifdef CUBITA_WINDOWS_LEGACY
+    !ifdef CUBITA_LEGACY_X86
+      !define CUBITA_PREREQUISITE_ARCH "x86"
+    !else
+      !define CUBITA_PREREQUISITE_ARCH "x64"
+    !endif
+    nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-prerequisites.ps1" -PayloadDirectory "$PLUGINSDIR" -LogPath "$CubitaInstallLog" -Role "$CubitaRole" -Architecture "${CUBITA_PREREQUISITE_ARCH}" -MinimumPowerShell 3 -MinimumFrameworkRelease 378389'
+    !undef CUBITA_PREREQUISITE_ARCH
+  !else
+nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-prerequisites.ps1" -PayloadDirectory "$PLUGINSDIR" -LogPath "$CubitaInstallLog" -Role "$CubitaRole"'
+  !endif
   Pop $0
   !insertmacro cubitaInstallLog "prerequisites exit=$0"
   ${If} $0 == "3010"
@@ -72,7 +104,11 @@ Var CubitaInstallLog
   InitPluginsDir
   File /oname=$PLUGINSDIR\cubita-installer-guard.ps1 "${CUBITA_INSTALLER_GUARD}"
   !insertmacro cubitaInstallLog "guard action=${ACTION} begin"
-  nsExec::ExecToLog /TIMEOUT=75000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-installer-guard.ps1" -Action "${ACTION}" -AppPath "$INSTDIR\${APP_EXECUTABLE_FILENAME}" -LogPath "$CubitaInstallLog"'
+    !ifdef CUBITA_LEGACY_X86
+nsExec::ExecToLog /TIMEOUT=75000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-installer-guard.ps1" -Action "${ACTION}" -AppPath "$INSTDIR\${APP_EXECUTABLE_FILENAME}" -LogPath "$CubitaInstallLog" -Architecture "x86"'
+  !else
+nsExec::ExecToLog /TIMEOUT=75000 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\cubita-installer-guard.ps1" -Action "${ACTION}" -AppPath "$INSTDIR\${APP_EXECUTABLE_FILENAME}" -LogPath "$CubitaInstallLog"'
+  !endif
   Pop ${RESULT}
   !insertmacro cubitaInstallLog "guard action=${ACTION} exit=${RESULT}"
 !macroend
@@ -163,7 +199,11 @@ Var CubitaInstallLog
   FileWrite $2 "Cubita Enterprise installer; session=$0-$1$\r$\n"
   FileClose $2
   ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion" "CurrentBuildNumber"
-  !insertmacro cubitaInstallLog "OS build=$0; minimum=${CUBITA_MIN_WINDOWS_BUILD}; architecture=x64"
+  !ifdef CUBITA_LEGACY_X86
+    !insertmacro cubitaInstallLog "OS build=$0; minimum=${CUBITA_MIN_WINDOWS_BUILD}; architecture=x86"
+  !else
+    !insertmacro cubitaInstallLog "OS build=$0; minimum=${CUBITA_MIN_WINDOWS_BUILD}; architecture=x64"
+  !endif
   ; پیش از هر چیز: روی ویندوز ۷/۸/۸٫۱ برنامه اجرا نمی‌شود، پس نه نقش پرسیده می‌شود نه سرویسی لمس.
   !insertmacro cubitaRequireWindows10
   !insertmacro cubitaReadRole
@@ -189,6 +229,18 @@ Var CubitaInstallLog
   ; این hook در section نصب است؛ در آغاز جادوگر اجرا نمی‌شود.
   !ifndef BUILD_UNINSTALLER
     !insertmacro cubitaPrerequisites
+  !endif
+  !ifndef BUILD_UNINSTALLER
+  !ifdef CUBITA_WINDOWS_LEGACY
+    ${If} $CubitaExistingRole == "server"
+      !insertmacro cubitaRunGuard "architecture-check" $0
+      ${If} $0 != "0"
+        MessageBox MB_ICONSTOP|MB_OK "معماری این نصاب با سرور قبلی سازگار نیست یا فایل سرور قابل بررسی نبود. نصاب هم‌معماری را اجرا کنید؛ فایل‌ها و سرویس‌ها هنوز تغییر نکرده‌اند.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
+        SetErrorLevel 2
+        Quit
+      ${EndIf}
+    ${EndIf}
+  !endif
   !endif
   !insertmacro cubitaRunGuard "app-running" $0
   ${If} $0 == "7"
@@ -400,8 +452,7 @@ Var CubitaInstallLog
       SetErrorLevel 2
       Abort
     ${EndIf}
-    nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "Get-ScheduledTask -TaskName CubitaEnterpriseNetwork -ErrorAction SilentlyContinue | Stop-ScheduledTask"'
-    Pop $1
+    !insertmacro cubitaRunGuard "pause-network" $1
     ${If} ${FileExists} "$INSTDIR\resources\server\cubita-server.exe"
       nsExec::ExecToLog '"$INSTDIR\resources\server\cubita-server.exe" network-disable'
       Pop $1

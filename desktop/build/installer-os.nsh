@@ -33,10 +33,14 @@
   ${If} $1 == "1"
     !ifmacrodef cubitaInstallLog
       !insertmacro cubitaInstallLog "BLOCKED unsupported Windows build=$0; no prerequisites or application installed"
+      !ifdef CUBITA_WINDOWS_LEGACY
+        MessageBox MB_ICONSTOP|MB_OK "این نصاب به ویندوز ۷ با Service Pack 1 یا جدیدتر و معماری مناسب فایل نیاز دارد. هیچ برنامه یا پیش‌نیازی نصب نشد.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
+      !else
       !ifdef CUBITA_WINDOWS81_COMPAT
         MessageBox MB_ICONSTOP|MB_OK "این کلاینت به ویندوز ۸٫۱ نسخهٔ ۶۴ بیتی یا جدیدتر نیاز دارد. هیچ برنامه یا پیش‌نیازی نصب نشد.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
       !else
       MessageBox MB_ICONSTOP|MB_OK "این ویندوز با نسخهٔ فعلی کوبیتا سازگار نیست. ویندوز ۱۰ یا ۱۱ نسخهٔ ۶۴ بیتی لازم است؛ نصب پیش‌نیاز، ویندوز ۸٫۱ را سازگار نمی‌کند.$\r$\nهیچ برنامه یا پیش‌نیازی نصب نشد.$\r$\nگزارش: $CubitaInstallLog" /SD IDOK
+      !endif
       !endif
     !else
     MessageBox MB_ICONSTOP|MB_OK "کوبیتا فقط روی ویندوز ۱۰ یا ۱۱ (۶۴ بیتی) اجرا می‌شود و این رایانه ویندوزِ قدیمی‌تری دارد (۷، ۸ یا ۸٫۱).$\r$\n$\r$\nچیزی نصب یا تغییر نکرد. کوبیتا را روی رایانه‌ای با ویندوز ۱۰ یا ۱۱ نصب کنید." /SD IDOK

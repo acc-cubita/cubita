@@ -12,7 +12,8 @@ const scripts = path.dirname(fileURLToPath(import.meta.url))
 const cache = path.join(process.env.LOCALAPPDATA, 'electron-builder', 'Cache', 'nsis-3.0.4.1')
 const compiler = process.env.CUBITA_QA_MAKENSIS ?? path.join(cache, fs.readdirSync(cache).find(name => name.startsWith('nsis-')), 'makensis.exe')
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'CubitaInstallerMockQa-'))
-const profileFlags = process.env.CUBITA_QA_WINDOWS81 === '1' ? ['/DQA_WINDOWS81'] : []
+const legacy = process.env.CUBITA_QA_WINDOWS_LEGACY === '1'
+const profileFlags = legacy ? ['/DQA_WINDOWS_LEGACY', ...(process.env.CUBITA_QA_LEGACY_X86 === '1' ? ['/DQA_LEGACY_X86'] : [])] : process.env.CUBITA_QA_WINDOWS81 === '1' ? ['/DQA_WINDOWS81'] : []
 const compiled = spawnSync(compiler, [
   '/V2', ...profileFlags, `/DQA_OUTPUT=${output}`,
   `/DCUBITA_INSTALLER_GUARD=${path.join(scripts, 'fixtures', 'installer-mock-guard.ps1')}`,
@@ -51,7 +52,7 @@ for (const [scenario, exitCode, expected] of cases) {
   assert.equal(run.status, exitCode, `${scenario}: ${run.error?.message ?? run.stderr}`)
   const log = path.join(output, scenario, 'actions.log')
   const actions = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split(/\r?\n/) : []
-  assert.deepEqual(actions, expected, scenario)
+  assert.deepEqual(actions, legacy && !['init-cancel','client-over-services','client-over-stopped-services'].includes(scenario) ? ['architecture-check', ...expected] : expected, scenario)
   console.log(`PASS: ${scenario}`)
 }
 // Compile and exercise the uninstaller hook: close only the GUI, do not prepare an upgrade.
