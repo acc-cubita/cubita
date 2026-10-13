@@ -277,3 +277,16 @@ def test_provider_exception_does_not_log_code_or_key(monkeypatch, caplog):
     assert 'private-provider-key' not in caplog.text
     assert '654321' not in caplog.text
     assert 'RuntimeError' in caplog.text
+
+
+def test_provider_failed_text_is_not_a_success(monkeypatch, caplog):
+    from types import SimpleNamespace
+    from app.services import sms
+    monkeypatch.setattr(sms, 'get_settings', lambda: SimpleNamespace(
+        melipayamak_api_key='private-provider-key', melipayamak_otp_pattern_id='42'))
+    monkeypatch.setattr(sms.httpx, 'post', lambda *a, **kw: SimpleNamespace(
+        content=b'{}', json=lambda: {'status': 'ارسال ناموفق 654321 private-provider-key'}))
+    assert sms.send_verification_code('09123456789', '654321') is False
+    assert '654321' not in caplog.text and 'private-provider-key' not in caplog.text
+    assert sms._ok({'status': 'ارسال موفق'}) is True
+    assert sms._ok({'recId': 123}) is True

@@ -68,7 +68,8 @@ def _ok(data: dict) -> bool:
             return True
     except (TypeError, ValueError):
         pass
-    return "موفق" in str(data.get("status", ""))
+    status_text = str(data.get("status", ""))
+    return "موفق" in status_text and "ناموفق" not in status_text
 
 
 def send_text(to: str, text: str) -> bool:
@@ -131,7 +132,7 @@ def send_pattern(to: str, args: list[str]) -> bool:
         data = res.json() if res.content else {}
         if _ok(data):
             return True
-        logger.warning("ارسالِ الگو به %s ناموفق بود: %s", phone, data.get("status"))
+        logger.warning("ارسالِ الگو به %s ناموفق بود", phone)
         return False
     except Exception as exc:
         logger.warning("ارسالِ الگو به %s خطا داد؛ نوع خطا: %s", phone, type(exc).__name__)
