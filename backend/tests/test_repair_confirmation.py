@@ -268,6 +268,10 @@ def test_concurrent_delivery_consumes_one_confirmation_once(tenant_id,user,monke
 def test_provider_exception_does_not_log_code_or_key(monkeypatch, caplog):
     from types import SimpleNamespace
     from app.services import sms
+    import logging
+    monkeypatch.setattr(sms.logger, "disabled", False)
+    monkeypatch.setattr(sms.logger, "handlers", [caplog.handler])
+    caplog.set_level(logging.WARNING, logger=sms.logger.name)
     monkeypatch.setattr(sms, 'get_settings', lambda: SimpleNamespace(
         melipayamak_api_key='private-provider-key', melipayamak_otp_pattern_id='42'))
     def fail(*args, **kwargs):
@@ -282,6 +286,10 @@ def test_provider_exception_does_not_log_code_or_key(monkeypatch, caplog):
 def test_provider_failed_text_is_not_a_success(monkeypatch, caplog):
     from types import SimpleNamespace
     from app.services import sms
+    import logging
+    monkeypatch.setattr(sms.logger, "disabled", False)
+    monkeypatch.setattr(sms.logger, "handlers", [caplog.handler])
+    caplog.set_level(logging.WARNING, logger=sms.logger.name)
     monkeypatch.setattr(sms, 'get_settings', lambda: SimpleNamespace(
         melipayamak_api_key='private-provider-key', melipayamak_otp_pattern_id='42'))
     monkeypatch.setattr(sms.httpx, 'post', lambda *a, **kw: SimpleNamespace(
