@@ -8,8 +8,24 @@ from app.schemas.repair import WarrantyIn, WarrantyClaimIn
 from app.services import repair as core, repair_warranty as svc
 from app.routers.repair_operations import once
 from app.routers.repair_finance import related
+from app.models.repair_completion import RepairWarrantyTransfer
+from app.schemas.repair_identity import WarrantyTransferIn
 
 router=APIRouter(prefix='/api/repair',tags=['repair'],dependencies=[Depends(require_module('repair')),Depends(require_permission('repair','view'))])
+
+
+@router.get('/cases/{case_id}/warranties/{warranty_id}/transfer-preview',dependencies=[Depends(require_permission('repair_warranty_transfer','approve'))])
+def transfer_preview(case_id:UUID,warranty_id:UUID,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    return svc.transfer_preview(db,p,core.case(db,p,case_id),warranty_id)
+
+
+@router.post('/cases/{case_id}/warranties/{warranty_id}/transfers',status_code=201,dependencies=[Depends(require_permission('repair_warranty_transfer','approve'))])
+def transfer(case_id:UUID,warranty_id:UUID,data:WarrantyTransferIn,request:Request,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    core.case(db,p,case_id)
+    row=once(db,request,p,'repair.warranty.transfer:'+str(warranty_id),data,
+        lambda:svc.transfer(db,p,core.case(db,p,case_id,lock=True),warranty_id,data),
+        lambda rid:related(db,RepairWarrantyTransfer,case_id,rid))
+    return core.out(row)
 
 @router.get('/cases/{case_id}/warranties')
 def overview(case_id:UUID,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):

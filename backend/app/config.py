@@ -127,6 +127,7 @@ class Settings(BaseSettings):
     melipayamak_api_key: str = ""
     melipayamak_sender: str = ""
     melipayamak_otp_pattern_id: str = ""
+    repair_otp_enabled: bool = False
 
     # اعلانِ Push اپ موبایل (FCM HTTP v1) — سراسری، مثلِ SMTP/پیامک یک حسابِ خودِ کوبیتاست.
     # خالی = Push غیرفعال (no-op، بی‌خطا). fcm_project_id شناسه‌ی پروژه‌ی Firebase و

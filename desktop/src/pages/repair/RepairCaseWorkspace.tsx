@@ -5,6 +5,12 @@ import {REPAIR_STATES} from './repairShared'
 import {RepairWorkspaceTabs,RepairRetainedPanel} from './RepairWorkspaceTabs'
 import {RepairWorkflow} from './RepairWorkflow'
 import {RepairDailyTools} from './RepairDailyTools'
+import {RepairDeviceIdentity} from './RepairDeviceIdentity'
+import {RepairTechnicalSummary} from './RepairTechnicalSummary'
+import {RepairOwnershipClaims} from './RepairOwnershipClaims'
+import {RepairRepresentatives} from './RepairRepresentatives'
+import {RepairIntakeEvidence} from './RepairIntakeEvidence'
+import {RepairConfirmation} from './RepairConfirmation'
 import {RepairTechnicalTools} from './RepairTechnicalTools'
 import {RepairEstimates} from './RepairEstimates'
 import {RepairOperations} from './RepairOperations'
@@ -31,6 +37,12 @@ export function RepairCaseWorkspace({token,me,row,branches,types,busy,run,refres
       <div data-repair-action><label>محل نگهداری<input disabled={!update} value={location} onChange={e => setLocation(e.target.value)} /></label>{update && <button disabled={busy || !location.trim()} onClick={() => run(async () => { await relocateRepairCase(token, row, location); await refresh() })}>ثبت محل نگهداری</button>}</div>
 </div>
       <RepairDailyTools key={'daily-'+row.id} token={token} me={me} row={row} busy={busy} run={run} refresh={async()=>{await refresh()}} />
+      <RepairDeviceIdentity key={'identity-'+row.device_id} token={token} me={me} deviceId={row.device_id} busy={busy} run={run}/>
+      <RepairTechnicalSummary key={'summary-'+row.id} token={token} me={me} row={row} busy={busy} run={run} refresh={refresh}/>
+      <RepairOwnershipClaims key={'claims-'+row.id} token={token} me={me} row={row} busy={busy} run={run} refresh={refresh}/>
+      <RepairRepresentatives key={'representatives-'+row.id} token={token} me={me} row={row} busy={busy} run={run} refresh={refresh}/>
+      <RepairIntakeEvidence key={'evidence-'+row.id} token={token} me={me} row={row} busy={busy} run={run} refresh={refresh}/>
+      {can(me,'repair_signatures','create')&&!['delivered','closed','cancelled','unrepairable'].includes(row.status)&&<RepairConfirmation canOverride={can(me,'repair_confirmation_override','approve')} token={token} row={row} busy={busy} run={run} refresh={refresh}/>}
       </RepairRetainedPanel>
       <RepairRetainedPanel id={row.id+"-panel-repair"} labelledBy={row.id+"-repair"} active={caseTab === "repair"}>
       <RepairEstimates mode="diagnosis" key={'diagnosis-' + row.id} token={token} me={me} row={row} types={types} branches={branches} busy={busy} run={run} refresh={async () => { await refresh() }} refreshTypes={async () => refreshTypes()} />

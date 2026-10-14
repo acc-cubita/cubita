@@ -37,6 +37,9 @@ def save_settings(db,p,branch_id,data):
     if (row.version if row else 0)!=data.version:
         raise HTTPException(409,'تنظیمات شعبه تغییر کرده؛ آن را تازه کنید.')
     values=data.model_dump(exclude={'version'})
+    if row is not None:
+        for field in ('intake_confirmation_policy','delivery_confirmation_policy'):
+            if field not in data.model_fields_set: values.pop(field,None)
     if row is None:
         row=RepairBranchSettings(branch_id=branch_id,**values);db.add(row)
     else:
@@ -167,7 +170,12 @@ def document(db,row,kind):
     meta=metadata(db,row)
     if kind=='intake':
         due=meta.settings_snapshot.get('initial_due_date') if meta and 'initial_due_date' in meta.settings_snapshot else row.due_date
-        return (meta.receipt_revision if meta else 1),jsonable_encoder({'number':meta.display_number if meta else str(row.number),'owner':row.owner_snapshot,'device':row.device_snapshot,'reported_issue':row.reported_issue,'appearance':row.appearance,'accessories':row.accessories,'terms':row.terms,'delivering_name':row.delivering_name,'admission_date':row.admission_date,'initial_due_date':due})
+        snapshot=jsonable_encoder({'number':meta.display_number if meta else str(row.number),'owner':row.owner_snapshot,'device':row.device_snapshot,'reported_issue':row.reported_issue,'appearance':row.appearance,'accessories':row.accessories,'terms':row.terms,'delivering_name':row.delivering_name,'admission_date':row.admission_date,'initial_due_date':due})
+        from app.services.repair_evidence import current
+        evidence=current(db,row)
+        if evidence:
+            snapshot['intake_evidence']={'id':str(evidence.id),'revision':evidence.revision,'document_hash':evidence.document_hash,'snapshot':evidence.snapshot}
+        return (meta.receipt_revision if meta else 1),snapshot
     delivered=db.query(RepairDelivery).filter_by(case_id=row.id).one_or_none()
     if delivered is None: raise HTTPException(409,'ابتدا تحویل واقعی با کنترل مالی ثبت شود؛ امضا جای تحویل نیست.')
     return 1,jsonable_encoder(core.out(delivered))
@@ -175,6 +183,9 @@ def document(db,row,kind):
 
 def acknowledge(db,p,row,data):
     core.check_version(row,data.version)
+    from app.services.repair_confirmation import required
+    if required(db,row,data.kind):
+        raise HTTPException(409,'این پرونده تأیید کد یا امضای جایگزین مجاز می‌خواهد؛ از بخش تأیید امن استفاده کنید.')
     revision,snapshot=document(db,row,data.kind)
     existing=db.query(RepairAcknowledgment).filter_by(case_id=row.id,kind=data.kind,document_revision=revision).one_or_none()
     if existing: raise HTTPException(409,'این نسخهٔ سند قبلاً تأیید شده؛ امضا بازنویسی نمی‌شود.')
