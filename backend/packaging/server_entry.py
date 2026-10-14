@@ -29,6 +29,29 @@ import os
 import sys
 from pathlib import Path
 
+_dll_directories = []
+
+
+def _prepare_legacy_libpq() -> None:
+    """Resolve the shipped DLL before psycopg is imported, including by setup.
+
+    Legacy bundles use Python3.8 and the pure Python psycopg implementation.
+    Build-host PATH must never be a runtime prerequisite on a customer's PC.
+    Keep AddDllDirectory cookies alive for dependent DLLs as well.
+    """
+    if not (getattr(sys, "frozen", False) and sys.platform == "win32"
+            and sys.version_info[:2] == (3, 8)):
+        return
+    pg_bin = _bundle_dir() / "pgsql" / "bin"
+    if not (pg_bin / "libpq.dll").is_file():
+        raise SystemExit("کتابخانهٔ پایگاه همراه برنامه پیدا نشد؛ نصاب کامل را دوباره اجرا کنید.")
+    directory = str(pg_bin)
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    if not entries or os.path.normcase(entries[0]) != os.path.normcase(directory):
+        os.environ["PATH"] = os.pathsep.join([directory, *entries])
+    if not _dll_directories and hasattr(os, "add_dll_directory"):
+        _dll_directories.append(os.add_dll_directory(directory))
+
 
 def _bundle_dir() -> Path:
     """پوشه‌ی exe در حالتِ بسته‌بندی؛ در توسعه، پوشه‌ی `backend/`."""
@@ -254,6 +277,7 @@ def cmd_network(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _prepare_legacy_libpq()
     if not getattr(sys, "frozen", False):
         sys.path.insert(0, str(_bundle_dir()))
     for stream in (sys.stdout, sys.stderr):
