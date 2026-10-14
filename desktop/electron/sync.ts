@@ -53,6 +53,7 @@ async function pullTable<T extends { id: string }>(
   table: string,
   columns: string[],
   toRow: (item: T) => Record<string, unknown>,
+  replace = false,
 ): Promise<void> {
   const token = config.getToken()
   if (!token) throw Object.assign(new Error('نشست ورود موجود نیست؛ دوباره وارد حساب خود شوید و «هم‌گام‌سازی» را بزنید.'), { status: 401 })
@@ -68,6 +69,8 @@ async function pullTable<T extends { id: string }>(
      ON CONFLICT(id) DO UPDATE SET ${updates}`,
   )
   const tx = db.transaction((rows: T[]) => {
+    // فهرست کامل فقط پس از دریافت همهٔ صفحه‌ها جایگزین می‌شود؛ قطع شبکه کش را خالی نمی‌کند.
+    if (replace) db.prepare(`DELETE FROM ${table}`).run()
     for (const item of rows) upsert.run(toRow(item))
   })
   tx(items)
@@ -107,7 +110,16 @@ export async function pullWarehouses(config: SyncConfig): Promise<void> {
   }) => w)
 }
 
-export async function pullItems(config: SyncConfig): Promise<void> {
+let itemPullTail: Promise<void> = Promise.resolve()
+
+export function pullItems(config: SyncConfig): Promise<void> {
+  // pull آغاز ورود و اعلان ثبت ممکن است هم‌زمان شوند؛ پاسخ قدیمی نباید کش تازه را بازنویسی کند.
+  const result = itemPullTail.then(() => pullItemsNow(config))
+  itemPullTail = result.catch(() => {})
+  return result
+}
+
+async function pullItemsNow(config: SyncConfig): Promise<void> {
   return pullTable(
     config,
     '/api/items',
@@ -117,6 +129,7 @@ export async function pullItems(config: SyncConfig): Promise<void> {
       ...i,
       is_service: i.is_service ? 1 : 0,
     }),
+    true,
   )
 }
 

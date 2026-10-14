@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('cubita', {
   clearSession: () => ipcRenderer.invoke('auth:clearSession'),
   currentRefreshToken: () => ipcRenderer.invoke('auth:currentRefreshToken'),
   pullAll: (permissions?: SyncPermissions) => ipcRenderer.invoke('sync:pullAll', permissions),
+  pullItems: () => ipcRenderer.invoke('sync:pullItems'),
   pushOutbox: () => ipcRenderer.invoke('sync:pushOutbox'),
   queueJournalEntry: (payload: unknown) => ipcRenderer.invoke('journal:queueEntry', payload),
   listOutbox: () => ipcRenderer.invoke('journal:listOutbox'),

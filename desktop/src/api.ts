@@ -1,4 +1,5 @@
 import { isEnterprise } from './platform'
+import { withItemChange } from './lib/itemChanges'
 import { formatErrorDates } from './lib/jalali'
 
 // کوبیتا سازمانی نشانیِ سرورِ شرکت را در زمانِ اجرا از preload می‌گیرد (کاربر در
@@ -1657,14 +1658,14 @@ export type ItemPatch = Partial<Omit<ItemIn, 'is_service'>> & {
 }
 
 export const createItemLive = (token: string, data: ItemIn) =>
-  authedSend<ItemRecord>(token, 'POST', '/api/items', data)
+  withItemChange(authedSend<ItemRecord>(token, 'POST', '/api/items', data))
 
 /** ویرایشِ کالا — فقط فیلدهایی که سرور در ItemUpdateIn می‌پذیرد. */
 export const updateItemLive = (token: string, itemId: string, patch: ItemPatch) =>
-  authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch)
+  withItemChange(authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, patch))
 
 /** حذفِ کالا — فقط اگر در هیچ سند/موجودی استفاده نشده باشد؛ وگرنه سرور ۴۰۹ با پیامِ راهنما می‌دهد. */
-export const deleteItemLive = (token: string, itemId: string) => authedDelete(token, `/api/items/${itemId}`)
+export const deleteItemLive = (token: string, itemId: string) => withItemChange(authedDelete(token, `/api/items/${itemId}`))
 
 export const updateItemStorefrontMapping = (token: string, itemId: string, storefrontProductId: number | null) =>
   authedSend<ItemRecord>(token, 'PATCH', `/api/items/${itemId}`, { storefront_product_id: storefrontProductId })
@@ -3201,7 +3202,7 @@ export interface ContactImportRow {
 }
 
 export const importItems = (token: string, rows: ItemImportRow[]) =>
-  authedSend<ImportResult>(token, 'POST', '/api/import/items', { rows })
+  withItemChange(authedSend<ImportResult>(token, 'POST', '/api/import/items', { rows }))
 
 export const importContacts = (token: string, rows: ContactImportRow[]) =>
   authedSend<ImportResult>(token, 'POST', '/api/import/contacts', { rows })

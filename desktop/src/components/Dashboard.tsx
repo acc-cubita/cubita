@@ -14,6 +14,7 @@ import type { AccountCache, BankAccountCache, ItemCache, OutboxEntry, WarehouseC
 import { isElectron } from '../platform'
 import { referenceAllowed, referenceSyncMessage, runReferenceSync } from '../lib/referenceSync'
 import { outboxErrorText } from '../lib/outboxError'
+import { subscribeItemChanges } from '../lib/itemChanges'
 import { Sidebar, type PageKey } from './Sidebar'
 import { buildNav, resolveLegacyPage } from '../lib/navModel'
 import { TopNav } from './TopNav'
@@ -472,6 +473,18 @@ export function Dashboard({
   const syncingRef = useRef(false)
   // نگهبانِ اجرای یک‌بارِ همگام‌سازیِ خودکارِ بدو ورود (در برابرِ دوباره‌مانت‌شدن).
   const didAutoSyncRef = useRef(false)
+
+  useEffect(() => {
+    let active = true
+    const unsubscribe = subscribeItemChanges(async () => {
+      if (!referenceAllowed(me.permissions, 'items')) return
+      // خواندن کش پس از تغییر روی سرور کافی نیست؛ فقط کالاها دریافت می‌شوند، نه ارسال اسناد صف.
+      if (isElectron) await window.cubita.pullItems()
+      const rows = await fetchItemsWithPricingLive(token)
+      if (active) setItems(rows)
+    }, (error) => setSyncStatus(`تغییر کالا ذخیره شد، ولی تازه‌سازی فهرست کامل نشد: ${outboxErrorText(error instanceof Error ? error.message : String(error))}؛ «هم‌گام‌سازی» را بزنید.`))
+    return () => { active = false; unsubscribe() }
+  }, [token, me.permissions])
 
   // نشانِ خوانده‌نشده‌ی گفتگوی بازار: فقط برای حسابِ پخش‌کننده/فروشگاه پول می‌شود.
   // `page` در وابستگی‌ها هست تا با هر جابه‌جایی (مثلاً بعد از خواندنِ پیام‌ها) فوراً به‌روز شود.
