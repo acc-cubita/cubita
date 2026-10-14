@@ -21,7 +21,7 @@ vi.mock('./db.js', () => ({
     }),
   }),
 }))
-import { pullAll, pushOutbox } from './sync'
+import { pullAll, pullItems, pushOutbox } from './sync'
 
 const config = { apiBaseUrl: 'http://server.invalid:8420', getToken: () => 'token' }
 const account = { id: 'a', code: '1101', name: 'بانک', type: 'asset', is_group: false, parent_id: null }
@@ -31,6 +31,35 @@ beforeEach(() => { state.writes = []; state.pending = {} })
 afterEach(() => vi.unstubAllGlobals())
 
 describe('موتور همگام‌سازی با دسترسی محدود', () => {
+  it('پاسخ کند همگام‌سازی آغاز ورود، کالای تازهٔ دریافت بعدی را بازنویسی نمی‌کند', async () => {
+    let finish!: (response: Response) => void
+    const initial = new Promise<Response>((resolve) => { finish = resolve })
+    const fetchMock = vi.fn().mockReturnValueOnce(initial).mockResolvedValueOnce(json({ items: [{ id: 'new', sku: 'NEW', name: 'جدید', unit: 'عدد', sales_price: '0', is_service: false }], next_cursor: null }))
+    vi.stubGlobal('fetch', fetchMock)
+    const first = pullItems(config)
+    const second = pullItems(config)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    finish(json({ items: [], next_cursor: null }))
+    await Promise.all([first, second])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(state.writes.at(-1)?.args[0]).toMatchObject({ id: 'new' })
+  })
+  it('تازه‌سازی کالا، همهٔ صفحه‌ها را پیش از جایگزینی کش می‌گیرد و صف مالی را لمس نمی‌کند', async () => {
+    const item = { id: 'new', sku: 'NEW', name: 'کالای جدید', unit: 'عدد', sales_price: '0', is_service: false }
+    const fetchMock = vi.fn(async (url: string) => json({ items: [item], next_cursor: new URL(url).searchParams.has('cursor') ? null : 'page2' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await pullItems(config)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(state.writes[0].sql).toBe('DELETE FROM items_cache')
+    expect(state.writes[1].args[0]).toMatchObject({ id: 'new', is_service: 0 })
+    expect(state.writes.some((write) => write.sql.includes('outbox'))).toBe(false)
+  })
+
+  it('قطع دریافت صفحهٔ دوم کش موجود را نگه می‌دارد', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json({ items: [], next_cursor: 'page2' })).mockRejectedValueOnce(new TypeError('fetch failed')))
+    await expect(pullItems(config)).rejects.toThrow('fetch failed')
+    expect(state.writes).toEqual([])
+  })
   it('سناریوی واقعیِ کلاینت: حساب و بانک ۲۰۰، انبار و کالا ۴۰۳؛ کش حساب موفق می‌ماند', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       const path = new URL(url).pathname

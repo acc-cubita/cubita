@@ -31,6 +31,7 @@ function debugLog(msg: string) {
 }
 import {
   pullAll,
+  pullItems,
   pushOutbox,
   queueCheck,
   queueJournalEntry,
@@ -346,6 +347,10 @@ ipcMain.handle('auth:currentRefreshToken', () => currentRefreshToken())
 ipcMain.handle('sync:pullAll', async (_evt, permissions?: SyncPermissions) => {
   const config = { apiBaseUrl: apiBaseUrl, getToken: () => authToken }
   return pullAll(config, permissions)
+})
+
+ipcMain.handle('sync:pullItems', async () => {
+  await pullItems({ apiBaseUrl, getToken: () => authToken })
 })
 
 ipcMain.handle('sync:pushOutbox', async () => {

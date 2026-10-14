@@ -115,6 +115,7 @@ export interface CubitaBridge {
   /** رفرشِ فعلی — فقط برای دادن به switch-tenant (تا نشستِ آفلاین هم سوییچ کند). */
   currentRefreshToken: () => Promise<string | null>
   pullAll: (permissions?: SyncPermissions) => Promise<ReferenceSyncReport>
+  pullItems: () => Promise<void>
   pushOutbox: () => Promise<{ pushed: number; failed: number }>
   queueJournalEntry: (payload: unknown) => Promise<string>
   listOutbox: () => Promise<OutboxEntry[]>
