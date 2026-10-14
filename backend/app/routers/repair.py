@@ -109,6 +109,14 @@ def cases(q: str = Query("", max_length=200), branch_id: UUID | None = None, dat
         if normalized.startswith('cubita:repair:'):
             try: tests.append(RepairCase.id == UUID(normalized.removeprefix('cubita:repair:')))
             except ValueError: pass
+        if normalized.startswith(('cubita:repair-device:', 'RD-')):
+            from app.services import repair_identity
+            raw=normalized.removeprefix('cubita:repair-device:').removeprefix('RD-')
+            try:
+                identity=repair_identity.device(db,p,UUID(raw))
+                tests.append(RepairCase.id.in_(repair_identity.history(db,p,identity).order_by(None).with_entities(RepairCase.id)))
+            except ValueError:
+                pass
         query = query.filter(or_(*tests))
     if branch_id:
         svc.branch(db, p, branch_id)

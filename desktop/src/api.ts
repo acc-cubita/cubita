@@ -11236,3 +11236,63 @@ export const updateCommissionRule = (
   id: string,
   data: Partial<{ rate: number; basis: 'net' | 'profit'; is_active: boolean; description: string }>,
 ) => authedSend<CommissionRule>(token, 'PATCH', `/api/sales-ops/commission-rules/${id}`, data)
+export interface RepairDeviceIdentity {id:string;identifier:string;version:number;type_id:string;brand:string;model:string;serial:string;imei:string;canonical_id:string;qr_payload:string}
+export interface RepairIdentityEvent {id:string;device_id:string;revision:number;kind:'merge'|'ownership'|'profile';contact_id:string|null;target_device_id:string|null;reason:string;evidence:string;created_at:string}
+export interface RepairMergeInput {version:number;target_device_id:string;target_version:number;reason:string;evidence:string}
+export const fetchRepairDeviceIdentity=(token:string,id:string)=>authedGet<RepairDeviceIdentity>(token,`/api/repair/devices/${id}`)
+export const searchRepairDeviceIdentities=(token:string,q:string)=>authedGet<{items:RepairDeviceIdentity[]}>(token,`/api/repair/devices?${new URLSearchParams({q})}`)
+export const fetchRepairIdentityEvents=(token:string,id:string,cursor?:string)=>authedGet<Page<RepairIdentityEvent>&{ownership_status:'confirmed'|'unverified'}>(token,`/api/repair/devices/${id}/identity-events${cursor?`?cursor=${encodeURIComponent(cursor)}`:''}`)
+export const previewRepairDeviceMerge=(token:string,id:string,data:RepairMergeInput)=>authedSend<{source:RepairDeviceIdentity;target:RepairDeviceIdentity}>(token,'POST',`/api/repair/devices/${id}/merge-preview`,data)
+export const mergeRepairDeviceIdentity=(token:string,id:string,data:RepairMergeInput,key:string)=>authedSend<RepairIdentityEvent>(token,'POST',`/api/repair/devices/${id}/merge`,data,key)
+export const confirmRepairDeviceOwner=(token:string,id:string,data:{version:number;contact_id:string;previous_ownership_id:string|null;reason:string;evidence:string},key:string)=>authedSend<RepairIdentityEvent>(token,'POST',`/api/repair/devices/${id}/ownership`,data,key)
+
+export interface RepairImageMark {x:number;y:number;category:string;description:string;severity:'minor'|'moderate'|'severe'|'unspecified'}
+export interface RepairEvidenceSnapshot {accessories:{title:string;quantity:number;condition:string}[];tests:{title:string;result:'healthy'|'faulty'|'not_tested'|'not_applicable';reason:string}[];images:{attachment_id:string;view:string;phase:'intake'|'delivery';marks:RepairImageMark[];sha256?:string}[]}
+export interface RepairIntakeEvidence {id:string;revision:number;snapshot:RepairEvidenceSnapshot;document_hash:string;reason:string;created_at:string}
+export const fetchRepairIntakeEvidence=(token:string,id:string)=>authedGet<Page<RepairIntakeEvidence>>(token,`/api/repair/cases/${id}/intake-evidence`)
+export const saveRepairIntakeEvidence=(token:string,id:string,data:RepairEvidenceSnapshot&{version:number;previous_revision:number;reason:string},key:string)=>authedSend<RepairIntakeEvidence>(token,'POST',`/api/repair/cases/${id}/intake-evidence`,data,key)
+export async function repairImageUrl(token:string,caseId:string,id:string):Promise<string>{const response=await fetch(`${API_BASE_URL}/api/repair/cases/${caseId}/attachments/${id}`,{headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw new Error('دریافت تصویر ناموفق بود؛ دسترسی پرونده و اتصال را بررسی کنید.');return URL.createObjectURL(await response.blob())}
+export const printRepairDeviceIdentity=(token:string,id:string)=>openInvoicePrintView(token,`/api/repair/devices/${id}/label`)
+
+export interface RepairConfirmation {id:string;version:number;kind:'intake'|'delivery';status:'requested'|'sent'|'failed'|'verified'|'expired'|'locked'|'consumed';attempts_remaining:number;expires_at:string;document_hash:string;message:string}
+export interface RepairDeliveryDraft {receiver_name:string;receiver_phone:string;authorization:string;accessories:string;care_instructions:string;credit_reason:string;approval_method:string;checklist:Record<string,boolean>}
+export const fetchRepairConfirmationCapabilities=(token:string)=>authedGet<{sms_available:boolean}>(token,'/api/repair/confirmation-capabilities')
+export const requestRepairConfirmation=(token:string,id:string,data:{version:number;kind:'intake'|'delivery';recipient_name:string;recipient_phone:string;recipient_contact_id?:string;authority_evidence:string;representation_id?:string;delivery?:RepairDeliveryDraft&{version:number}},key:string)=>authedSend<RepairConfirmation>(token,'POST',`/api/repair/cases/${id}/confirmations`,data,key)
+export const verifyRepairConfirmation=(token:string,id:string,confirmation:RepairConfirmation,code:string,key:string)=>authedSend<RepairConfirmation>(token,'POST',`/api/repair/cases/${id}/confirmations/${confirmation.id}/verify`,{version:confirmation.version,code},key)
+export const consumeRepairIntakeConfirmation=(token:string,row:RepairCase,confirmation:RepairConfirmation,key:string)=>authedSend<RepairConfirmation>(token,'POST',`/api/repair/cases/${row.id}/confirmations/${confirmation.id}/intake`,{version:row.version},key)
+export const deliverRepairDeviceWithConfirmation=(token:string,row:RepairCase,data:RepairDeliveryDraft,confirmation_id:string,key:string)=>authedSend(token,'POST',`/api/repair/cases/${row.id}/delivery`,{version:row.version,...data,confirmation_id},key)
+
+export interface RepairIntakeSettings {intake_confirmation_policy?:'legacy'|'otp';delivery_confirmation_policy?:'legacy'|'otp'}
+export const saveRepairConfirmationSettings=(token:string,id:string,data:RepairIntakeSettings)=>authedSend<RepairIntakeSettings>(token,'PUT',`/api/repair/branches/${id}/intake-settings`,{version:data.version,code:data.code,default_location:data.default_location,terms:data.terms,number_format:data.number_format,intake_confirmation_policy:data.intake_confirmation_policy??'legacy',delivery_confirmation_policy:data.delivery_confirmation_policy??'legacy'})
+export const repairConfirmationRequired=(row:RepairCase,kind:'intake'|'delivery')=>((row.intake_details as (NonNullable<RepairCase['intake_details']>&{settings_snapshot?:Record<string,unknown>})|null)?.settings_snapshot?.[`${kind}_confirmation_policy`]==='otp')
+export type RepairConfirmationInput=Parameters<typeof requestRepairConfirmation>[2]
+export const previewRepairConfirmation=(token:string,id:string,data:RepairConfirmationInput)=>authedSend<{document_hash:string;document:Record<string,unknown>}>(token,'POST',`/api/repair/cases/${id}/confirmation-preview`,data)
+export const overrideRepairConfirmation=(token:string,id:string,data:RepairConfirmationInput&{expected_document_hash:string;override_reason:string;acknowledgment:{version:number;kind:'intake'|'delivery';signer_name:string;signer_relation:string;strokes:number[][][]}},key:string)=>authedSend<RepairConfirmation>(token,'POST',`/api/repair/cases/${id}/confirmation-override`,data,key)
+export const fetchRepairEvidenceHistoryPage=(token:string,id:string,cursor:string)=>authedGet<Page<RepairIntakeEvidence>>(token,`/api/repair/cases/${id}/intake-evidence?${new URLSearchParams({cursor})}`)
+export interface RepairMergeInput {source_ownership_id?:string|null;target_ownership_id?:string|null;resolved_owner_contact_id?:string|null}
+export interface RepairMergeOwner {id:string;contact_id:string;name:string}
+export const previewRepairIdentityMergeWithOwners=(token:string,id:string,data:RepairMergeInput)=>authedSend<{source:RepairDeviceIdentity;target:RepairDeviceIdentity;owners:{source:RepairMergeOwner|null;target:RepairMergeOwner|null}}>(token,'POST',`/api/repair/devices/${id}/merge-preview`,data)
+export interface RepairWarrantyTransfer {id:string;warranty_id:string;revision:number;ownership_id:string;contact_id:string;reason:string;created_at:string}
+export interface RepairWarrantyView {transfers?:RepairWarrantyTransfer[]}
+export interface RepairWarrantyTransferPreview {device_version:number;ownership_id:string|null;contact_id:string|null;recipient_name:string;previous_revision:number;warranty:RepairWarranty}
+export const previewRepairWarrantyTransfer=(token:string,row:RepairCase,warrantyId:string)=>authedGet<RepairWarrantyTransferPreview>(token,`/api/repair/cases/${row.id}/warranties/${warrantyId}/transfer-preview`)
+export const transferRepairWarranty=(token:string,row:RepairCase,warrantyId:string,data:{ownership_id:string;device_version:number;previous_revision:number;reason:string},key:string)=>authedSend<RepairWarrantyTransfer>(token,'POST',`/api/repair/cases/${row.id}/warranties/${warrantyId}/transfers`,{version:row.version,...data},key)
+export interface RepairTechnicalSummary {id:string;revision:number;approved_at:string;content:{condition:string;repairs:string;tests:string;care:string}}
+export interface RepairSummaryPreview {device_version:number;ownership_id:string|null;recipient_name:string;previous_revision:number}
+export interface RepairPortalView {technical_summaries?:RepairTechnicalSummary[]}
+export const fetchRepairTechnicalSummaries=(token:string,id:string)=>authedGet<{items:RepairTechnicalSummary[]}>(token,`/api/repair/cases/${id}/technical-summaries`)
+export const previewRepairTechnicalSummary=(token:string,id:string)=>authedGet<RepairSummaryPreview>(token,`/api/repair/cases/${id}/technical-summary-preview`)
+export const approveRepairTechnicalSummary=(token:string,row:RepairCase,data:{ownership_id:string;device_version:number;previous_revision:number;content:RepairTechnicalSummary['content'];reason:string;privacy_reviewed:true},key:string)=>authedSend<RepairTechnicalSummary>(token,'POST',`/api/repair/cases/${row.id}/technical-summaries`,{version:row.version,...data},key)
+export interface RepairOwnershipClaim {id:string;kind:'ownership_claim'|'ownership'|'ownership_rejected';claim_id:string|null;contact_id:string;reason:string;evidence:string;revision:number;created_at:string}
+export interface RepairClaimPreview {device_version:number;previous_ownership_id:string|null;owner_name:string}
+export const fetchRepairOwnershipClaims=(token:string,id:string,cursor?:string)=>authedGet<Page<RepairOwnershipClaim>>(token,`/api/repair/cases/${id}/ownership-claims${cursor?'?'+new URLSearchParams({cursor}):''}`)
+export const previewRepairOwnershipClaim=(token:string,id:string)=>authedGet<RepairClaimPreview>(token,`/api/repair/cases/${id}/ownership-claim-preview`)
+export const submitRepairOwnershipClaim=(token:string,row:RepairCase,data:{device_version:number;contact_id:string;reason:string;evidence:string},key:string)=>authedSend<RepairOwnershipClaim>(token,'POST',`/api/repair/cases/${row.id}/ownership-claims`,{version:row.version,...data},key)
+export const decideRepairOwnershipClaim=(token:string,row:RepairCase,id:string,data:{device_version:number;previous_ownership_id:string|null;decision:'approved'|'rejected';reason:string;evidence:string},key:string)=>authedSend<RepairOwnershipClaim>(token,'POST',`/api/repair/cases/${row.id}/ownership-claims/${id}/decision`,{version:row.version,...data},key)
+export interface RepairRepresentative {id:string;contact_id:string|null;operation:'intake'|'delivery';name:string;phone:string;expires_at:string;revoked:boolean;evidence?:string}
+export const fetchRepairRepresentatives=(token:string,id:string,cursor?:string)=>authedGet<Page<RepairRepresentative>>(token,`/api/repair/cases/${id}/representatives${cursor?'?'+new URLSearchParams({cursor}):''}`)
+export const approveRepairRepresentative=(token:string,row:RepairCase,data:{contact_id?:string;operation:'intake'|'delivery';name:string;phone:string;evidence:string;expires_at:string},key:string)=>authedSend<RepairRepresentative>(token,'POST',`/api/repair/cases/${row.id}/representatives`,{version:row.version,...data},key)
+export const revokeRepairRepresentative=(token:string,row:RepairCase,id:string,reason:string,key:string)=>authedSend<RepairRepresentative>(token,'POST',`/api/repair/cases/${row.id}/representatives/${id}/revoke`,{version:row.version,reason},key)
+export interface RepairDeliveryDraft {representation_id?:string}
+export interface RepairDeviceIdentity {hardware_revision:string;industry_identifiers:Record<string,string>}
+export const saveRepairDeviceProfile=(token:string,id:string,data:{version:number;hardware_revision:string;industry_identifiers:Record<string,string>;reason:string},key:string)=>authedSend<RepairIdentityEvent>(token,'POST',`/api/repair/devices/${id}/profile`,data,key)

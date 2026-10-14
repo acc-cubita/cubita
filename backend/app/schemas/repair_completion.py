@@ -13,6 +13,8 @@ class BranchSettingsIn(RepairInput):
     terms: str = Field(min_length=1, max_length=6000)
     code: str = Field(min_length=1, max_length=40)
     number_format: str = Field(default='{branch}-{year}-{number:06d}', max_length=120)
+    intake_confirmation_policy: Literal['legacy','otp'] = 'legacy'
+    delivery_confirmation_policy: Literal['legacy','otp'] = 'legacy'
 
     @model_validator(mode='after')
     def format(self):

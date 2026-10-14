@@ -16,6 +16,97 @@ def private_response(response:Response):
 
 router=APIRouter(prefix='/api/repair',tags=['repair'],dependencies=[Depends(require_module('repair')),Depends(require_permission('repair','view')),Depends(private_response)])
 
+from app.models.repair_completion import RepairIntakeEvidence
+from app.schemas.repair_evidence import IntakeEvidenceIn
+from app.services import repair_evidence
+from app.pagination import PageParams, paginate
+from app.schemas.repair_confirmation import ConfirmationRequestIn, ConfirmationVerifyIn, ConfirmationOverrideIn
+from app.schemas.repair import VersionIn
+from app.services import repair_confirmation
+
+
+class ConfirmationFingerprint(VersionIn):
+    code_digest: str
+
+
+@router.get('/confirmation-capabilities',dependencies=[Depends(require_permission('repair_signatures','create'))])
+def confirmation_capabilities():
+    from app.config import get_settings
+    settings=get_settings()
+    return {'sms_available':bool(settings.repair_otp_enabled and settings.melipayamak_api_key and settings.melipayamak_otp_pattern_id)}
+
+
+@router.post('/cases/{case_id}/confirmation-preview',dependencies=[Depends(require_permission('repair_signatures','create'))])
+def confirmation_preview(case_id:UUID,data:ConfirmationRequestIn,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    row=core.case(db,p,case_id)
+    core.check_version(row,data.version)
+    if data.kind=='delivery' and not (p.has_permission('repair','deliver') or p.has_permission('repair','approve')):
+        raise HTTPException(403,'مجوز تحویل تعمیرگاه لازم است.')
+    body=repair_confirmation.snapshot(db,p,row,data)
+    # Financial records remain bound to the proof without disclosing document IDs
+    # to a signature-only employee.
+    visible={key:value for key,value in body.items() if key!='financial' or p.has_permission('invoices','view')}
+    return {'document':visible,'document_hash':repair_confirmation.document_hash(body)}
+
+
+@router.post('/cases/{case_id}/confirmation-override',status_code=201,dependencies=[Depends(require_permission('repair_signatures','create')),Depends(require_permission('repair_confirmation_override','approve'))])
+def confirmation_override(case_id:UUID,data:ConfirmationOverrideIn,request:Request,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    keyed(request);core.case(db,p,case_id)
+    if data.kind=='delivery' and not (p.has_permission('repair','deliver') or p.has_permission('repair','approve')):
+        raise HTTPException(403,'مجوز تحویل تعمیرگاه لازم است.')
+    row=idempotent(db,request,p.user,operation=f'repair.confirmation.override.{case_id}',payload=data,
+        run=lambda:repair_confirmation.signature_override(db,p,core.case(db,p,case_id,lock=True),data),
+        replay=lambda rid:repair_confirmation.get(db,p,case_id,rid))
+    return repair_confirmation.public(row)
+
+
+@router.post('/cases/{case_id}/confirmations',status_code=201,dependencies=[Depends(require_permission('repair_signatures','create'))])
+def request_confirmation(case_id:UUID,data:ConfirmationRequestIn,request:Request,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    keyed(request);core.case(db,p,case_id)
+    if data.kind=='delivery' and not (p.has_permission('repair','deliver') or p.has_permission('repair','approve')):
+        raise HTTPException(403,'برای آماده‌سازی تأیید تحویل، مجوز تحویل تعمیرگاه لازم است.')
+    row=idempotent(db,request,p.user,operation=f'repair.confirmation.request.{case_id}',payload=data,
+        run=lambda:repair_confirmation.request(db,p,core.case(db,p,case_id,lock=True),data),
+        replay=lambda rid:repair_confirmation.get(db,p,case_id,rid))
+    return repair_confirmation.public(row)
+
+
+@router.post('/cases/{case_id}/confirmations/{confirmation_id}/verify',dependencies=[Depends(require_permission('repair_signatures','create'))])
+def verify_confirmation(case_id:UUID,confirmation_id:UUID,data:ConfirmationVerifyIn,request:Request,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    keyed(request);core.case(db,p,case_id)
+    # Idempotency fingerprints must not become an offline six-digit-code oracle.
+    safe=ConfirmationFingerprint(version=data.version,code_digest=repair_confirmation.digest(str(confirmation_id)+'|'+data.code.get_secret_value()))
+    row=idempotent(db,request,p.user,operation=f'repair.confirmation.verify.{confirmation_id}',payload=safe,
+        run=lambda:repair_confirmation.verify(db,p,case_id,confirmation_id,data),
+        replay=lambda rid:repair_confirmation.get(db,p,case_id,rid))
+    return repair_confirmation.public(row)
+
+
+@router.post('/cases/{case_id}/confirmations/{confirmation_id}/intake',dependencies=[Depends(require_permission('repair_signatures','create'))])
+def consume_intake_confirmation(case_id:UUID,confirmation_id:UUID,data:VersionIn,request:Request,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    keyed(request);core.case(db,p,case_id)
+    row=idempotent(db,request,p.user,operation=f'repair.confirmation.intake.{confirmation_id}',payload=data,
+        run=lambda:repair_confirmation.consume_intake(db,p,core.case(db,p,case_id,lock=True),confirmation_id,data),
+        replay=lambda rid:repair_confirmation.get(db,p,case_id,rid))
+    return repair_confirmation.public(row)
+
+
+@router.get('/cases/{case_id}/intake-evidence')
+def evidence_history(case_id:UUID, params:PageParams=Depends(), db:Session=Depends(get_db), p:Principal=Depends(get_principal)):
+    core.case(db,p,case_id)
+    rows,cursor=paginate(db.query(RepairIntakeEvidence).filter_by(tenant_id=p.tenant_id,case_id=case_id),[RepairIntakeEvidence.revision],params)
+    return {'items':[core.out(row) for row in rows],'next_cursor':cursor}
+
+
+@router.post('/cases/{case_id}/intake-evidence',status_code=201,dependencies=[Depends(require_permission('repair','update'))])
+def add_evidence(case_id:UUID,data:IntakeEvidenceIn,request:Request,db:Session=Depends(get_db),p:Principal=Depends(get_principal)):
+    keyed(request)
+    core.case(db,p,case_id)
+    row=idempotent(db,request,p.user,operation='repair.intake_evidence:'+str(case_id),payload=data,
+        run=lambda:repair_evidence.save(db,p,core.case(db,p,case_id,lock=True),data),
+        replay=lambda rid:db.query(RepairIntakeEvidence).filter_by(tenant_id=p.tenant_id,case_id=case_id,id=rid).one())
+    return core.out(row)
+
 from app.models.repair import RepairCase
 from app.models.repair_completion import RepairTimeSession
 from app.schemas.repair_completion import TimeStartIn, TimeActionIn

@@ -55,6 +55,39 @@ class RepairDevice(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     serial: Mapped[str] = mapped_column(String(120), default="", index=True)
     imei: Mapped[str] = mapped_column(String(30), default="", index=True)
     attributes: Mapped[dict] = mapped_column(JSONB, default=dict)
+    hardware_revision: Mapped[str] = mapped_column(String(120), default='', server_default='')
+    industry_identifiers: Mapped[dict] = mapped_column(JSONB, default=dict, server_default=text("'{}'::jsonb"))
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+
+class RepairDeviceIdentityEvent(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """Append-only identity decisions; admission snapshots are never rewritten."""
+    __tablename__ = "repair_device_identity_events"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id"),
+        UniqueConstraint("tenant_id", "device_id", "revision"),
+        ForeignKeyConstraint(["tenant_id", "device_id"], ["repair_devices.tenant_id", "repair_devices.id"]),
+        ForeignKeyConstraint(["tenant_id", "target_device_id"], ["repair_devices.tenant_id", "repair_devices.id"]),
+        ForeignKeyConstraint(["tenant_id", "contact_id"], ["contacts.tenant_id", "contacts.id"]),
+        ForeignKeyConstraint(['tenant_id','case_id'],['repair_cases.tenant_id','repair_cases.id']),
+        ForeignKeyConstraint(['tenant_id','claim_id'],['repair_device_identity_events.tenant_id','repair_device_identity_events.id']),
+        UniqueConstraint('tenant_id','claim_id'),
+        CheckConstraint("kind IN ('merge','ownership','ownership_claim','ownership_rejected','profile')", name="ck_repair_identity_kind"),
+        CheckConstraint("revision > 1", name="ck_repair_identity_revision"),
+        CheckConstraint("(kind = 'merge' AND target_device_id IS NOT NULL AND contact_id IS NULL AND target_device_id <> device_id) OR (kind IN ('ownership','ownership_claim','ownership_rejected') AND contact_id IS NOT NULL AND target_device_id IS NULL) OR (kind='profile' AND contact_id IS NULL AND target_device_id IS NULL AND case_id IS NULL AND claim_id IS NULL AND profile_snapshot IS NOT NULL)", name="ck_repair_identity_reference"),
+        CheckConstraint("(kind NOT IN ('ownership_claim','ownership_rejected') OR case_id IS NOT NULL) AND (kind <> 'ownership_rejected' OR claim_id IS NOT NULL)", name='ck_repair_claim_reference'),
+    )
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(20))
+    target_device_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    case_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    claim_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    evidence: Mapped[str] = mapped_column(Text)
+    profile_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    recorded_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
 
 
 class RepairCase(TenantMixin, UUIDPKMixin, TimestampMixin, Base):

@@ -20,6 +20,119 @@ class RepairBranchSettings(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     terms: Mapped[str] = mapped_column(Text)
     code: Mapped[str] = mapped_column(String(40))
     number_format: Mapped[str] = mapped_column(String(120), default='{branch}-{year}-{number:06d}')
+    intake_confirmation_policy: Mapped[str] = mapped_column(String(20),default='legacy',server_default='legacy')
+    delivery_confirmation_policy: Mapped[str] = mapped_column(String(20),default='legacy',server_default='legacy')
+
+
+class RepairIntakeEvidence(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = 'repair_intake_evidence'
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'id'),
+        UniqueConstraint('tenant_id', 'case_id', 'revision'),
+        ForeignKeyConstraint(['tenant_id', 'case_id'], ['repair_cases.tenant_id', 'repair_cases.id']),
+        CheckConstraint('revision > 0', name='ck_repair_evidence_revision'),
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    snapshot: Mapped[dict] = mapped_column(JSONB)
+    document_hash: Mapped[str] = mapped_column(String(64))
+    reason: Mapped[str] = mapped_column(Text)
+    recorded_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+
+
+class RepairTechnicalSummary(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    """Explicit approved projection for one ownership decision; never a case copy."""
+    __tablename__ = 'repair_technical_summaries'
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'id'),
+        UniqueConstraint('tenant_id', 'case_id', 'revision'),
+        ForeignKeyConstraint(['tenant_id','case_id'],['repair_cases.tenant_id','repair_cases.id']),
+        ForeignKeyConstraint(['tenant_id','device_id'],['repair_devices.tenant_id','repair_devices.id']),
+        ForeignKeyConstraint(['tenant_id','ownership_id'],['repair_device_identity_events.tenant_id','repair_device_identity_events.id']),
+        ForeignKeyConstraint(['tenant_id','contact_id'],['contacts.tenant_id','contacts.id']),
+        CheckConstraint('revision > 0', name='ck_repair_summary_revision'),
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    ownership_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    contact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    revision: Mapped[int] = mapped_column(Integer)
+    content: Mapped[dict] = mapped_column(JSONB)
+    reason: Mapped[str] = mapped_column(Text)
+    approved_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+
+
+class RepairRepresentativeAuthorization(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = 'repair_representative_authorizations'
+    __table_args__ = (
+        UniqueConstraint('tenant_id','id'),
+        ForeignKeyConstraint(['tenant_id','case_id'],['repair_cases.tenant_id','repair_cases.id']),
+        ForeignKeyConstraint(['tenant_id','contact_id'],['contacts.tenant_id','contacts.id']),
+        ForeignKeyConstraint(['tenant_id','principal_contact_id'],['contacts.tenant_id','contacts.id']),
+        CheckConstraint("operation IN ('intake','delivery')",name='ck_repair_representation_operation'),
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),index=True)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True),nullable=True)
+    principal_contact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    operation: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(200))
+    phone: Mapped[str] = mapped_column(String(30))
+    evidence: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+
+
+class RepairConfirmation(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = 'repair_confirmations'
+    __table_args__ = (
+        UniqueConstraint('tenant_id','id'),
+        ForeignKeyConstraint(['tenant_id','case_id'],['repair_cases.tenant_id','repair_cases.id']),
+        ForeignKeyConstraint(['tenant_id','recipient_contact_id'],['contacts.tenant_id','contacts.id']),
+        ForeignKeyConstraint(['tenant_id','case_id','signature_ack_id'],['repair_acknowledgments.tenant_id','repair_acknowledgments.case_id','repair_acknowledgments.id']),
+        CheckConstraint("kind IN ('intake','delivery')",name='ck_repair_confirmation_kind'),
+        CheckConstraint("status IN ('requested','sent','failed','verified','expired','locked','consumed')",name='ck_repair_confirmation_status'),
+        CheckConstraint('attempts >= 0 AND attempts <= 5 AND version > 0',name='ck_repair_confirmation_attempts'),
+        CheckConstraint("(method='sms' AND signature_ack_id IS NULL) OR (method='signature_override' AND signature_ack_id IS NOT NULL)",name='ck_repair_confirmation_method'),
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    version: Mapped[int] = mapped_column(Integer,default=1)
+    status: Mapped[str] = mapped_column(String(20),default='requested')
+    recipient_name: Mapped[str] = mapped_column(String(200))
+    recipient_phone: Mapped[str] = mapped_column(String(30))
+    recipient_contact_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True),nullable=True)
+    authority_evidence: Mapped[str] = mapped_column(Text)
+    document_snapshot: Mapped[dict] = mapped_column(JSONB)
+    document_hash: Mapped[str] = mapped_column(String(64))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer,default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),nullable=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),nullable=True)
+    requested_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+    method: Mapped[str] = mapped_column(String(25),default='sms',server_default='sms')
+    signature_ack_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True),nullable=True)
+    override_reason: Mapped[str] = mapped_column(Text,default='')
+
+
+class RepairWarrantyTransfer(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = 'repair_warranty_transfers'
+    __table_args__ = (
+        UniqueConstraint('tenant_id','id'),
+        UniqueConstraint('tenant_id','warranty_id','revision'),
+        ForeignKeyConstraint(['tenant_id','case_id','warranty_id'],['repair_warranties.tenant_id','repair_warranties.case_id','repair_warranties.id']),
+        ForeignKeyConstraint(['tenant_id','ownership_id'],['repair_device_identity_events.tenant_id','repair_device_identity_events.id']),
+        ForeignKeyConstraint(['tenant_id','contact_id'],['contacts.tenant_id','contacts.id']),
+        CheckConstraint('revision > 0',name='ck_repair_warranty_transfer_revision'),
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),index=True)
+    warranty_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    ownership_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    contact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    reason: Mapped[str] = mapped_column(Text)
+    approved_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
 
 
 class RepairIntakeBatch(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
@@ -54,7 +167,7 @@ class RepairTechnicianCapacity(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
 
 class RepairAcknowledgment(TenantMixin, UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = 'repair_acknowledgments'
-    __table_args__ = (ForeignKeyConstraint(['tenant_id','case_id'],['repair_cases.tenant_id','repair_cases.id']), UniqueConstraint('tenant_id','case_id','kind','document_revision'))
+    __table_args__ = (ForeignKeyConstraint(['tenant_id','case_id'],['repair_cases.tenant_id','repair_cases.id']), UniqueConstraint('tenant_id','case_id','kind','document_revision'), UniqueConstraint('tenant_id','case_id','id',name='uq_repair_ack_case_id'))
     case_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     kind: Mapped[str] = mapped_column(String(20))
     document_revision: Mapped[int] = mapped_column(Integer)

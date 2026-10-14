@@ -27,6 +27,11 @@ ACTION_LABELS: dict[str, str] = {
 
 #: ماژول‌های مجوز و اکشن‌هایی که هرکدام واقعاً پشتیبانی می‌کنند.
 PERMISSION_MODULES: list[dict] = [
+    {"key":"repair_confirmation_override","label":"تأیید جایگزین تعمیرگاه","hint":"امضای روی صفحه با دلیل و ثبت کارمند، هنگام نبود پیامک؛ مستقل از تحویل و مدیریت عادی","actions":["approve"]},
+    {"key":"repair_identity","label":"هویت و مالکیت دستگاه تعمیرگاه","hint":"مدیریت مستقل ادغام هویت و تأیید تاریخچهٔ مالکیت؛ بدون انتقال پرونده یا بدهی","actions":["view","approve"]},
+    {"key":"repair_warranty_transfer","label":"انتقال ضمانت تعمیرگاه","hint":"تأیید مدیر فنی برای مالکیت جدید؛ بدون افزایش مهلت یا پوشش ضمانت اولیه","actions":["approve"]},
+    {"key":"repair_technical_summary","label":"خلاصهٔ فنی انتقال دستگاه","hint":"تأیید مستقل متن فنی مجاز برای مالک فعلی؛ بدون انتقال پرونده و اطلاعات مالک قبلی","actions":["approve"]},
+    {"key":"repair_representation","label":"اختیار نمایندهٔ تعمیرگاه","hint":"بررسی مدرک و ثبت یا لغو نمایندگی برای یک پرونده و عملیات مشخص","actions":["view","approve"]},
     {"key":"repair_harvest","label":"تأیید مالی استخراج قطعات شرکت","hint":"تأیید درصد بهای قطعات و ضایعات و ثبت یا ابطال اسناد واقعی انبار","actions":["approve"]},
     {"key":"repair_access","label":"رمز دستگاه در تعمیرگاه","hint":"مشاهدهٔ ثبت‌شونده و نگهداری محدود رمز؛ فقط برای کارکنان مورد اعتماد تعمیرگاه","actions":["view","update"]},
     {"key": "repair", "label": "تعمیرگاه", "hint": "پذیرش دستگاه مشتری؛ تأیید یعنی مدیریت شعبه و دسترسی به همه شعبه‌های تعمیرگاه", "actions": ["view", "create", "update", "approve", "deliver"]},
