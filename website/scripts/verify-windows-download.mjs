@@ -28,7 +28,7 @@ try {
           const href = await link.getAttribute('href')
           const expected = arch === '32' || os === '7' || os === '8' || os === '8.1'
             ? `https://acc.cubita.ir/updates/enterprise/legacy/Cubita-Enterprise-Legacy-${arch === '32' ? 'x86' : 'x64'}-Setup-1.9.21.exe`
-            : 'https://acc.cubita.ir/updates/enterprise/Cubita-Enterprise-Setup.exe'
+            : 'https://acc.cubita.ir/updates/enterprise/Cubita-Enterprise-Setup-1.9.21.exe'
           assert.equal(href, expected)
           assert.match(await link.innerText(), arch === '32' ? /۳۲ بیتی/ : /۶۴ بیتی/)
           if (os === '10-11' && arch === '32') assert.match(await section.getByRole('status').innerText(), /ویندوز ۱۱ نسخهٔ ۳۲ بیتی ندارد/)
