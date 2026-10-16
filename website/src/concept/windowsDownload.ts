@@ -1,4 +1,4 @@
-import { ENTERPRISE_DOWNLOAD_URL, ENTERPRISE_WINDOWS81_DOWNLOAD_URL, ENTERPRISE_LEGACY_X86_DOWNLOAD_URL, ENTERPRISE_LEGACY_X64_DOWNLOAD_URL } from '../content/links'
+import { ENTERPRISE_DOWNLOAD_URL, ENTERPRISE_LEGACY_X86_DOWNLOAD_URL, ENTERPRISE_LEGACY_X64_DOWNLOAD_URL } from '../content/links'
 
 export type WindowsVersion = '' | '7' | '8' | '8.1' | '10-11'
 export type WindowsBits = '' | '32' | '64'
@@ -22,10 +22,9 @@ export function suggestWindows(userAgent: string, hints?: WindowsHints): Windows
 
 export function windowsPackage(version: WindowsVersion, bits: WindowsBits) {
   if (!version || !bits) return { href: null, message: 'نسخهٔ ویندوز و معماری سیستم را انتخاب کنید.' }
-  if (bits === '32' || version === '7' || version === '8') return {
+  if (bits === '32' || version === '7' || version === '8' || version === '8.1') return {
     href: bits === '32' ? ENTERPRISE_LEGACY_X86_DOWNLOAD_URL : ENTERPRISE_LEGACY_X64_DOWNLOAD_URL,
-    message: 'نسخهٔ آزمایشی سازگار ۱٫۹٫۱۷ — سرور و کلاینت. ویندوز ۷ نیازمند Service Pack 1 است. آزمون نصب و اجرای واقعی روی ویندوزهای قدیمی هنوز تکمیل نشده است.' + (version === '10-11' ? ' نسخهٔ ۳۲ بیتی برای ویندوز ۱۰ است؛ ویندوز ۱۱ نسخهٔ ۳۲ بیتی ندارد.' : '')
+    message: 'نسخهٔ آزمایشی سازگار ۱٫۹٫۲۱ — سرور و کلاینت. ویندوز ۷ نیازمند Service Pack 1 است. آزمون نصب و اجرای واقعی این نسخه روی ویندوزهای قدیمی هنوز تکمیل نشده است.' + (version === '10-11' ? ' نسخهٔ ۳۲ بیتی برای ویندوز ۱۰ است؛ ویندوز ۱۱ نسخهٔ ۳۲ بیتی ندارد.' : '')
   }
-  if (version === '8.1') return { href: ENTERPRISE_WINDOWS81_DOWNLOAD_URL, message: 'نسخهٔ سازگار ۱٫۹٫۱۶ — سرور و کلاینت. آزمون نصب و اجرای واقعی روی ویندوز ۸٫۱ هنوز تکمیل نشده است.' }
-  return { href: ENTERPRISE_DOWNLOAD_URL, message: 'نسخهٔ اصلی — سرور و کلاینت، برای ویندوز ۱۰ و ۱۱ نسخهٔ ۶۴ بیتی.' }
+  return { href: ENTERPRISE_DOWNLOAD_URL, message: 'نسخهٔ ۱٫۹٫۲۱ — سرور و کلاینت، برای ویندوز ۱۰ و ۱۱ نسخهٔ ۶۴ بیتی.' }
 }
